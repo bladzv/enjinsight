@@ -4,6 +4,9 @@
   "description": "Monitor Enjin Blockchain validator reward cadence via Subscan API",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

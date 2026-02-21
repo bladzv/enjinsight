@@ -38,6 +38,14 @@ npm run dev
 
 Open `http://localhost:5173`. Configure your proxy URL via the ⚙ gear in the top-right before running checks.
 
+If `npm ci` fails due to Node version mismatch, install Node 18 (recommended) and try again. Example using `volta`:
+
+```bash
+# Install Node 18 via Volta (recommended for contributors)
+volta install node@18
+npm ci
+```
+
 Run unit tests:
 
 ```bash
@@ -49,6 +57,33 @@ Create a production build:
 ```bash
 npm run build
 ```
+
+Deploy options (choose one):
+
+- GitHub Actions (recommended): The repository already contains `.github/workflows/deploy.yml` which builds and deploys the `dist` artifact to GitHub Pages automatically on pushes to `main`. Ensure GitHub Pages site source is set to "GitHub Actions" in repository Settings → Pages.
+
+- `gh-pages` (manual/npm): Publish the `dist` folder to the `gh-pages` branch using `gh-pages`:
+
+```bash
+npm ci
+npm run deploy
+```
+
+- `docs/` folder (commit-built): Build and copy `dist` into `docs/` and commit (useful if you prefer serving from `main/docs`):
+
+```bash
+npm run build
+# remove previous docs contents, copy in new build, then commit
+rm -rf docs/*
+cp -r dist/* docs/
+git add docs
+git commit -m "chore(build): publish site to docs/"
+git push
+```
+
+Notes:
+- Do not serve the raw repository `index.html` from the repo root — it references source modules (`/src/main.jsx`) and will 404 on GitHub Pages. Always serve a built `dist` or `docs/` copy.
+- This repo includes a `.nojekyll` file to prevent Jekyll processing on GitHub Pages.
 
 ---
 
