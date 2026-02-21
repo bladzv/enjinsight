@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+        <!-- Security meta tags -->
+        <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+        <!-- NOTE: X-Frame-Options must be set as an HTTP response header by your host
+          (e.g. via Netlify / Vercel / GitHub Pages or your reverse proxy). Do not
+          use a <meta http-equiv> for X-Frame-Options — it is ignored by browsers. -->
+        <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+        <meta http-equiv="Permissions-Policy" content="geolocation=(), camera=(), microphone=()" />
+    <!--
+      CSP is intentionally kept permissive here for development flexibility.
+      In production, your static host (Vercel / Netlify / GitHub Pages + custom headers)
+      should enforce a strict CSP. See README.md for recommended production CSP.
+    -->
+
+    <!-- Preconnect for Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <title>Enjin Validator Reward Checker</title>
+    <meta name="description" content="Monitor Enjin Blockchain validator reward cadence across eras via the Subscan API." />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Friendly error handler for common static-server misconfiguration
+      window.addEventListener('error', function (e) {
+        const msg = (e && e.message) || ''
+        if (msg.includes('Expected a JavaScript-or-Wasm module script') || msg.includes('MIME type')) {
+          const root = document.getElementById('root')
+          if (root) {
+            root.innerHTML = '<div style="padding:24px;font-family:system-ui,Arial,sans-serif">\n' +
+              '<h2 style="color:#b91c1c">Module load failed</h2>\n' +
+              '<p>The app requires the Vite dev server or a production build.\n' +
+              'Start the dev server with <code>npm run dev</code> or build and preview with <code>npm run build</code> and <code>npm run preview</code>.</p>\n' +
+              '<p>If you are using a simple static server (python -m http.server) it will not serve transformed JSX or the correct MIME types.</p>\n' +
+              '</div>'
+          }
+        }
+      })
+    </script>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-ink text-text font-sans antialiased;
+    min-height: 100dvh;
+  }
+
+  :focus-visible {
+    outline: 2px solid theme('colors.primary');
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: theme('colors.primary');
+    color: white;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track  { background: theme('colors.surface'); }
+  ::-webkit-scrollbar-thumb  { background: theme('colors.rim');     border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: theme('colors.primary-dim'); }
+}
+
+@layer components {
+  /* ── Dot-grid background ── */
+  .bg-grid {
+    background-image: radial-gradient(circle, #2A2A45 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  /* ── Glass card ── */
+  .card {
+    @apply bg-card border border-border rounded-xl shadow-card;
+  }
+
+  /* ── Primary button ── */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg
+           bg-primary hover:bg-primary-glow active:bg-primary-dim
+           text-white font-semibold text-sm tracking-wide
+           transition-all duration-150
+           disabled:opacity-40 disabled:cursor-not-allowed
+           focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
+           focus-visible:ring-offset-ink;
+  }
+
+  /* ── Ghost button ── */
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg
+           text-dim hover:text-text hover:bg-border
+           text-xs font-medium transition-all duration-150
+           focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1
+           focus-visible:ring-offset-ink;
+  }
+
+  /* ── Icon button — minimum 44×44 tap target ── */
+  .btn-icon {
+    @apply inline-flex items-center justify-center
+           min-w-[44px] min-h-[44px] rounded-lg
+           text-dim hover:text-text hover:bg-border
+           transition-all duration-150
+           focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1
+           focus-visible:ring-offset-ink;
+  }
+
+  /* ── Status badges ── */
+  .badge-active  { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-success/15 text-success; }
+  .badge-waiting { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-muted/40 text-dim; }
+  .badge-error   { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-danger/15 text-danger; }
+
+  /* ── Terminal log line colours ── */
+  .log-info { @apply text-cyan; }
+  .log-ok   { @apply text-success; }
+  .log-warn { @apply text-warning; }
+  .log-err  { @apply text-danger; }
+  .log-done { @apply text-primary-glow; }
+  .log-ts   { @apply text-muted; }
+
+  /* ── Severity chips ── */
+  .sev-low    { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-warning/15 text-warning; }
+  .sev-medium { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-500/15 text-orange-400; }
+  .sev-high   { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-danger/15 text-danger; }
+}
+
+@layer utilities {
+  .scrollbar-thin { scrollbar-width: thin; }
+
+  /* Horizontal scroll container */
+  .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Line clamp for addresses */
+  .addr {
+    @apply font-mono text-xs text-text-secondary;
+    word-break: break-all;
+  }
+
+  /* Animated gradient border */
+  .glow-border {
+    border-image: linear-gradient(135deg, #7B3FE4, #00D4FF) 1;
+  }
+}
