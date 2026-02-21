@@ -4,6 +4,8 @@
 
 <p align="center">
   <!-- Repository badges (auto-update once pushed) -->
+  <a href="https://github.com/bladzv/enjin-status-checker/actions"><img src="https://img.shields.io/github/actions/workflow/status/bladzv/enjin-status-checker/ci.yml?branch=main&label=CI&logo=github" alt="CI status" /></a>
+  <a href="https://github.com/bladzv/enjin-status-checker/actions"><img src="https://img.shields.io/github/actions/workflow/status/bladzv/enjin-status-checker/ci.yml?branch=main&label=Tests&logo=vitest" alt="tests status" /></a>
   <a href="https://github.com/bladzv/enjin-status-checker/actions"><img src="https://img.shields.io/github/actions/workflow/status/bladzv/enjin-status-checker/deploy.yml?branch=main&label=Deploy&logo=github" alt="deploy status" /></a>
   <a href="https://github.com/bladzv/enjin-status-checker"><img src="https://img.shields.io/github/license/bladzv/enjin-status-checker" alt="license" /></a>
 </p>
