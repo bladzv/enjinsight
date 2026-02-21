@@ -1,11 +1,10 @@
 <p align="center">
-  <strong style="font-size:28px">Enjin Validator Reward Checker</strong>
+  <strong style="font-size:28px">Enjin Status Checker</strong>
 </p>
 
 <p align="center">
   <!-- Repository badges (auto-update once pushed) -->
-  <a href="https://github.com/bladzv/enjin-status-checker/actions"><img src="https://img.shields.io/github/actions/workflow/status/bladzv/enjin-status-checker/ci.yml?branch=main&label=CI&logo=github" alt="CI status" /></a>
-  <a href="https://github.com/bladzv/enjin-status-checker/actions"><img src="https://img.shields.io/github/actions/workflow/status/bladzv/enjin-status-checker/ci.yml?branch=main&label=Tests&logo=vitest" alt="tests status" /></a>
+  <a href="https://github.com/bladzv/enjin-status-checker/actions"><img src="https://img.shields.io/github/actions/workflow/status/bladzv/enjin-status-checker/deploy.yml?branch=main&label=Deploy&logo=github" alt="deploy status" /></a>
   <a href="https://github.com/bladzv/enjin-status-checker"><img src="https://img.shields.io/github/license/bladzv/enjin-status-checker" alt="license" /></a>
 </p>
 
@@ -29,8 +28,8 @@ A fast, accessible, and secure static web application to monitor validator rewar
 Clone and run locally:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/enjin-validator-checker.git
-cd enjin-validator-checker
+git clone https://github.com/bladzv/enjin-status-checker.git
+cd enjin-status-checker
 npm ci
 npm run dev
 ```
@@ -53,17 +52,31 @@ npm run build
 
 ## Project Structure
 
-Short summary of the source layout and responsibilities:
+Repository layout (root-level overview):
 
 ```
-src/
-├── components/        # Presentational UI components (one component per file)
-├── hooks/             # Custom hooks with side-effects and orchestrators
-├── utils/             # Utilities: api, formatters, era analysis, proxy probe
-├── constants.js       # Centralised configuration and endpoints
-├── App.jsx            # Root application component
-├── main.jsx           # App entry + bootstrapping
-└── index.css          # Tailwind and global styles
+./
+├── README.md
+├── LICENSE
+├── index.html
+├── package.json
+├── postcss.config.js
+├── tailwind.config.js
+├── vite.config.js
+├── PROXY.md
+├── public/             # Static assets served as-is
+├── docs/               # Product docs, deployment notes, security
+├── src/
+│   ├── App.jsx
+│   ├── main.jsx
+│   ├── constants.js
+│   ├── index.css
+│   ├── components/     # Presentational UI components (one component per file)
+│   ├── hooks/          # Custom hooks with side-effects and orchestrators
+│   └── utils/          # Utilities: api, formatters, era analysis, proxy probe
+└── .github/
+  ├── workflows/      # GitHub Actions workflows (CI / deploy)
+  └── (session files)
 ```
 
 Notes:
