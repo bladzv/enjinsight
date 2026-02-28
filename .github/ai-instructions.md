@@ -3,15 +3,18 @@
 ## Project Context
 
 **Project Name:** Enjin Validator Reward Checker  
-**GitHub Repository:** https://github.com/YOUR_USERNAME/enjin-validator-checker  
-**Project Type:** Open Source Blockchain Monitoring Tool — Static Frontend Web Application
+**GitHub Repository:** https://github.com/bladzv/enjin-status-checker 
+**Project Type:** Open Source Enjin Blockchain Monitoring Tool
 
 ### Project Overview
-A static, browser-based web application that monitors the reward cadence of every active validator on the Enjin Relaychain by querying the Subscan API. The application enables users to:
-- Enter the number of recent eras (1 era ≈ 24 hours) to check across all validators
+A browser-based web application that checks the reward cadence of every active validator and nomination pool on the Enjin Relaychain by querying the Subscan API. The application enables users to:
+- Choose which entity to check: all validators or all nomination pools
+- Enter the number of recent eras (1 era ≈ 24 hours) to check
 - View the complete list of validators with bonded stake, commission, and active/waiting status
-- Expand any validator to inspect its nominator list and era-by-era reward history
-- Automatically detect missing eras (validators that failed to earn rewards) and visually surface gaps
+- Expand any item to inspect its details, including:
+  - A list of nominators and their bonded amounts
+  - A list of recent eras with reward status (rewarded/missed) and reward amounts
+- Automatically detect missing eras (validators that failed to earn rewards) or nomination pools that missed rewards and visually surface gaps
 - Read a live terminal-style log of all background API activity for full transparency
 - Review a summary section that severity-grades reward gaps and issues critical alerts for 3+ consecutive missed eras
 
@@ -27,10 +30,9 @@ A static, browser-based web application that monitors the reward cadence of ever
 - **Security:** OWASP Top 10 compliance adapted for a client-side static app, CSP, input sanitisation, no `dangerouslySetInnerHTML`, BigInt for on-chain values
 
 ### Documentation
-- **Product Requirements Document:** `enjin_validator_reward_checker_PRD.md`
-- **CORS Proxy Setup Guide:** `PROXY.md`
-- **Deployment Guide:** `README.md`
-- **Vulnerability Disclosure:** `SECURITY.md`
+- **API Information for Querying Pools:** `docs/pools_api_calls.md`
+- **API Information for Querying Validators:** `docs/validator_api_calls.md`
+- **UI/UX Guidelines:** `docs/ui-design-system-prompt.md`
 
 ---
 

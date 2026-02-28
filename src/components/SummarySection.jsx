@@ -5,6 +5,8 @@ import { truncateAddress, validatorExplorerUrl } from '../utils/format.js'
 
 export default function SummarySection({ validators, eraCount }) {
   const [showClean, setShowClean] = useState(false)
+  const [gapPage,     setGapPage]     = useState(0)
+  const [gapPageSize, setGapPageSize] = useState(10)
 
   if (!validators.length) return null
 
@@ -16,6 +18,12 @@ export default function SummarySection({ validators, eraCount }) {
   const critical = withGaps
     .map(v => ({ v, groups: findConsecutiveGroups(v.missedEras) }))
     .filter(({ groups }) => groups.length > 0)
+
+  // Gap table pagination
+  const gapPages     = Math.max(1, Math.ceil(withGaps.length / gapPageSize))
+  const gapPageItems = withGaps.slice(gapPage * gapPageSize, (gapPage + 1) * gapPageSize)
+  const safeGapPage  = Math.min(gapPage, gapPages - 1)
+  if (safeGapPage !== gapPage) setGapPage(safeGapPage)
 
   return (
     <section aria-labelledby="summary-heading" className="space-y-4 animate-fade-in">
@@ -105,7 +113,7 @@ export default function SummarySection({ validators, eraCount }) {
                 </tr>
               </thead>
               <tbody>
-                {withGaps.map((v, i) => {
+                {gapPageItems.map((v, i) => {
                   const sev      = getSeverity(v.missedEras.length)
                   const missed   = v.missedEras.length
                   // number of checked eras minus missed = rewarded count
@@ -144,6 +152,40 @@ export default function SummarySection({ validators, eraCount }) {
               </tbody>
             </table>
           </div>
+
+          {/* Gap table pagination */}
+          {gapPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-2.5 border-t border-border text-xs text-dim">
+              <div className="flex items-center gap-2">
+                <span>{withGaps.length} validators</span>
+                <select
+                  value={gapPageSize}
+                  onChange={e => { setGapPageSize(Number(e.target.value)); setGapPage(0) }}
+                  className="bg-surface border border-border rounded px-1.5 py-0.5 text-xs text-text cursor-pointer"
+                  aria-label="Rows per page"
+                >
+                  {[5, 10, 20].map(s => (
+                    <option key={s} value={s}>{s} / page</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setGapPage(p => Math.max(0, p - 1))}
+                  disabled={gapPage === 0}
+                  className="btn-ghost disabled:opacity-30"
+                  aria-label="Previous page"
+                >‹ Prev</button>
+                <span className="px-2">{gapPage + 1} / {gapPages}</span>
+                <button
+                  onClick={() => setGapPage(p => Math.min(gapPages - 1, p + 1))}
+                  disabled={gapPage >= gapPages - 1}
+                  className="btn-ghost disabled:opacity-30"
+                  aria-label="Next page"
+                >Next ›</button>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="card px-4 py-5 flex items-center gap-3">

@@ -42,10 +42,45 @@ export function safeInt(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback
 }
 
-// ── Subscan explorer URL ──────────────────────────────────────────────────
+/**
+ * Convert Substrate commission (parts-per-billion) to a percentage.
+ * e.g. 100_000_000 → 10, 50_000_000 → 5, 23_450_000 → 2.35
+ */
+export function parseCommission(rawPref) {
+  const raw = safeInt(rawPref)
+  if (raw === 0) return 0
+  return Number((raw / 1e7).toFixed(2))
+}
+
+// ── Subscan explorer URLs ─────────────────────────────────────────────────
 import { EXPLORER_BASE } from '../constants.js'
 export function validatorExplorerUrl(address) {
   // Address is sourced from API, not user input, but we still sanitise
   const safe = encodeURIComponent(String(address).replace(/[^a-zA-Z0-9]/g, ''))
   return `${EXPLORER_BASE}/validator/${safe}`
+}
+
+/**
+ * Build a safe Subscan explorer URL for a nomination pool.
+ * @param {number|string} poolId — numeric pool identifier from the API
+ * @returns {string}
+ */
+export function poolExplorerUrl(poolId) {
+  const id = Math.max(0, Math.floor(Number(poolId) || 0))
+  return `${EXPLORER_BASE}/nomination_pool/${id}`
+}
+
+/**
+ * Derive a human-readable label for a pool.
+ * Prefers `metadata` (the actual pool name) when it is a non-empty string.
+ *
+ * @param {{ metadata?: string, stashDisplay?: string, poolId: number }} pool
+ * @param {{ forLog?: boolean }} [opts]
+ * @returns {string}
+ */
+export function poolLabel(pool, opts = {}) {
+  const meta  = (pool?.metadata ?? '').trim()
+  const stash = pool?.stashDisplay || `Pool #${pool?.poolId ?? '?'}`
+  if (!meta) return stash
+  return `${stash} — ${meta}`
 }

@@ -1,10 +1,10 @@
 import { useReducer, useCallback, useRef } from 'react'
 import {
-  fetchValidators, fetchNominators, fetchEraStat, runInBatches,
+  fetchValidators, fetchNominators, fetchEraStat, delay,
 } from '../utils/api.js'
 import { computeMissedEras, resolveLatestEra } from '../utils/eraAnalysis.js'
-import { nowHHMMSS, safeInt } from '../utils/format.js'
-import { BATCH_SIZE, PROXY_STORAGE_KEY } from '../constants.js'
+import { nowHHMMSS, safeInt, parseCommission } from '../utils/format.js'
+import { PROXY_STORAGE_KEY, API_DELAY_MS } from '../constants.js'
 
 // ── State shape ────────────────────────────────────────────────────────────
 const initialState = {
@@ -62,12 +62,8 @@ function reducer(state, action) {
 
 // helper utilities exported for testing
 
-export function parseCommission(rawPref) {
-  const raw = safeInt(rawPref)
-  if (raw === 0) return 0
-  // divide by 1e7 to convert parts-per-billion -> percent
-  return Number((raw / 1e7).toFixed(2))
-}
+// parseCommission is now in format.js — re-export for test backward compat
+export { parseCommission } from '../utils/format.js'
 
 export function determineActive(v) {
   const raw = v?.status ?? v?.is_active ?? v?.active ?? ''
@@ -119,17 +115,6 @@ export function useValidatorChecker() {
     abortControllerRef.current = new AbortController()
     dispatch({ type: 'START' })
     const proxy = state.proxyUrl
-
-    // Determine effective batch size based on network conditions (2g/3g -> half)
-    const effectiveBatchSize = (() => {
-      try {
-        const type = (navigator && navigator.connection && navigator.connection.effectiveType) || ''
-        if (type.includes('2g') || type.includes('3g')) return Math.max(1, Math.floor(BATCH_SIZE / 2))
-      } catch (e) {
-        // ignore and fall back
-      }
-      return BATCH_SIZE
-    })()
 
     // ── Step 1: Validator list ──────────────────────────────────────────
     log('INFO', 'Fetching validator list from Subscan…')
@@ -188,11 +173,12 @@ export function useValidatorChecker() {
 
     if (abortControllerRef.current?.signal.aborted) return
 
-    // ── Step 2: Nominators (batched parallel) ───────────────────────────
-    log('INFO', `Fetching nominators for ${validators.length} validators (batch size: ${effectiveBatchSize})…`)
+    // ── Step 2: Nominators (sequential, 1 req/s) ────────────────────────
+    log('INFO', `Fetching nominators for ${validators.length} validators (sequential, ${API_DELAY_MS}ms between requests)…`)
 
-    const nomTasks = validators.map((v, idx) => async () => {
+    for (let idx = 0; idx < validators.length; idx++) {
       if (abortControllerRef.current?.signal.aborted) return
+      const v = validators[idx]
       dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { fetchStatus: 'loading' } })
       try {
         const list = await fetchNominators(v.address, proxy, abortControllerRef.current.signal)
@@ -207,30 +193,23 @@ export function useValidatorChecker() {
         dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { nominators: [], fetchStatus: 'error' } })
         log('WARN', `[${idx + 1}/${validators.length}] Nominators failed for ${v.address.slice(0, 10)} — request failed.`)
       }
-    })
-
-    await runInBatches(nomTasks, effectiveBatchSize)
+      await delay(API_DELAY_MS)
+    }
     if (abortControllerRef.current?.signal.aborted) return
 
-    // ── Step 3: Era stats (batched parallel) ────────────────────────────
-    log('INFO', `Fetching era stats (last ${eraCount} eras) for ${validators.length} validators (batch size: ${effectiveBatchSize})…`)
+    // ── Step 3: Era stats (sequential, 1 req/s) ─────────────────────────
+    log('INFO', `Fetching era stats (last ${eraCount} eras) for ${validators.length} validators (sequential, ${API_DELAY_MS}ms between requests)…`)
 
-    const eraTasks = validators.map((v, idx) => async () => {
+    for (let idx = 0; idx < validators.length; idx++) {
       if (abortControllerRef.current?.signal.aborted) return
+      const v = validators[idx]
       try {
         const list = await fetchEraStat(v.address, eraCount, proxy, abortControllerRef.current.signal)
-        // map the raw eraStat entries to our internal shape while preserving
-        // legacy fields (reward/stakes) in case other parts of the app still
-        // reference them.  New requirements ask us to expose Subscan’s
-        // start_block_num, end_block_num, reward_point and compute the number
-        // of unique blocks produced in an era.
         const eraStat = (list ?? []).map(e => {
-          // helper to safely count distinct block numbers returned by Subscan.
           const countUniqueBlocks = raw => {
             if (!raw) return 0
             if (Array.isArray(raw)) return new Set(raw.map(String)).size
             if (typeof raw === 'string') {
-              // many responses are comma-separated strings
               const parts = raw.split(/,|\s+/).map(s => s.trim()).filter(Boolean)
               return new Set(parts).size
             }
@@ -242,7 +221,6 @@ export function useValidatorChecker() {
             reward:         BigInt(String(e?.validator_reward_total ?? e?.reward ?? '0').replace(/[^0-9]/g, '') || '0'),
             validatorStake: BigInt(String(e?.validator_stash_amount ?? '0').replace(/[^0-9]/g, '') || '0'),
             nominatorStake: BigInt(String(e?.nominator_stash_amount ?? '0').replace(/[^0-9]/g, '') || '0'),
-            // newly required fields
             startBlock:     safeInt(e?.start_block_num),
             endBlock:       safeInt(e?.end_block_num),
             rewardPoint:    safeInt(e?.reward_point),
@@ -256,9 +234,8 @@ export function useValidatorChecker() {
         dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { eraStat: [], fetchStatus: 'error' } })
         log('ERR', `[${idx + 1}/${validators.length}] Era stat failed for ${v.address.slice(0, 10)} — request failed.`)
       }
-    })
-
-    await runInBatches(eraTasks, effectiveBatchSize)
+      await delay(API_DELAY_MS)
+    }
     if (abortControllerRef.current?.signal.aborted) return
 
     log('DONE', 'All data loaded. Summary generated below.')

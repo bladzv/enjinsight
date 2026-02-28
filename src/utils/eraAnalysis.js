@@ -72,6 +72,29 @@ export function resolveLatestEra(validators) {
   return max
 }
 
+/**
+ * Compute which eras are missing from a pool's reward_slash response.
+ * Same logic as computeMissedEras but operates on reward events
+ * (each with an `era` field) rather than era_stat records.
+ *
+ * @param {Array}  eraRewards - array of { era: number, ... } from reward_slash
+ * @param {number} latestEra  - the global latest era
+ * @param {number} eraCount   - user's requested N
+ * @returns {number[]} sorted descending list of missing era numbers
+ */
+export function computePoolMissedEras(eraRewards, latestEra, eraCount) {
+  if (!latestEra || !eraCount) return []
+  const expected = new Set(
+    Array.from({ length: eraCount }, (_, i) => latestEra - i)
+  )
+  const received = new Set(
+    (Array.isArray(eraRewards) ? eraRewards : []).map(e => safeEraNum(e.era))
+  )
+  return [...expected]
+    .filter(era => !received.has(era))
+    .sort((a, b) => b - a)
+}
+
 function safeEraNum(val) {
   const n = parseInt(String(val), 10)
   return Number.isFinite(n) ? n : 0
