@@ -3,9 +3,9 @@ import { Copy, CheckCircle2 } from 'lucide-react'
 import { formatENJ, truncateAddress } from '../utils/format.js'
 
 export default function NominatorsTable({ nominators }) {
-  const [page, setPage]     = useState(0)
-  const [copied, setCopied] = useState(null)
-  const PAGE_SIZE = 10
+  const [page, setPage]         = useState(0)
+  const [pageSize, setPageSize] = useState(10)
+  const [copied, setCopied]     = useState(null)
 
   if (!nominators || nominators.length === 0) {
     return (
@@ -13,8 +13,8 @@ export default function NominatorsTable({ nominators }) {
     )
   }
 
-  const pages     = Math.ceil(nominators.length / PAGE_SIZE)
-  const pageItems = nominators.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const pages     = Math.ceil(nominators.length / pageSize)
+  const pageItems = nominators.slice(page * pageSize, (page + 1) * pageSize)
 
   async function copyAddr(addr) {
     try {
@@ -42,7 +42,7 @@ export default function NominatorsTable({ nominators }) {
                 key={n.address || i}
                 className="border-b border-border/50 hover:bg-surface/50 transition-colors"
               >
-                <td className="px-3 py-2.5 text-muted">{page * PAGE_SIZE + i + 1}</td>
+                <td className="px-3 py-2.5 text-muted">{page * pageSize + i + 1}</td>
                 <td className="px-3 py-2.5">
                   <div className="flex items-center gap-1.5">
                     <span className="font-mono text-text-secondary">
@@ -75,7 +75,19 @@ export default function NominatorsTable({ nominators }) {
       {/* Pagination */}
       {pages > 1 && (
         <div className="flex items-center justify-between mt-3 text-xs text-dim">
-          <span>{nominators.length} nominators</span>
+          <div className="flex items-center gap-2">
+            <span>{nominators.length} nominators</span>
+            <select
+              value={pageSize}
+              onChange={e => { setPageSize(Number(e.target.value)); setPage(0) }}
+              className="bg-surface border border-border rounded px-1.5 py-0.5 text-xs text-text cursor-pointer"
+              aria-label="Rows per page"
+            >
+              {[5, 10, 20, 50].map(s => (
+                <option key={s} value={s}>{s} / page</option>
+              ))}
+            </select>
+          </div>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setPage(p => Math.max(0, p - 1))}

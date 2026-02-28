@@ -13,13 +13,6 @@ export default function TerminalLog({ logs }) {
   const [expanded, setExpanded] = useState(false)
   const endRef = useRef(null)
 
-  // Auto-scroll to bottom when new logs arrive
-  useEffect(() => {
-    if (expanded && endRef.current) {
-      endRef.current.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [logs, expanded])
-
   // Auto-expand on first log
   useEffect(() => {
     if (logs.length === 1) setExpanded(true)
