@@ -65,7 +65,9 @@ export default function App() {
     let mounted = true
     ;(async () => {
       try {
-        const mod = await import('@vercel/analytics/react')
+        // use a variable for the path so Rollup doesn’t try to resolve it at build
+        const path = '@vercel/analytics/react'
+        const mod = await import(path)
         if (mounted && mod && mod.Analytics) setAnalyticsComponent(() => mod.Analytics)
       } catch (err) {
         // Package not installed or failed to load — skip analytics silently.
