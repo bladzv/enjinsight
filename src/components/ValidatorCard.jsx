@@ -7,7 +7,6 @@ import {
 import NominatorsTable from './NominatorsTable.jsx'
 import EraStatTable    from './EraStatTable.jsx'
 import { formatENJ, truncateAddress, validatorExplorerUrl } from '../utils/format.js'
-import { resolveLatestEra } from '../utils/eraAnalysis.js'
 
 export default function ValidatorCard({ validator, eraCount, latestEra, onRetry }) {
   const [open,         setOpen]         = useState(false)
@@ -22,7 +21,7 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
 
   const hasMissed   = missedEras?.length > 0
   const loading     = fetchStatus === 'loading'
-  const hasError    = fetchStatus === 'error'
+  const hasError    = fetchStatus === 'error' || fetchStatus === 'failed'
   const displayName = display || truncateAddress(address)
 
   async function copyAddress() {
@@ -63,7 +62,7 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
         <div className="flex-1 min-w-0">
           {/* Line 1 — name */}
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="font-semibold text-sm text-text truncate">{displayName}</span>
+            <span className="font-semibold text-sm text-text truncate" title={displayName}>{displayName}</span>
             {hasMissed && (
               <AlertTriangle size={13} className="text-warning flex-shrink-0" aria-label={`${missedEras.length} missed era(s)`} />
             )}
@@ -85,7 +84,7 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
         <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
           <button
             onClick={copyAddress}
-            className="btn-icon !min-w-[36px] !min-h-[36px]"
+            className="btn-icon"
             aria-label={`Copy address of ${displayName}`}
           >
             {copied ? <CheckCircle2 size={13} className="text-success" /> : <Copy size={13} />}
@@ -94,7 +93,7 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
             href={validatorExplorerUrl(address)}
             target="_blank"
             rel="noopener noreferrer"
-            className="btn-icon !min-w-[36px] !min-h-[36px]"
+            className="btn-icon"
             aria-label={`Open ${displayName} on Subscan`}
           >
             <ExternalLink size={13} />
@@ -105,7 +104,7 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
           {hasError && (
             <button
               onClick={() => onRetry?.(address)}
-              className="btn-icon !min-w-[36px] !min-h-[36px]"
+              className="btn-icon"
               aria-label={`Retry fetching data for ${displayName}`}
             >
               <RefreshCw size={13} className="text-danger" />
@@ -187,19 +186,17 @@ function TabButton({ active, onClick, icon, label, badge, badgeVariant }) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium border-b-2 transition-colors
-        ${active
-          ? 'border-primary text-primary'
-          : 'border-transparent text-dim hover:text-text'}`}
+      className={`flex items-center px-4 py-2.5 text-xs font-medium border-b-2 transition-colors w-full
+        ${active ? 'border-primary text-primary' : 'border-transparent text-dim hover:text-text'}`}
       aria-selected={active}
     >
-      {icon}
-      {label}
+      <span className="flex items-center gap-1.5 min-w-0">
+        {icon}
+        <span className="truncate" title={label}>{label}</span>
+      </span>
       {badge && (
-        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold
-          ${badgeVariant === 'warn'
-            ? 'bg-warning/20 text-warning'
-            : 'bg-border text-dim'}`}
+        <span className={`ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0
+          ${badgeVariant === 'warn' ? 'bg-warning/20 text-warning' : 'bg-border text-dim'}`}
         >
           {badge}
         </span>

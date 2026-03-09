@@ -26,7 +26,7 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
 
   return (
     <div>
-      {validatorFetchStatus === 'failed' && onRetry && (
+      {(validatorFetchStatus === 'failed' || validatorFetchStatus === 'error') && onRetry && (
         <div className="flex items-center justify-end mb-2">
           <button
             onClick={() => onRetry?.(validatorAddress)}
@@ -37,14 +37,38 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
           </button>
         </div>
       )}
-      <div className="scroll-x rounded-lg border border-border">
+      <div className="sm:hidden space-y-2">
+        {pageItems.map((n, i) => (
+          <article key={`m-${n.address || i}`} className="rounded-lg border border-border bg-surface/30 p-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted">#{page * pageSize + i + 1}</span>
+              <span className="font-mono text-text-secondary text-xs truncate">{truncateAddress(n.address)}</span>
+              <button
+                onClick={() => copyAddr(n.address)}
+                className="btn-icon"
+                aria-label={`Copy address ${n.address}`}
+              >
+                {copied === n.address
+                  ? <CheckCircle2 size={13} className="text-success" />
+                  : <Copy size={13} />
+                }
+              </button>
+            </div>
+            <div className="mt-2 text-xs text-dim">
+              <p>Display: <span className="text-text-secondary">{n.display || '—'}</span></p>
+              <p>Bonded: <span className="font-mono text-text">{formatENJ(n.bonded, 2)}</span></p>
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="hidden sm:block scroll-x rounded-lg border border-border">
         <table className="w-full text-xs min-w-[480px]">
           <thead>
             <tr className="bg-surface border-b border-border">
-              <th className="text-left px-3 py-2.5 font-semibold text-dim w-8">#</th>
-              <th className="text-left px-3 py-2.5 font-semibold text-dim">Address</th>
-              <th className="text-left px-3 py-2.5 font-semibold text-dim">Display Name</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-dim">Bonded</th>
+              <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim w-8">#</th>
+              <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim">Address</th>
+              <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim">Display Name</th>
+              <th className="sticky top-0 bg-surface text-right px-3 py-2.5 font-semibold text-dim">Bonded</th>
             </tr>
           </thead>
           <tbody>
@@ -61,7 +85,7 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
                     </span>
                     <button
                       onClick={() => copyAddr(n.address)}
-                      className="btn-icon !min-w-[28px] !min-h-[28px] opacity-50 hover:opacity-100"
+                      className="btn-icon"
                       aria-label={`Copy address ${n.address}`}
                     >
                       {copied === n.address

@@ -11,15 +11,25 @@ const MODES = [
  */
 export default function ModeSelector({ mode, onModeChange, disabled }) {
   return (
-    <div className="flex border-b border-border bg-card rounded-t-xl overflow-hidden">
+    <div
+      role="tablist"
+      aria-label="Scan mode"
+      className="flex border-b border-border bg-card rounded-t-xl overflow-hidden"
+    >
       {MODES.map(({ key, label, icon: Icon }) => {
         const isActive = mode === key
+        const panelId = key === 'validators' ? 'validators-panel' : 'pools-panel'
+        const tabId = `mode-tab-${key}`
         return (
           <button
             key={key}
+            id={tabId}
+            role="tab"
             onClick={() => onModeChange(key)}
             disabled={disabled}
             aria-selected={isActive}
+            aria-controls={panelId}
+            tabIndex={isActive ? 0 : -1}
             className={`flex items-center justify-center gap-1.5 flex-1 px-4 py-3
                         text-xs sm:text-sm font-medium border-b-2 transition-colors
                         disabled:opacity-50 disabled:cursor-not-allowed

@@ -3,6 +3,7 @@ import {
   fetchAllPools, fetchVoted, fetchEraStat,
   fetchRewardSlash, delay,
 } from '../utils/api.js'
+import { enqueueRequest } from '../utils/api.js'
 import { computePoolMissedEras } from '../utils/eraAnalysis.js'
 import { nowHHMMSS, safeInt, truncateAddress, poolLabel, parseCommission } from '../utils/format.js'
 import {
@@ -12,10 +13,11 @@ import {
 
 // ── State shape ────────────────────────────────────────────────────────────
 const initialState = {
-  status:  'idle',   // idle | loading | done | error
+  status:  'idle',   // idle | loading | done | stopped | error
   pools:   [],
   logs:    [],
   proxyUrl: '',
+  progress: null,
 }
 
 // ── Reducer ────────────────────────────────────────────────────────────────
@@ -24,7 +26,20 @@ function reducer(state, action) {
     
 
     case 'START':
-      return { ...state, status: 'loading', pools: [], logs: [] }
+      return {
+        ...state,
+        status: 'loading',
+        pools: [],
+        logs: [],
+        progress: {
+          phases: [
+            { key: 'list', label: 'Fetch Pools', total: 1, completed: 0, status: 'in_progress' },
+            { key: 'validators', label: 'Fetch Nominated Validators', total: 0, completed: 0, status: 'pending' },
+            { key: 'ranges', label: 'Resolve Era Ranges', total: 1, completed: 0, status: 'pending' },
+            { key: 'rewards', label: 'Confirm Rewards', total: 0, completed: 0, status: 'pending' },
+          ],
+        },
+      }
 
       case 'SET_PROXY':
         return { ...state, proxyUrl: action.payload }
@@ -50,11 +65,17 @@ function reducer(state, action) {
       return { ...state, pools }
     }
 
+    case 'SET_PROGRESS':
+      return { ...state, progress: action.payload }
+
     case 'DONE':
       return { ...state, status: 'done' }
 
     case 'ERROR':
       return { ...state, status: 'error' }
+
+    case 'STOP':
+      return { ...state, status: 'stopped' }
 
     case 'RESET':
       return { ...initialState, proxyUrl: state.proxyUrl, logs: [] }
@@ -102,11 +123,18 @@ export function usePoolChecker() {
     const proxy  = state.proxyUrl
     const signal = abortControllerRef.current.signal
     const runStart = Date.now()
+    const phases = [
+      { key: 'list', label: 'Fetch Pools', total: 1, completed: 0, status: 'in_progress' },
+      { key: 'validators', label: 'Fetch Nominated Validators', total: 0, completed: 0, status: 'pending' },
+      { key: 'ranges', label: 'Resolve Era Ranges', total: 1, completed: 0, status: 'pending' },
+      { key: 'rewards', label: 'Confirm Rewards', total: 0, completed: 0, status: 'pending' },
+    ]
+    const syncProgress = () => {
+      dispatch({ type: 'SET_PROGRESS', payload: { phases: phases.map(p => ({ ...p })) } })
+    }
 
-    /** Elapsed seconds since run start, formatted to 1 decimal */
     const elapsed = (since = runStart) => ((Date.now() - since) / 1000).toFixed(1)
 
-    // ── Step 1: Fetch all pools (multi-page) ─────────────────────────
     log('INFO', '─── Step 1: Fetching nomination pools ───')
     const s1 = Date.now()
     let rawPools
@@ -115,6 +143,7 @@ export function usePoolChecker() {
         log('INFO', `Pools page ${pageNum}: ${count} pool(s) received.`)
       })
     } catch (err) {
+      if (signal.aborted) return
       log('ERR', `Failed to fetch pools: ${err?.message || 'unknown error'}. Check your network or proxy and retry.`)
       dispatch({ type: 'ERROR' })
       return
@@ -126,7 +155,6 @@ export function usePoolChecker() {
       return
     }
 
-    // Map to internal shape — extract only needed fields (data minimisation)
     const pools = rawPools.map(p => ({
       poolId:        safeInt(p?.pool_id),
       metadata:      String(p?.metadata ?? ''),
@@ -147,17 +175,15 @@ export function usePoolChecker() {
 
     log('OK', `Found ${pools.length} nomination pool(s). Step 1 completed in ${elapsed(s1)}s.`)
     dispatch({ type: 'SET_POOLS', payload: pools })
-
+    phases[0] = { ...phases[0], completed: 1, status: 'completed' }
+    phases[1] = { ...phases[1], total: pools.length, completed: 0, status: 'in_progress' }
+    syncProgress()
     if (signal.aborted) return
 
-    // ── Step 2: Fetch nominated validators per pool (batched) ────────
     log('INFO', `─── Step 2: Fetching nominated validators (${pools.length} pools, sequential, ${API_DELAY_MS}ms between requests) ───`)
     const s2 = Date.now()
-
-    // Collect all unique validator addresses across pools for Step 3
-    const allCollectedValidators = [] // { address, display }
-    // Also keep a per-pool map so Step 4 can cross-reference
-    const poolValidatorsMap = new Map() // poolId → [{ address, display }]
+    const allCollectedValidators = []
+    const poolValidatorsMap = new Map()
 
     for (let idx = 0; idx < pools.length; idx++) {
       if (signal.aborted) return
@@ -172,30 +198,32 @@ export function usePoolChecker() {
               ? `${v.stash_account_display.parent.display || ''}${v.stash_account_display.parent.sub_symbol ? ` / ${v.stash_account_display.parent.sub_symbol}` : ''}`
               : v?.stash_account_display?.display ?? ''
           ),
-          bonded:   BigInt(String(v?.bonded ?? '0').replace(/[^0-9]/g, '') || '0'),
+          bonded: BigInt(String(v?.bonded ?? '0').replace(/[^0-9]/g, '') || '0'),
           isActive: v?.active === true || (typeof v?.active === 'undefined' && String(v?.status ?? '') === ''),
           fetchStatus: 'done',
           retryAttempts: 0,
           lastError: null,
         }))
         dispatch({ type: 'PATCH_POOL', poolId: p.poolId, patch: { nominatedValidators: validators } })
-        // Store for local use in Steps 3 & 4
         poolValidatorsMap.set(p.poolId, validators)
         for (const v of validators) {
           if (v.address) allCollectedValidators.push({ address: v.address, display: v.display })
         }
-        const label = poolLabel(p)
-        log('OK', `[${idx + 1}/${pools.length}] ${label}: ${validators.length} nominated validator(s).`)
+        log('OK', `[${idx + 1}/${pools.length}] ${poolLabel(p)}: ${validators.length} nominated validator(s).`)
       } catch (err) {
         dispatch({ type: 'PATCH_POOL', poolId: p.poolId, patch: { nominatedValidators: [], fetchStatus: 'error' } })
         poolValidatorsMap.set(p.poolId, [])
         log('WARN', `[${idx + 1}/${pools.length}] Voted fetch failed for Pool #${p.poolId}: ${err?.message || 'unknown error'}.`)
       }
+      phases[1] = { ...phases[1], completed: idx + 1 }
+      syncProgress()
       await delay(API_DELAY_MS)
     }
+    phases[1] = { ...phases[1], status: 'completed' }
+    phases[2] = { ...phases[2], total: 1, completed: 0, status: 'in_progress' }
+    syncProgress()
     if (signal.aborted) return
 
-    // Deduplicate collected validators by address
     const seenAddrs = new Set()
     const uniqueValidators = []
     for (const v of allCollectedValidators) {
@@ -204,30 +232,23 @@ export function usePoolChecker() {
         uniqueValidators.push(v)
       }
     }
-
     log('OK', `${allCollectedValidators.length} validator references collected across ${pools.length} pools (${uniqueValidators.length} unique). Step 2 completed in ${elapsed(s2)}s.`)
 
-    // ── Step 3: Resolve era block ranges (3-validator consensus) ─────
     log('INFO', `─── Step 3: Resolving era block ranges (${ERA_VALIDATORS_SAMPLE}-validator consensus) ───`)
     const s3 = Date.now()
-
     if (uniqueValidators.length === 0) {
       log('ERR', 'No nominated validators found — cannot resolve era block ranges.')
       dispatch({ type: 'ERROR' })
       return
     }
 
-    // Request eraCount + 1 rows to capture the current (incomplete) era + N completed ones
     const rowsNeeded = eraCount + 1
-    let consensusMap = null // era → { start, end }
+    let consensusMap = null
     let currentEra = 0
-    let usedIdx = 0 // tracks how many unique validators we've consumed
+    let usedIdx = 0
 
     log('INFO', `Requesting ${rowsNeeded} era(s) per validator to identify current + ${eraCount} completed era(s).`)
-
     shuffle(uniqueValidators)
-
-    // Try rounds of ERA_VALIDATORS_SAMPLE validators until consensus or exhausted
     const maxRounds = Math.ceil(uniqueValidators.length / ERA_VALIDATORS_SAMPLE)
     for (let round = 0; round < maxRounds && !consensusMap; round++) {
       if (signal.aborted) return
@@ -235,8 +256,7 @@ export function usePoolChecker() {
       usedIdx += ERA_VALIDATORS_SAMPLE
       if (sample.length === 0) break
 
-      // Fetch era_stat for each sample validator
-      const eraMaps = [] // Array<Map<era, { start, end }>>
+      const eraMaps = []
       log('INFO', `Consensus round ${round + 1}: sampling ${sample.length} validator(s)…`)
       for (const v of sample) {
         if (signal.aborted) return
@@ -246,9 +266,9 @@ export function usePoolChecker() {
           const list = await fetchEraStat(v.address, rowsNeeded, proxy, signal)
           const map = new Map()
           for (const e of (list ?? [])) {
-            const era   = safeInt(e?.era)
+            const era = safeInt(e?.era)
             const start = safeInt(e?.start_block_num)
-            const end   = safeInt(e?.end_block_num)
+            const end = safeInt(e?.end_block_num)
             if (era > 0) map.set(era, { start, end })
           }
           if (map.size > 0) eraMaps.push(map)
@@ -262,11 +282,8 @@ export function usePoolChecker() {
       if (eraMaps.length === 0) continue
 
       log('INFO', 'Comparing era block ranges...')
-
-      // Build consensus: take the first map as reference, verify against others
       const refMap = eraMaps[0]
       let mismatch = false
-
       for (const [era, ref] of refMap) {
         for (let m = 1; m < eraMaps.length; m++) {
           const other = eraMaps[m].get(era)
@@ -291,30 +308,22 @@ export function usePoolChecker() {
       return
     }
 
-    // Identify current (incomplete) era = highest era in consensus map
     currentEra = Math.max(...consensusMap.keys())
-
-    // Save current era's block range — it's the payout window for the most recent completed era
-    // (staking rewards for era N are paid out in era N+1's blocks)
     const currentEraRange = consensusMap.get(currentEra)
-
-    // Remove current era — only completed eras should be checked
     consensusMap.delete(currentEra)
 
-    // Keep only the requested eraCount of completed eras (highest first)
     const completedEras = [...consensusMap.keys()].sort((a, b) => b - a).slice(0, eraCount)
     const completedEraSet = new Set(completedEras)
-    // Prune consensus map to only the eras we care about
     for (const era of consensusMap.keys()) {
       if (!completedEraSet.has(era)) consensusMap.delete(era)
     }
 
     const latestCompletedEra = completedEras[0] ?? 0
-    const oldestCompletedEra = completedEras[completedEras.length - 1] ?? 0
     const erasAscending = [...completedEras].sort((a, b) => a - b).join(', ')
-
     log('OK', `Era block ranges resolved: current era ${currentEra} (excluded), ${completedEras.length} completed era(s): ${erasAscending}. Step 3 completed in ${elapsed(s3)}s.`)
-
+    phases[2] = { ...phases[2], completed: 1, status: 'completed' }
+    phases[3] = { ...phases[3], total: pools.length, completed: 0, status: 'in_progress' }
+    syncProgress()
     if (signal.aborted) return
 
     if (completedEras.length === 0) {
@@ -323,7 +332,6 @@ export function usePoolChecker() {
       return
     }
 
-    // ── Step 4: Confirm rewards per pool, one query per era ──────────
     log('INFO', `─── Step 4: Confirming rewards for ${pools.length} pools × ${completedEras.length} eras (${pools.length * completedEras.length} requests, ${API_DELAY_MS}ms apart) ───`)
     const s4 = Date.now()
     let poolsOk = 0
@@ -335,26 +343,22 @@ export function usePoolChecker() {
       const p = pools[idx]
       const label = poolLabel(p)
       log('INFO', `[${idx + 1}/${pools.length}] Checking rewards for ${label} (${completedEras.length} era queries)…`)
-
       try {
-        // Query each era individually using its exact block range
         const allRewards = []
         let eraErrors = 0
         for (let eIdx = 0; eIdx < completedEras.length; eIdx++) {
           if (signal.aborted) break
           const era = completedEras[eIdx]
-          // Rewards for era N are paid out in era N+1's blocks.
-          // For the most recent completed era, era N+1 = currentEra (saved above).
           const payoutRange = consensusMap.get(era + 1) ?? currentEraRange
           const { start, end } = payoutRange
           const blockRange = `${start}-${end}`
           try {
             const rewardList = await fetchRewardSlash(p.stashAddress, blockRange, proxy, signal)
             const mapped = (rewardList ?? []).map(r => ({
-              era:            safeInt(r?.era),
-              amount:         String(r?.amount ?? '0'),
+              era: safeInt(r?.era),
+              amount: String(r?.amount ?? '0'),
               blockTimestamp: safeInt(r?.block_timestamp),
-              eventIndex:     String(r?.event_index ?? ''),
+              eventIndex: String(r?.event_index ?? ''),
               validatorStash: String(r?.validator_stash ?? ''),
             }))
             allRewards.push(...mapped)
@@ -363,18 +367,12 @@ export function usePoolChecker() {
             eraErrors++
             log('WARN', `  Era ${era} reward fetch failed: ${eraErr?.message || 'unknown error'}.`)
           }
-          // Delay between era queries (and also acts as the between-pool delay
-          // since the last era of one pool naturally precedes the first of the next)
           if (!signal.aborted) await delay(API_DELAY_MS)
         }
         if (signal.aborted) break
 
-        // Cross-reference validator_stash with pool's nominated validators
         const poolVals = poolValidatorsMap.get(p.poolId) ?? []
-        const eraValidatorBreakdown = buildEraValidatorBreakdown(
-          allRewards, poolVals, completedEras
-        )
-
+        const eraValidatorBreakdown = buildEraValidatorBreakdown(allRewards, poolVals, completedEras)
         const missedEras = computePoolMissedEras(allRewards, latestCompletedEra, completedEras.length)
         dispatch({
           type: 'PATCH_POOL',
@@ -385,7 +383,7 @@ export function usePoolChecker() {
         const errNote = eraErrors > 0 ? ` (${eraErrors} era fetch error(s))` : ''
         if (missedEras.length > 0) {
           poolsMissed++
-          log('WARN', `[${idx + 1}/${pools.length}] ${label}: ${allRewards.length} reward event(s), ${missedEras.length} missed era(s) — eras ${missedEras.sort((a,b)=>a-b).join(', ')}.${errNote}`)
+          log('WARN', `[${idx + 1}/${pools.length}] ${label}: ${allRewards.length} reward event(s), ${missedEras.length} missed era(s) — eras ${missedEras.sort((a, b) => a - b).join(', ')}.${errNote}`)
         } else {
           poolsOk++
           log('OK', `[${idx + 1}/${pools.length}] ${label}: ${allRewards.length} reward event(s), all ${completedEras.length} eras rewarded.${errNote}`)
@@ -399,14 +397,23 @@ export function usePoolChecker() {
         })
         log('ERR', `[${idx + 1}/${pools.length}] Reward check failed for ${label}: ${err?.message || 'unknown error'}.`)
       }
+      phases[3] = { ...phases[3], completed: idx + 1 }
+      syncProgress()
     }
+
+    if (signal.aborted) return
+    phases[3] = { ...phases[3], status: 'completed' }
+    syncProgress()
+    log('OK', `Step 4 completed in ${elapsed(s4)}s. Results: ${poolsOk} all-rewarded, ${poolsMissed} with gaps, ${poolsErrored} errors.`)
+    log('DONE', `All pool data loaded. Total elapsed: ${elapsed(runStart)}s. Summary generated below.`)
+    dispatch({ type: 'DONE' })
+  }, [state.proxyUrl, log])
 
   const retryPoolValidator = useCallback(async (poolId, address) => {
     if (!poolId || !address) return
     if (!abortControllerRef.current) abortControllerRef.current = new AbortController()
     const signal = abortControllerRef.current.signal
 
-    // mark the validator as queued in the pool's nominatedValidators
     const pool = state.pools.find(p => p.poolId === poolId)
     if (!pool) return
     const queued = (pool.nominatedValidators || []).map(v =>
@@ -417,7 +424,7 @@ export function usePoolChecker() {
 
     try {
       const eraStat = await enqueueRequest({
-        fn: () => fetchEraStat(address, /* row */ DEFAULT_ERA_COUNT, state.proxyUrl, {
+        fn: () => fetchEraStat(address, DEFAULT_ERA_COUNT, state.proxyUrl, {
           signal,
           attempts: MAX_RETRY_ATTEMPTS,
           onRetry: (attempt, errOrStatus, waitMs) => {
@@ -432,7 +439,6 @@ export function usePoolChecker() {
           log('INFO', `Dequeued retry for ${truncateAddress(address)} in Pool #${poolId} — starting requests`)
         },
       })
-      // success: mark as done
       const updated = (pool.nominatedValidators || []).map(v => v.address === address ? { ...v, eraStat, fetchStatus: 'done' } : v)
       dispatch({ type: 'PATCH_POOL', poolId, patch: { nominatedValidators: updated } })
       log('OK', `Manual retry: era stats fetched for ${truncateAddress(address)} in Pool #${poolId}`)
@@ -443,18 +449,18 @@ export function usePoolChecker() {
     }
   }, [state.pools, state.proxyUrl, log])
 
-    if (signal.aborted) return
-
-    log('OK', `Step 4 completed in ${elapsed(s4)}s. Results: ${poolsOk} all-rewarded, ${poolsMissed} with gaps, ${poolsErrored} errors.`)
-    log('DONE', `All pool data loaded. Total elapsed: ${elapsed(runStart)}s. Summary generated below.`)
-    dispatch({ type: 'DONE' })
-  }, [state.proxyUrl, log])
-
   const reset = useCallback(() => {
     try { abortControllerRef.current?.abort() } catch { /* noop */ }
     abortControllerRef.current = null
     dispatch({ type: 'RESET' })
   }, [])
+
+  const stop = useCallback(() => {
+    try { abortControllerRef.current?.abort() } catch { /* noop */ }
+    abortControllerRef.current = null
+    dispatch({ type: 'STOP' })
+    log('WARN', 'Pool scan stopped by user.')
+  }, [log])
 
   // Derive latestEra from pools' eraRewards for enrichment
   const latestEra = resolvePoolLatestEra(state.pools)
@@ -464,7 +470,9 @@ export function usePoolChecker() {
     latestEra,
     setProxy,
     runCheck,
+    stop,
     reset,
+    retryPoolValidator,
   }
 }
 
