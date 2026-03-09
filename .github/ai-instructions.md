@@ -141,7 +141,7 @@ Cross-Origin-Resource-Policy: same-origin
 #### A10:2021 - Server-Side Request Forgery (SSRF)
 - The CORS proxy is the primary SSRF risk surface. Mitigations:
   - **Strict URL allowlist**: only the three whitelisted Subscan paths may be forwarded; any other path returns `403`
-  - **No user-supplied hostnames**: the proxy constructs the upstream URL from a fixed base (`https://enjin.webapi.subscan.io`) — no client-supplied host component is ever used
+  - **No user-supplied hostnames**: the proxy constructs the upstream URL from a fixed base (`https://enjin.api.subscan.io`) — no client-supplied host component is ever used
   - **Block internal IP ranges**: the proxy must reject any resolved upstream IP in RFC 1918 ranges (10.x, 172.16.x, 192.168.x) or loopback (127.x)
   - The proxy never follows redirects from the upstream (`redirect: 'error'`)
 

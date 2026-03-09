@@ -13,7 +13,7 @@ import { formatENJ, poolExplorerUrl, poolLabel } from '../utils/format.js'
  * Collapsed: state badge, display name, member count, bonded, commission, icons.
  * Expanded: two-tab layout — nominated validators + era reward status.
  */
-export default function PoolCard({ pool, eraCount, latestEra }) {
+export default function PoolCard({ pool, eraCount, latestEra, onRetry }) {
   const [open,      setOpen]      = useState(false)
   const [activeTab,  setActiveTab] = useState('rewards') // 'rewards' | 'validators'
   const [copied,    setCopied]    = useState(false)
@@ -174,7 +174,7 @@ export default function PoolCard({ pool, eraCount, latestEra }) {
                   ? <LoadingPlaceholder label="Fetching nominated validators…" />
                   : hasError && !nominatedValidators
                     ? <ErrorPlaceholder label="Validator list fetch failed." />
-                    : <PoolValidatorsTable validators={nominatedValidators} />
+                    : <PoolValidatorsTable validators={nominatedValidators} onRetry={(addr) => onRetry?.(pool.poolId, addr)} />
                 }
               </>
             )}

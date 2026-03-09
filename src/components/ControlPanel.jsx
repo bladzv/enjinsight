@@ -4,10 +4,8 @@ import { DEFAULT_ERA_COUNT, MIN_ERA_COUNT, MAX_ERA_COUNT } from '../constants.js
 
 export default function ControlPanel({
   status,
-  proxyUrl,
   onRun,
   onReset,
-  onOpenProxy,
 }) {
   const [value, setValue]   = useState(String(DEFAULT_ERA_COUNT))
   const [error, setError]   = useState('')
@@ -52,24 +50,9 @@ export default function ControlPanel({
             Enter the number of recent eras (1 era ≈ 24 hours) to scan.
           </p>
         </div>
-        <button
-          onClick={onOpenProxy}
-          className="btn-icon !min-w-[40px] !min-h-[40px]"
-          aria-label="Configure proxy URL"
-          title="Proxy settings"
-        >
-          <Settings size={16} className={proxyUrl ? 'text-success' : 'text-warning'} />
-        </button>
       </div>
 
-      {/* Proxy status hint */}
-      {!proxyUrl && (
-        <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-warning/10 border border-warning/30 text-xs text-warning">
-          <AlertCircle size={13} />
-          <span>No proxy configured — requests may be blocked by CORS.</span>
-          <button onClick={onOpenProxy} className="ml-auto underline hover:no-underline">Configure</button>
-        </div>
-      )}
+      {/* Proxy status hint removed — use the built-in serverless proxy in production. */}
 
       {/* Input row */}
       <div className="flex flex-col sm:flex-row gap-3">

@@ -7,7 +7,7 @@ import { formatENJ, truncateAddress, validatorExplorerUrl } from '../utils/forma
  * Columns: #, Address (truncated + copy), Display, Bonded, Status, Explorer link.
  * Bonded column hidden below md breakpoint.
  */
-export default function PoolValidatorsTable({ validators }) {
+export default function PoolValidatorsTable({ validators, onRetry }) {
   const [page, setPage]         = useState(0)
   const [pageSize, setPageSize] = useState(10)
   const [copied, setCopied]     = useState(null)
@@ -115,10 +115,26 @@ export default function PoolValidatorsTable({ validators }) {
                   {formatENJ(v.bonded, 2)}
                 </td>
                 <td className="px-3 py-2.5 text-center">
-                  {v.isActive
-                    ? <span className="badge-active"><Shield size={10} />Active</span>
-                    : <span className="badge-waiting"><Clock size={10} />Inactive</span>
-                  }
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="flex items-center gap-2">
+                      {v.isActive
+                        ? <span className="badge-active"><Shield size={10} />Active</span>
+                        : <span className="badge-waiting"><Clock size={10} />Inactive</span>
+                      }
+                      {v.fetchStatus === 'queued' && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-border text-dim">Queued</span>
+                      )}
+                      {v.fetchStatus === 'failed' && onRetry && (
+                        <button
+                          onClick={() => onRetry(v.address)}
+                          className="text-xs bg-yellow-600 text-white px-2 py-1 rounded"
+                          aria-label={`Retry fetch for ${v.address}`}
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </td>
               </tr>
             ))}
