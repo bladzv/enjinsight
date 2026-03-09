@@ -99,6 +99,9 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
           >
             <ExternalLink size={13} />
           </a>
+          {fetchStatus === 'queued' && (
+            <span className="px-2 py-1 text-xs bg-border text-dim rounded">Queued</span>
+          )}
           {hasError && (
             <button
               onClick={() => onRetry?.(address)}
@@ -164,7 +167,12 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
                   ? <LoadingPlaceholder label="Fetching nominators…" />
                   : hasError && !nominators
                   ? <ErrorPlaceholder label="Nominator fetch failed." onRetry={() => onRetry?.(address)} />
-                  : <NominatorsTable nominators={nominators} />
+                  : <NominatorsTable
+                      nominators={nominators}
+                      onRetry={onRetry}
+                      validatorAddress={address}
+                      validatorFetchStatus={fetchStatus}
+                    />
                 }
               </>
             )}

@@ -23,14 +23,14 @@ export default function App() {
   const {
     status: vStatus, validators, logs: vLogs,
     proxyUrl: vProxyUrl, setProxy: vSetProxy,
-    runCheck: vRunCheck, reset: vReset,
+    runCheck: vRunCheck, reset: vReset, retryValidator: vRetryValidator,
   } = useValidatorChecker()
 
   // Pool hook
   const {
     status: pStatus, pools, logs: pLogs,
     proxyUrl: pProxyUrl, setProxy: pSetProxy,
-    runCheck: pRunCheck, reset: pReset,
+    runCheck: pRunCheck, reset: pReset, retryPoolValidator: pRetryPoolValidator,
     latestEra: poolLatestEra,
   } = usePoolChecker()
 
@@ -131,6 +131,7 @@ export default function App() {
                   validator={v}
                   eraCount={lastEraCount}
                   latestEra={validatorLatestEra}
+                  onRetry={vRetryValidator}
                 />
               ))}
             </div>
@@ -169,6 +170,7 @@ export default function App() {
                   pool={p}
                   eraCount={lastEraCount}
                   latestEra={poolLatestEra}
+                  onRetry={pRetryPoolValidator}
                 />
               ))}
             </div>

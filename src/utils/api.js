@@ -1,7 +1,7 @@
 import {
   SUBSCAN_BASE, ENDPOINTS, REQUEST_TIMEOUT_MS,
   NOMINATORS_ROW, POOLS_PAGE_SIZE, REWARD_SLASH_ROW,
-  MAX_RETRIES, API_DELAY_MS,
+  MAX_RETRIES, API_DELAY_MS, MAX_RETRY_ATTEMPTS, RETRY_BASE_MS,
 } from '../constants.js'
 
 // Exact allowlist of permitted upstream path suffixes
@@ -31,12 +31,18 @@ function buildUrl(proxyUrl, path) {
     throw new Error(`Blocked: path "${path}" is not in the allowlist.`)
   }
   if (proxyUrl) {
+    // If proxyUrl looks like a same-origin path (e.g. '/api' or '/api/'),
+    // treat it as a serverless proxy that expects the full upstream URL
+    // encoded in the path: `/api/<encodeURIComponent(fullUpstreamUrl)>`.
+    if (proxyUrl.startsWith('/')) {
+      const base = proxyUrl.endsWith('/') ? proxyUrl.slice(0, -1) : proxyUrl
+      return `${base}/${encodeURIComponent(`${SUBSCAN_BASE}${path}`)}`
+    }
+
+    // Otherwise expect a full HTTPS proxy root (external proxy service).
     if (!validateProxyUrl(proxyUrl)) {
       throw new Error('Invalid proxy URL: must be a valid HTTPS URL.')
     }
-    // Proxy is expected to forward requests by path: append the allowed path
-    // to the worker root (see PROXY.md). Do not attempt to interpolate
-    // user-supplied path parts beyond the allowlist to avoid SSRF.
     const base = proxyUrl.endsWith('/') ? proxyUrl.slice(0, -1) : proxyUrl
     return `${base}${path}`
   }
@@ -44,6 +50,48 @@ function buildUrl(proxyUrl, path) {
 }
 
 const delay = ms => new Promise(r => setTimeout(r, ms))
+
+// Simple FIFO request queue to serialize top-level requests and enforce a
+// delay between them to avoid hitting rate limits when manual retries are invoked.
+class RequestQueue {
+  constructor(delayMs = 1000) {
+    this.delayMs = delayMs
+    this.queue = []
+    this.running = false
+  }
+
+  add(item) {
+    // item can be a function (legacy) or an object { fn, onStart }
+    return new Promise((resolve, reject) => {
+      const entry = typeof item === 'function' ? { fn: item } : { fn: item.fn, onStart: item.onStart }
+      this.queue.push({ ...entry, resolve, reject })
+      if (!this.running) this._runNext()
+    })
+  }
+
+  async _runNext() {
+    if (this.running) return
+    this.running = true
+    while (this.queue.length) {
+      const { fn, onStart, resolve, reject } = this.queue.shift()
+      try {
+        if (typeof onStart === 'function') {
+          try { onStart() } catch (e) { /* ignore */ }
+        }
+        const result = await fn()
+        resolve(result)
+      } catch (err) {
+        reject(err)
+      }
+      // wait between requests to avoid bursts
+      await delay(this.delayMs)
+    }
+    this.running = false
+  }
+}
+
+export const requestQueue = new RequestQueue(API_DELAY_MS)
+export const enqueueRequest = (fn) => requestQueue.add(fn)
 
 /**
  * Core fetch wrapper.
@@ -58,8 +106,10 @@ export async function subscanPost(path, body, proxyUrl, options = {}) {
   const url = buildUrl(proxyUrl, path)
   const external = options.signal
   const serialisedBody = JSON.stringify(body)
+  const attempts = Number.isFinite(options.attempts) ? options.attempts : MAX_RETRY_ATTEMPTS
+  const retryBase = Number.isFinite(options.retryBaseMs) ? options.retryBaseMs : RETRY_BASE_MS
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     const controller = new AbortController()
     const onExternalAbort = () => controller.abort()
     if (external) {
@@ -82,19 +132,37 @@ export async function subscanPost(path, body, proxyUrl, options = {}) {
     } catch (err) {
       clearTimeout(timer)
       if (external) external.removeEventListener('abort', onExternalAbort)
-      if (err.name === 'AbortError') throw new Error('Request timed out after 15 s.')
+      if (err.name === 'AbortError') {
+        // If external aborted, propagate immediately
+        if (external && external.aborted) throw new Error('Request aborted.')
+        // Otherwise treat as timeout
+        if (attempt < attempts) {
+          const waitMs = Math.round(retryBase * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.2))
+          if (typeof options.onRetry === 'function') options.onRetry(attempt, err, waitMs)
+          await delay(waitMs)
+          continue
+        }
+        throw new Error('Request timed out after 15 s.')
+      }
+      if (attempt < attempts) {
+        const waitMs = Math.round(retryBase * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.2))
+        if (typeof options.onRetry === 'function') options.onRetry(attempt, err, waitMs)
+        await delay(waitMs)
+        continue
+      }
       throw new Error('Network error — check your connection or proxy URL.')
     } finally {
       clearTimeout(timer)
       if (external) external.removeEventListener('abort', onExternalAbort)
     }
 
-    // Handle 429 rate-limit with retry
-    if (response.status === 429 && attempt < MAX_RETRIES) {
+    // Retry on 429 or 5xx
+    if ((response.status === 429 || (response.status >= 500 && response.status < 600)) && attempt < attempts) {
       const retryAfter = parseInt(response.headers.get('retry-after') || '', 10)
       const waitMs = (Number.isFinite(retryAfter) && retryAfter > 0)
         ? retryAfter * 1000
-        : API_DELAY_MS * (attempt + 1)  // exponential-ish fallback: 1s, 2s, 3s
+        : Math.round(retryBase * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.2))
+      if (typeof options.onRetry === 'function') options.onRetry(attempt, { status: response.status }, waitMs)
       await delay(waitMs)
       continue
     }
@@ -122,8 +190,8 @@ export async function subscanPost(path, body, proxyUrl, options = {}) {
     return data
   }
 
-  // All retries exhausted for 429
-  throw new Error('Rate limited by Subscan (429) — retries exhausted.')
+  // All retries exhausted
+  throw new Error('Retries exhausted while contacting Subscan.')
 }
 
 // ── Typed helpers ──────────────────────────────────────────────────────────
@@ -138,22 +206,31 @@ export async function fetchValidators(proxyUrl, signal) {
   return data?.data?.list ?? []
 }
 
-export async function fetchNominators(address, proxyUrl, signal) {
+export async function fetchNominators(address, proxyUrl, options = {}) {
+  // Support legacy signature where a signal may be passed as the third arg
+  if (options && typeof options === 'object' && typeof options.addEventListener === 'function') {
+    options = { signal: options }
+  }
+  const { signal } = options
   const data = await subscanPost(
     ENDPOINTS.nominators,
     { page: 0, row: NOMINATORS_ROW, address, order: 'desc', order_field: 'bonded' },
     proxyUrl,
-    { signal },
+    options,
   )
   return data?.data?.list ?? []
 }
 
-export async function fetchEraStat(address, row, proxyUrl, signal) {
+export async function fetchEraStat(address, row, proxyUrl, options = {}) {
+  // Support legacy signature where the fourth param is an AbortSignal
+  if (options && typeof options === 'object' && typeof options.addEventListener === 'function') {
+    options = { signal: options }
+  }
   const data = await subscanPost(
     ENDPOINTS.eraStat,
     { address, row, page: 0 },
     proxyUrl,
-    { signal },
+    options,
   )
   return data?.data?.list ?? []
 }

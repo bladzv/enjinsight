@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Copy, CheckCircle2 } from 'lucide-react'
 import { formatENJ, truncateAddress } from '../utils/format.js'
 
-export default function NominatorsTable({ nominators }) {
+export default function NominatorsTable({ nominators, onRetry, validatorAddress, validatorFetchStatus }) {
   const [page, setPage]         = useState(0)
   const [pageSize, setPageSize] = useState(10)
   const [copied, setCopied]     = useState(null)
@@ -26,6 +26,17 @@ export default function NominatorsTable({ nominators }) {
 
   return (
     <div>
+      {validatorFetchStatus === 'failed' && onRetry && (
+        <div className="flex items-center justify-end mb-2">
+          <button
+            onClick={() => onRetry?.(validatorAddress)}
+            className="text-xs bg-yellow-600 text-white px-2 py-1 rounded"
+            aria-label={`Retry fetching nominators for ${validatorAddress}`}
+          >
+            Retry nominators
+          </button>
+        </div>
+      )}
       <div className="scroll-x rounded-lg border border-border">
         <table className="w-full text-xs min-w-[480px]">
           <thead>

@@ -24,7 +24,7 @@ worker forwards requests from your deployed app and rewrites the `Origin` header
 
 // ── CONFIGURE THESE ─────────────────────────────────────────────────────────
 const ALLOWED_ORIGIN  = 'https://YOUR_GITHUB_USERNAME.github.io'  // your app's domain
-const UPSTREAM_BASE   = 'https://enjin.webapi.subscan.io'
+const UPSTREAM_BASE   = 'https://enjin.api.subscan.io'
 
 const ALLOWED_PATHS = new Set([
   '/api/scan/staking/validators',

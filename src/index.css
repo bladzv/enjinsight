@@ -91,6 +91,11 @@
   .log-done { @apply text-primary-glow; }
   .log-ts   { @apply text-muted; }
 
+  /* Highlight retry log lines for visibility */
+  .log-retry {
+    @apply font-semibold text-yellow-400;
+  }
+
   /* ── Severity chips ── */
   .sev-low    { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-warning/15 text-warning; }
   .sev-medium { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-500/15 text-orange-400; }

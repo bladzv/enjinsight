@@ -8,6 +8,7 @@ import { nowHHMMSS, safeInt, truncateAddress, poolLabel, parseCommission } from 
 import {
   PROXY_STORAGE_KEY,
   ERA_VALIDATORS_SAMPLE, API_DELAY_MS,
+  DEFAULT_ERA_COUNT, MAX_RETRY_ATTEMPTS,
 } from '../constants.js'
 
 // ── State shape ────────────────────────────────────────────────────────────
@@ -174,6 +175,9 @@ export function usePoolChecker() {
           ),
           bonded:   BigInt(String(v?.bonded ?? '0').replace(/[^0-9]/g, '') || '0'),
           isActive: v?.active === true || (typeof v?.active === 'undefined' && String(v?.status ?? '') === ''),
+          fetchStatus: 'done',
+          retryAttempts: 0,
+          lastError: null,
         }))
         dispatch({ type: 'PATCH_POOL', poolId: p.poolId, patch: { nominatedValidators: validators } })
         // Store for local use in Steps 3 & 4
@@ -397,6 +401,48 @@ export function usePoolChecker() {
         log('ERR', `[${idx + 1}/${pools.length}] Reward check failed for ${label}: ${err?.message || 'unknown error'}.`)
       }
     }
+
+  const retryPoolValidator = useCallback(async (poolId, address) => {
+    if (!poolId || !address) return
+    if (!abortControllerRef.current) abortControllerRef.current = new AbortController()
+    const signal = abortControllerRef.current.signal
+
+    // mark the validator as queued in the pool's nominatedValidators
+    const pool = state.pools.find(p => p.poolId === poolId)
+    if (!pool) return
+    const queued = (pool.nominatedValidators || []).map(v =>
+      v.address === address ? { ...v, fetchStatus: 'queued', queued: true, retryAttempts: 0, lastError: null } : v
+    )
+    dispatch({ type: 'PATCH_POOL', poolId, patch: { nominatedValidators: queued } })
+    log('INFO', `Manual retry queued for validator ${truncateAddress(address)} in Pool #${poolId}`)
+
+    try {
+      const eraStat = await enqueueRequest({
+        fn: () => fetchEraStat(address, /* row */ DEFAULT_ERA_COUNT, state.proxyUrl, {
+          signal,
+          attempts: MAX_RETRY_ATTEMPTS,
+          onRetry: (attempt, errOrStatus, waitMs) => {
+            const updated = (pool.nominatedValidators || []).map(v => v.address === address ? { ...v, retryAttempts: attempt } : v)
+            dispatch({ type: 'PATCH_POOL', poolId, patch: { nominatedValidators: updated } })
+            log('INFO', `Retry ${attempt}/${MAX_RETRY_ATTEMPTS} fetching era stats for ${truncateAddress(address)} in Pool #${poolId} (waiting ${waitMs}ms)`)
+          },
+        }),
+        onStart: () => {
+          const started = (pool.nominatedValidators || []).map(v => v.address === address ? { ...v, fetchStatus: 'loading', queued: false } : v)
+          dispatch({ type: 'PATCH_POOL', poolId, patch: { nominatedValidators: started } })
+          log('INFO', `Dequeued retry for ${truncateAddress(address)} in Pool #${poolId} — starting requests`)
+        },
+      })
+      // success: mark as done
+      const updated = (pool.nominatedValidators || []).map(v => v.address === address ? { ...v, eraStat, fetchStatus: 'done' } : v)
+      dispatch({ type: 'PATCH_POOL', poolId, patch: { nominatedValidators: updated } })
+      log('OK', `Manual retry: era stats fetched for ${truncateAddress(address)} in Pool #${poolId}`)
+    } catch (err) {
+      const updated = (pool.nominatedValidators || []).map(v => v.address === address ? { ...v, fetchStatus: 'failed', lastError: String(err?.message ?? err) } : v)
+      dispatch({ type: 'PATCH_POOL', poolId, patch: { nominatedValidators: updated } })
+      log('ERR', `Manual retry failed for ${truncateAddress(address)} in Pool #${poolId} — ${String(err?.message ?? '')}`)
+    }
+  }, [state.pools, state.proxyUrl, log])
 
     if (signal.aborted) return
 

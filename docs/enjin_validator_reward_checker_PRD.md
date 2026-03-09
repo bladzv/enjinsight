@@ -6,7 +6,7 @@
 > **Author:** Product Team  
 > **Stakeholders:** Engineering, DevOps, Blockchain Operations  
 > **Target Chain:** Enjin Relaychain (Nominated Proof of Stake)  
-> **Data Source:** Subscan API — `enjin.webapi.subscan.io`
+> **Data Source:** Subscan API — `enjin.api.subscan.io`
 
 ---
 
@@ -118,7 +118,7 @@ A community member shares a screenshot of the Summary section to publicly docume
 
 The Subscan WebAPI for Enjin returns `Access-Control-Allow-Origin: https://enjin.subscan.io` — direct browser calls from a different origin will be blocked by CORS. Two mitigation options are available:
 
-**Option A — CORS Proxy (Recommended for v1):** Deploy a lightweight Cloudflare Worker or Vercel Edge Function that forwards requests to Subscan and rewrites the `Origin` header. The proxy is a pure passthrough with no business logic. It must whitelist only `enjin.webapi.subscan.io` as a permitted forwarding target.
+**Option A — CORS Proxy (Recommended for v1):** Deploy a lightweight Cloudflare Worker or Vercel Edge Function that forwards requests to Subscan and rewrites the `Origin` header. The proxy is a pure passthrough with no business logic. It must whitelist only `enjin.api.subscan.io` as a permitted forwarding target.
 
 **Option B — Thin Backend:** A Node.js/Express server performs the API calls server-side and serves results to the frontend. This trades deployment simplicity for full CORS control.
 
@@ -133,7 +133,7 @@ The PRD assumes **Option A** to keep the architecture lean and serverless.
 All three endpoints share the same base configuration:
 
 ```
-POST https://enjin.webapi.subscan.io/api/scan/staking/[endpoint]
+POST https://enjin.api.subscan.io/api/scan/staking/[endpoint]
 
 Headers:
   Content-Type:    application/json
@@ -426,7 +426,7 @@ This section defines security controls that must be implemented to protect the a
 
 #### A01 — Broken Access Control
 - **Not applicable** in v1: the app has no authentication, user roles, or access-controlled resources.
-- The CORS proxy must enforce a strict allowlist: only requests targeting `enjin.webapi.subscan.io` are forwarded. Any attempt to use the proxy as an open relay to arbitrary hosts must return `403 Forbidden`.
+- The CORS proxy must enforce a strict allowlist: only requests targeting `enjin.api.subscan.io` are forwarded. Any attempt to use the proxy as an open relay to arbitrary hosts must return `403 Forbidden`.
 - The proxy must reject requests from origins other than the app's own production domain.
 
 #### A02 — Cryptographic Failures
@@ -504,7 +504,7 @@ Cross-Origin-Resource-Policy: same-origin
 
 #### A10 — Server-Side Request Forgery (SSRF)
 - The CORS proxy is the primary SSRF risk surface. Mitigations:
-  - **Strict URL allowlist**: only `https://enjin.webapi.subscan.io/api/scan/staking/validators`, `/nominators`, and `/era_stat` may be forwarded. No other URLs or hosts.
+  - **Strict URL allowlist**: only `https://enjin.api.subscan.io/api/scan/staking/validators`, `/nominators`, and `/era_stat` may be forwarded. No other URLs or hosts.
   - **No user-supplied hostnames**: the proxy constructs the upstream URL from a fixed base — no part of the upstream URL is derived from the client request body or query string (except the path suffix, which is allowlisted).
   - **Block internal IP ranges**: the proxy must reject any upstream URL that resolves to RFC 1918 addresses (10.x, 172.16.x, 192.168.x) or loopback (127.x). This must be enforced at the DNS resolution level.
   - The proxy must not follow HTTP redirects from the upstream server automatically.

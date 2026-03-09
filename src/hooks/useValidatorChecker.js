@@ -4,7 +4,9 @@ import {
 } from '../utils/api.js'
 import { computeMissedEras, resolveLatestEra } from '../utils/eraAnalysis.js'
 import { nowHHMMSS, safeInt, parseCommission } from '../utils/format.js'
-import { PROXY_STORAGE_KEY, API_DELAY_MS } from '../constants.js'
+import { PROXY_STORAGE_KEY, API_DELAY_MS, MAX_RETRY_ATTEMPTS, DEFAULT_ERA_COUNT } from '../constants.js'
+import { truncateAddress } from '../utils/format.js'
+import { enqueueRequest } from '../utils/api.js'
 
 // ── State shape ────────────────────────────────────────────────────────────
 const initialState = {
@@ -179,9 +181,16 @@ export function useValidatorChecker() {
     for (let idx = 0; idx < validators.length; idx++) {
       if (abortControllerRef.current?.signal.aborted) return
       const v = validators[idx]
-      dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { fetchStatus: 'loading' } })
+      dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { fetchStatus: 'loading', retryAttempts: 0, lastError: null } })
       try {
-        const list = await fetchNominators(v.address, proxy, abortControllerRef.current.signal)
+        const list = await fetchNominators(v.address, proxy, {
+          signal: abortControllerRef.current.signal,
+          attempts: MAX_RETRY_ATTEMPTS,
+          onRetry: (attempt, errOrStatus, waitMs) => {
+            dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { retryAttempts: attempt } })
+            log('INFO', `Retry ${attempt}/${MAX_RETRY_ATTEMPTS} fetching nominators for ${truncateAddress(v.address)} (waiting ${waitMs}ms)`)
+          },
+        })
         const nominators = (list ?? []).map(n => ({
           address: String(n?.account_display?.address ?? ''),
           display: String(n?.account_display?.display ?? ''),
@@ -190,8 +199,8 @@ export function useValidatorChecker() {
         dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { nominators } })
         log('OK', `[${idx + 1}/${validators.length}] ${v.display || v.address.slice(0, 10)}: ${nominators.length} nominator(s).`)
       } catch (err) {
-        dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { nominators: [], fetchStatus: 'error' } })
-        log('WARN', `[${idx + 1}/${validators.length}] Nominators failed for ${v.address.slice(0, 10)} — request failed.`)
+        dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { nominators: [], fetchStatus: 'failed', lastError: String(err?.message ?? err) } })
+        log('WARN', `[${idx + 1}/${validators.length}] Nominators failed for ${truncateAddress(v.address)} — ${String(err?.message ?? '')}`)
       }
       await delay(API_DELAY_MS)
     }
@@ -204,7 +213,14 @@ export function useValidatorChecker() {
       if (abortControllerRef.current?.signal.aborted) return
       const v = validators[idx]
       try {
-        const list = await fetchEraStat(v.address, eraCount, proxy, abortControllerRef.current.signal)
+        const list = await fetchEraStat(v.address, eraCount, proxy, {
+          signal: abortControllerRef.current.signal,
+          attempts: MAX_RETRY_ATTEMPTS,
+          onRetry: (attempt, errOrStatus, waitMs) => {
+            dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { retryAttempts: attempt } })
+            log('INFO', `Retry ${attempt}/${MAX_RETRY_ATTEMPTS} fetching era stats for ${truncateAddress(v.address)} (waiting ${waitMs}ms)`)
+          },
+        })
         const eraStat = (list ?? []).map(e => {
           const countUniqueBlocks = raw => {
             if (!raw) return 0
@@ -231,8 +247,8 @@ export function useValidatorChecker() {
         dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { eraStat, fetchStatus: 'done' } })
         log('OK', `[${idx + 1}/${validators.length}] ${v.display || v.address.slice(0, 10)}: era stat done (latest era: ${latestInBatch}).`)
       } catch (err) {
-        dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { eraStat: [], fetchStatus: 'error' } })
-        log('ERR', `[${idx + 1}/${validators.length}] Era stat failed for ${v.address.slice(0, 10)} — request failed.`)
+        dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { eraStat: [], fetchStatus: 'failed', lastError: String(err?.message ?? err) } })
+        log('ERR', `[${idx + 1}/${validators.length}] Era stat failed for ${truncateAddress(v.address)} — ${String(err?.message ?? '')}`)
       }
       await delay(API_DELAY_MS)
     }
@@ -249,6 +265,59 @@ export function useValidatorChecker() {
     dispatch({ type: 'RESET' })
   }, [])
 
+  const retryValidator = useCallback(async (address) => {
+    if (!address) return
+    // ensure we have an AbortController for this action
+    if (!abortControllerRef.current) abortControllerRef.current = new AbortController()
+    const signal = abortControllerRef.current.signal
+    dispatch({ type: 'PATCH_VALIDATOR', address, patch: { fetchStatus: 'queued', queued: true, retryAttempts: 0, lastError: null } })
+    log('INFO', `Manual retry queued for ${truncateAddress(address)}`)
+
+    try {
+      const nominators = await enqueueRequest({
+        fn: () => fetchNominators(address, state.proxyUrl, {
+          signal,
+          attempts: MAX_RETRY_ATTEMPTS,
+          onRetry: (attempt, errOrStatus, waitMs) => {
+            dispatch({ type: 'PATCH_VALIDATOR', address, patch: { retryAttempts: attempt } })
+            log('INFO', `Retry ${attempt}/${MAX_RETRY_ATTEMPTS} fetching nominators for ${truncateAddress(address)} (waiting ${waitMs}ms)`)
+          },
+        }),
+        onStart: () => {
+          dispatch({ type: 'PATCH_VALIDATOR', address, patch: { fetchStatus: 'loading', queued: false } })
+          log('INFO', `Dequeued retry for ${truncateAddress(address)} — starting requests`)        
+        },
+      })
+      dispatch({ type: 'PATCH_VALIDATOR', address, patch: { nominators } })
+      log('OK', `Manual retry: nominators fetched for ${truncateAddress(address)}`)
+    } catch (err) {
+      dispatch({ type: 'PATCH_VALIDATOR', address, patch: { nominators: [], fetchStatus: 'failed', lastError: String(err?.message ?? err) } })
+      log('ERR', `Manual retry nominators failed for ${truncateAddress(address)} — ${String(err?.message ?? '')}`)
+      return
+    }
+
+    try {
+      const eraStat = await enqueueRequest({
+        fn: () => fetchEraStat(address, /* row */ DEFAULT_ERA_COUNT, state.proxyUrl, {
+          signal,
+          attempts: MAX_RETRY_ATTEMPTS,
+          onRetry: (attempt, errOrStatus, waitMs) => {
+            dispatch({ type: 'PATCH_VALIDATOR', address, patch: { retryAttempts: attempt } })
+            log('INFO', `Retry ${attempt}/${MAX_RETRY_ATTEMPTS} fetching era stats for ${truncateAddress(address)} (waiting ${waitMs}ms)`)
+          },
+        }),
+        onStart: () => {
+          dispatch({ type: 'PATCH_VALIDATOR', address, patch: { fetchStatus: 'loading', queued: false } })
+        },
+      })
+      dispatch({ type: 'PATCH_VALIDATOR', address, patch: { eraStat, fetchStatus: 'done' } })
+      log('OK', `Manual retry: era stats fetched for ${truncateAddress(address)}`)
+    } catch (err) {
+      dispatch({ type: 'PATCH_VALIDATOR', address, patch: { eraStat: [], fetchStatus: 'failed', lastError: String(err?.message ?? err) } })
+      log('ERR', `Manual retry era stats failed for ${truncateAddress(address)} — ${String(err?.message ?? '')}`)
+    }
+  }, [state.proxyUrl, log])
+
   // Derive latestEra and missedEras after loading
   const enrichedValidators = state.status === 'done' || state.status === 'loading'
     ? enrichValidators(state.validators)
@@ -260,6 +329,7 @@ export function useValidatorChecker() {
     setProxy,
     runCheck,
     reset,
+    retryValidator,
   }
 }
 

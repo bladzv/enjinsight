@@ -66,7 +66,14 @@ export default function TerminalLog({ logs }) {
                     [{entry.level}]
                   </span>
                   {/* Entry message is plain text — never HTML — safe to render as string */}
-                  <span className="text-[#C8C8E8] break-all">{entry.message}</span>
+                  {(() => {
+                    const isRetry = typeof entry.message === 'string' && /Retry\s+\d+\/\d+/i.test(entry.message)
+                    return (
+                      <span className={`text-[#C8C8E8] break-all ${isRetry ? 'log-retry' : ''}`}>
+                        {entry.message}
+                      </span>
+                    )
+                  })()}
                 </div>
               ))}
               <div ref={endRef} />
