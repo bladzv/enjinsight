@@ -31,20 +31,15 @@ function buildUrl(proxyUrl, path) {
     throw new Error(`Blocked: path "${path}" is not in the allowlist.`)
   }
   if (proxyUrl) {
-    // If proxyUrl looks like a same-origin path (e.g. '/api' or '/api/'),
-    // treat it as a serverless proxy that expects the full upstream URL
-    // encoded in the path: `/api/<encodeURIComponent(fullUpstreamUrl)>`.
+    // Only allow same-origin serverless proxy paths (e.g. '/api').
+    // Disallow external HTTPS proxy roots to prevent SSRF and accidental
+    // exposure of upstream targets from the client UI.
     if (proxyUrl.startsWith('/')) {
       const base = proxyUrl.endsWith('/') ? proxyUrl.slice(0, -1) : proxyUrl
       return `${base}/${encodeURIComponent(`${SUBSCAN_BASE}${path}`)}`
     }
 
-    // Otherwise expect a full HTTPS proxy root (external proxy service).
-    if (!validateProxyUrl(proxyUrl)) {
-      throw new Error('Invalid proxy URL: must be a valid HTTPS URL.')
-    }
-    const base = proxyUrl.endsWith('/') ? proxyUrl.slice(0, -1) : proxyUrl
-    return `${base}${path}`
+    throw new Error('External proxy URLs are disallowed. Use a same-origin proxy path (e.g. \'/api\') or omit proxyUrl.')
   }
   return `${SUBSCAN_BASE}${path}`
 }

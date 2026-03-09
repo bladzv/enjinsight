@@ -32,7 +32,6 @@ export const API_DELAY_MS          = 1000  // global delay between sequential AP
 export const NOMINATORS_ROW        = 100  // max nominators to fetch per validator
 export const POOLS_PAGE_SIZE       = 100  // rows per page when fetching pools (multi-page loop)
 export const REWARD_SLASH_ROW      = 100  // max reward/slash events per request
-export const PROXY_STORAGE_KEY     = 'enjin_checker_proxy_url'
 export const ERA_VALIDATORS_SAMPLE = 3    // validators to check for era block-range consensus
 
 // ── Defaults ───────────────────────────────────────────────────────────────

@@ -7,7 +7,6 @@ import { resolveLatestEra }    from './utils/eraAnalysis.js'
 import AppHeader           from './components/AppHeader.jsx'
 import ModeSelector        from './components/ModeSelector.jsx'
 import ControlPanel        from './components/ControlPanel.jsx'
-import ProxySetup          from './components/ProxySetup.jsx'
 import ValidatorCard       from './components/ValidatorCard.jsx'
 import PoolCard            from './components/PoolCard.jsx'
 import TerminalLog         from './components/TerminalLog.jsx'
@@ -16,7 +15,6 @@ import PoolSummarySection  from './components/PoolSummarySection.jsx'
 
 export default function App() {
   const [mode,       setMode]       = useState('validators') // 'validators' | 'pools'
-  const [showProxy,  setShowProxy]  = useState(false)
   const [lastEraCount, setLastEraCount] = useState(DEFAULT_ERA_COUNT)
 
   // Validator hook
@@ -44,12 +42,7 @@ export default function App() {
 
   const validatorLatestEra = resolveLatestEra(validators)
 
-  function handleSetProxy(url) {
-    // Keep both hooks in sync
-    const ok1 = vSetProxy(url)
-    const ok2 = pSetProxy(url)
-    return ok1 !== false && ok2 !== false
-  }
+  // Proxy configuration removed from UI; hooks retain a no-op `setProxy` for compatibility.
 
   async function handleRun(eraCount) {
     setLastEraCount(eraCount)
@@ -79,26 +72,13 @@ export default function App() {
         {/* Mode selector tabs */}
         <ModeSelector mode={mode} onModeChange={handleModeChange} disabled={isLoading} />
 
-        {/* Proxy setup (inline or modal-like) */}
-        {showProxy && (
-          <ProxySetup
-            proxyUrl={proxyUrl}
-            onSave={(url) => {
-              const ok = handleSetProxy(url)
-              if (ok !== false) setShowProxy(false)
-              return ok !== false
-            }}
-            onDismiss={() => setShowProxy(false)}
-          />
-        )}
+        {/* Proxy setup removed from UI (use serverless proxy in production). */}
 
         {/* Control panel */}
         <ControlPanel
           status={status}
-          proxyUrl={proxyUrl}
           onRun={handleRun}
           onReset={handleReset}
-          onOpenProxy={() => setShowProxy(s => !s)}
         />
 
         {/* Terminal log */}

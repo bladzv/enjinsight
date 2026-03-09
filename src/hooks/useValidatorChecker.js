@@ -4,7 +4,7 @@ import {
 } from '../utils/api.js'
 import { computeMissedEras, resolveLatestEra } from '../utils/eraAnalysis.js'
 import { nowHHMMSS, safeInt, parseCommission } from '../utils/format.js'
-import { PROXY_STORAGE_KEY, API_DELAY_MS, MAX_RETRY_ATTEMPTS, DEFAULT_ERA_COUNT } from '../constants.js'
+import { API_DELAY_MS, MAX_RETRY_ATTEMPTS, DEFAULT_ERA_COUNT } from '../constants.js'
 import { truncateAddress } from '../utils/format.js'
 import { enqueueRequest } from '../utils/api.js'
 
@@ -13,9 +13,7 @@ const initialState = {
   status:     'idle',   // idle | loading | done | error
   validators: [],
   logs:       [],
-  proxyUrl:   typeof localStorage !== 'undefined'
-                ? localStorage.getItem(PROXY_STORAGE_KEY) ?? ''
-                : '',
+  proxyUrl:   '',
 }
 
 // ── Reducer ────────────────────────────────────────────────────────────────
@@ -100,16 +98,14 @@ export function useValidatorChecker() {
   }, [])
 
   const setProxy = useCallback((url) => {
+    // Proxy configuration removed: prefer same-origin serverless proxy in production.
     const safe = String(url || '').trim()
-    // Only store if it looks like a valid HTTPS URL or is blank
-    try {
-      if (safe) new URL(safe) // throws if invalid
-    } catch {
-      return false
+    if (!safe) {
+      dispatch({ type: 'SET_PROXY', payload: '' })
+      return true
     }
-    localStorage.setItem(PROXY_STORAGE_KEY, safe)
-    dispatch({ type: 'SET_PROXY', payload: safe })
-    return true
+    // Reject external proxies: instruct users to use the built-in serverless proxy in production.
+    return false
   }, [])
 
   const runCheck = useCallback(async (eraCount) => {

@@ -6,7 +6,6 @@ import {
 import { computePoolMissedEras } from '../utils/eraAnalysis.js'
 import { nowHHMMSS, safeInt, truncateAddress, poolLabel, parseCommission } from '../utils/format.js'
 import {
-  PROXY_STORAGE_KEY,
   ERA_VALIDATORS_SAMPLE, API_DELAY_MS,
   DEFAULT_ERA_COUNT, MAX_RETRY_ATTEMPTS,
 } from '../constants.js'
@@ -16,19 +15,19 @@ const initialState = {
   status:  'idle',   // idle | loading | done | error
   pools:   [],
   logs:    [],
-  proxyUrl: typeof localStorage !== 'undefined'
-              ? localStorage.getItem(PROXY_STORAGE_KEY) ?? ''
-              : '',
+  proxyUrl: '',
 }
 
 // ── Reducer ────────────────────────────────────────────────────────────────
 function reducer(state, action) {
   switch (action.type) {
-    case 'SET_PROXY':
-      return { ...state, proxyUrl: action.payload }
+    
 
     case 'START':
       return { ...state, status: 'loading', pools: [], logs: [] }
+
+      case 'SET_PROXY':
+        return { ...state, proxyUrl: action.payload }
 
     case 'LOG':
       return {
@@ -86,15 +85,15 @@ export function usePoolChecker() {
   }, [])
 
   const setProxy = useCallback((url) => {
+    // Proxy configuration removed: prefer same-origin serverless proxy in production.
+    // Keep function signature for compatibility but do not persist or accept external proxy URLs.
     const safe = String(url || '').trim()
-    try {
-      if (safe) new URL(safe)
-    } catch {
-      return false
+    if (!safe) {
+      dispatch({ type: 'SET_PROXY', payload: '' })
+      return true
     }
-    localStorage.setItem(PROXY_STORAGE_KEY, safe)
-    dispatch({ type: 'SET_PROXY', payload: safe })
-    return true
+    // Reject external proxies: instruct users to use the built-in serverless proxy in production.
+    return false
   }, [])
 
   const runCheck = useCallback(async (eraCount) => {
