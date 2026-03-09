@@ -64,15 +64,63 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
         )}
       </div>
 
-      <div className="scroll-x rounded-lg border border-border">
+      <div className="sm:hidden space-y-2">
+        {pageItems.map((v, i) => (
+          <article key={`m-${v.address || i}`} className="rounded-lg border border-border bg-surface/30 p-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted">#{page * pageSize + i + 1}</span>
+              <span className="font-mono text-text-secondary text-xs truncate">{truncateAddress(v.address)}</span>
+              <button
+                onClick={() => copyAddr(v.address)}
+                className="btn-icon"
+                aria-label={`Copy validator address ${v.address}`}
+              >
+                {copied === v.address
+                  ? <CheckCircle2 size={13} className="text-success" />
+                  : <Copy size={13} />
+                }
+              </button>
+              <a
+                href={validatorExplorerUrl(v.address)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-icon text-dim hover:text-cyan"
+                aria-label={`Open ${v.display || 'validator'} on Subscan`}
+              >
+                <ExternalLink size={13} />
+              </a>
+            </div>
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <p className="text-xs text-dim truncate">{v.display || '—'}</p>
+              {v.isActive
+                ? <span className="badge-active"><Shield size={10} />Active</span>
+                : <span className="badge-waiting"><Clock size={10} />Inactive</span>
+              }
+            </div>
+            <p className="mt-2 text-xs text-dim">
+              Bonded: <span className="font-mono text-text">{formatENJ(v.bonded, 2)}</span>
+            </p>
+            {(v.fetchStatus === 'failed' || v.fetchStatus === 'error') && onRetry && (
+              <button
+                onClick={() => onRetry(v.address)}
+                className="mt-2 text-xs bg-yellow-600 text-white px-2 py-1 rounded"
+                aria-label={`Retry fetch for ${v.address}`}
+              >
+                Retry
+              </button>
+            )}
+          </article>
+        ))}
+      </div>
+      <div className="hidden sm:block scroll-x rounded-lg border border-border">
         <table className="w-full text-xs min-w-[480px]">
           <thead>
             <tr className="bg-surface border-b border-border">
-              <th className="text-left px-3 py-2.5 font-semibold text-dim w-8">#</th>
-              <th className="text-left px-3 py-2.5 font-semibold text-dim">Address</th>
-              <th className="text-left px-3 py-2.5 font-semibold text-dim">Display Name</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-dim hidden md:table-cell">Bonded</th>
-              <th className="text-center px-3 py-2.5 font-semibold text-dim">Status</th>
+              <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim w-8">#</th>
+              <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim">Address</th>
+              <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim">Display Name</th>
+              <th className="sticky top-0 bg-surface text-right px-3 py-2.5 font-semibold text-dim hidden md:table-cell">Bonded</th>
+              <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -89,7 +137,7 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
                     </span>
                     <button
                       onClick={() => copyAddr(v.address)}
-                      className="btn-icon !min-w-[28px] !min-h-[28px] opacity-50 hover:opacity-100"
+                      className="btn-icon"
                       aria-label={`Copy validator address ${v.address}`}
                     >
                       {copied === v.address
@@ -101,7 +149,7 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
                       href={validatorExplorerUrl(v.address)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="btn-icon !min-w-[28px] !min-h-[28px] opacity-50 hover:opacity-100 text-dim hover:text-cyan"
+                      className="btn-icon text-dim hover:text-cyan"
                       aria-label={`Open ${v.display || 'validator'} on Subscan`}
                     >
                       <ExternalLink size={11} />
@@ -124,7 +172,7 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
                       {v.fetchStatus === 'queued' && (
                         <span className="text-xs px-2 py-0.5 rounded bg-border text-dim">Queued</span>
                       )}
-                      {v.fetchStatus === 'failed' && onRetry && (
+                      {(v.fetchStatus === 'failed' || v.fetchStatus === 'error') && onRetry && (
                         <button
                           onClick={() => onRetry(v.address)}
                           className="text-xs bg-yellow-600 text-white px-2 py-1 rounded"

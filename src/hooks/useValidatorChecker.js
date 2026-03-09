@@ -10,10 +10,11 @@ import { enqueueRequest } from '../utils/api.js'
 
 // ── State shape ────────────────────────────────────────────────────────────
 const initialState = {
-  status:     'idle',   // idle | loading | done | error
+  status:     'idle',   // idle | loading | done | stopped | error
   validators: [],
   logs:       [],
   proxyUrl:   '',
+  progress:   null,
 }
 
 // ── Reducer ────────────────────────────────────────────────────────────────
@@ -23,7 +24,19 @@ function reducer(state, action) {
       return { ...state, proxyUrl: action.payload }
 
     case 'START':
-      return { ...state, status: 'loading', validators: [], logs: [] }
+      return {
+        ...state,
+        status: 'loading',
+        validators: [],
+        logs: [],
+        progress: {
+          phases: [
+            { key: 'list', label: 'Fetch Validators', total: 1, completed: 0, status: 'in_progress' },
+            { key: 'nominators', label: 'Fetch Nominators', total: 0, completed: 0, status: 'pending' },
+            { key: 'eras', label: 'Fetch Era Stats', total: 0, completed: 0, status: 'pending' },
+          ],
+        },
+      }
 
     case 'LOG':
       return {
@@ -46,11 +59,17 @@ function reducer(state, action) {
       return { ...state, validators }
     }
 
+    case 'SET_PROGRESS':
+      return { ...state, progress: action.payload }
+
     case 'DONE':
       return { ...state, status: 'done' }
 
     case 'ERROR':
       return { ...state, status: 'error' }
+
+    case 'STOP':
+      return { ...state, status: 'stopped' }
 
     case 'RESET':
       return { ...initialState, proxyUrl: state.proxyUrl, logs: [] }
@@ -113,13 +132,23 @@ export function useValidatorChecker() {
     abortControllerRef.current = new AbortController()
     dispatch({ type: 'START' })
     const proxy = state.proxyUrl
+    const signal = abortControllerRef.current.signal
+    const phases = [
+      { key: 'list', label: 'Fetch Validators', total: 1, completed: 0, status: 'in_progress' },
+      { key: 'nominators', label: 'Fetch Nominators', total: 0, completed: 0, status: 'pending' },
+      { key: 'eras', label: 'Fetch Era Stats', total: 0, completed: 0, status: 'pending' },
+    ]
+    const syncProgress = () => {
+      dispatch({ type: 'SET_PROGRESS', payload: { phases: phases.map(p => ({ ...p })) } })
+    }
 
     // ── Step 1: Validator list ──────────────────────────────────────────
     log('INFO', 'Fetching validator list from Subscan…')
     let rawValidators
     try {
-      rawValidators = await fetchValidators(proxy, abortControllerRef.current.signal)
+      rawValidators = await fetchValidators(proxy, signal)
     } catch (err) {
+      if (signal.aborted) return
       // Generic user-facing error (avoid exposing upstream details)
       log('ERR', 'Failed to fetch validators — please check your network or proxy and retry.')
       dispatch({ type: 'ERROR' })
@@ -168,19 +197,22 @@ export function useValidatorChecker() {
 
     log('OK', `Found ${validators.length} validators.`)
     dispatch({ type: 'SET_VALIDATORS', payload: validators })
+    phases[0] = { ...phases[0], completed: 1, status: 'completed' }
+    phases[1] = { ...phases[1], total: validators.length, completed: 0, status: 'in_progress' }
+    syncProgress()
 
-    if (abortControllerRef.current?.signal.aborted) return
+    if (signal.aborted) return
 
     // ── Step 2: Nominators (sequential, 1 req/s) ────────────────────────
     log('INFO', `Fetching nominators for ${validators.length} validators (sequential, ${API_DELAY_MS}ms between requests)…`)
 
     for (let idx = 0; idx < validators.length; idx++) {
-      if (abortControllerRef.current?.signal.aborted) return
+      if (signal.aborted) return
       const v = validators[idx]
       dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { fetchStatus: 'loading', retryAttempts: 0, lastError: null } })
       try {
         const list = await fetchNominators(v.address, proxy, {
-          signal: abortControllerRef.current.signal,
+          signal,
           attempts: MAX_RETRY_ATTEMPTS,
           onRetry: (attempt, errOrStatus, waitMs) => {
             dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { retryAttempts: attempt } })
@@ -195,22 +227,29 @@ export function useValidatorChecker() {
         dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { nominators } })
         log('OK', `[${idx + 1}/${validators.length}] ${v.display || v.address.slice(0, 10)}: ${nominators.length} nominator(s).`)
       } catch (err) {
+        if (signal.aborted) return
         dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { nominators: [], fetchStatus: 'failed', lastError: String(err?.message ?? err) } })
         log('WARN', `[${idx + 1}/${validators.length}] Nominators failed for ${truncateAddress(v.address)} — ${String(err?.message ?? '')}`)
       }
+      phases[1] = { ...phases[1], completed: idx + 1 }
+      syncProgress()
       await delay(API_DELAY_MS)
+      if (signal.aborted) return
     }
-    if (abortControllerRef.current?.signal.aborted) return
+    phases[1] = { ...phases[1], status: 'completed' }
+    phases[2] = { ...phases[2], total: validators.length, completed: 0, status: 'in_progress' }
+    syncProgress()
+    if (signal.aborted) return
 
     // ── Step 3: Era stats (sequential, 1 req/s) ─────────────────────────
     log('INFO', `Fetching era stats (last ${eraCount} eras) for ${validators.length} validators (sequential, ${API_DELAY_MS}ms between requests)…`)
 
     for (let idx = 0; idx < validators.length; idx++) {
-      if (abortControllerRef.current?.signal.aborted) return
+      if (signal.aborted) return
       const v = validators[idx]
       try {
         const list = await fetchEraStat(v.address, eraCount, proxy, {
-          signal: abortControllerRef.current.signal,
+          signal,
           attempts: MAX_RETRY_ATTEMPTS,
           onRetry: (attempt, errOrStatus, waitMs) => {
             dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { retryAttempts: attempt } })
@@ -243,13 +282,19 @@ export function useValidatorChecker() {
         dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { eraStat, fetchStatus: 'done' } })
         log('OK', `[${idx + 1}/${validators.length}] ${v.display || v.address.slice(0, 10)}: era stat done (latest era: ${latestInBatch}).`)
       } catch (err) {
+        if (signal.aborted) return
         dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { eraStat: [], fetchStatus: 'failed', lastError: String(err?.message ?? err) } })
         log('ERR', `[${idx + 1}/${validators.length}] Era stat failed for ${truncateAddress(v.address)} — ${String(err?.message ?? '')}`)
       }
+      phases[2] = { ...phases[2], completed: idx + 1 }
+      syncProgress()
       await delay(API_DELAY_MS)
+      if (signal.aborted) return
     }
-    if (abortControllerRef.current?.signal.aborted) return
+    if (signal.aborted) return
 
+    phases[2] = { ...phases[2], status: 'completed' }
+    syncProgress()
     log('DONE', 'All data loaded. Summary generated below.')
     dispatch({ type: 'DONE' })
   }, [state.proxyUrl, log])
@@ -260,6 +305,13 @@ export function useValidatorChecker() {
     abortControllerRef.current = null
     dispatch({ type: 'RESET' })
   }, [])
+
+  const stop = useCallback(() => {
+    try { abortControllerRef.current?.abort() } catch (e) { /* noop */ }
+    abortControllerRef.current = null
+    dispatch({ type: 'STOP' })
+    log('WARN', 'Scan stopped by user.')
+  }, [log])
 
   const retryValidator = useCallback(async (address) => {
     if (!address) return
@@ -324,6 +376,7 @@ export function useValidatorChecker() {
     validators: enrichedValidators,
     setProxy,
     runCheck,
+    stop,
     reset,
     retryValidator,
   }

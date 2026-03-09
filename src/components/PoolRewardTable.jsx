@@ -88,13 +88,13 @@ export default function PoolRewardTable({
         <table className="w-full text-xs min-w-[400px]">
           <thead>
             <tr className="bg-surface border-b border-border">
-              <th className="text-left px-3 py-2.5 font-semibold text-dim w-16">Era</th>
-              <th className="text-right px-3 py-2.5 font-semibold text-dim">Reward</th>
-              <th className="text-center px-3 py-2.5 font-semibold text-dim hidden md:table-cell w-20">Rewarded</th>
-              <th className="text-center px-3 py-2.5 font-semibold text-dim hidden md:table-cell w-20">No Reward</th>
-              <th className="text-center px-3 py-2.5 font-semibold text-dim w-20">Status</th>
+              <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim w-16">Era</th>
+              <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim w-10">Reward</th>
+              <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim hidden md:table-cell w-20">Rewarded</th>
+              <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim hidden md:table-cell w-20">No Reward</th>
+              <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim w-20">Status</th>
               {hasBreakdown && (
-                <th className="text-center px-2 py-2.5 font-semibold text-dim w-8" aria-label="Expand" />
+                <th className="sticky top-0 bg-surface text-center px-2 py-2.5 font-semibold text-dim w-8" aria-label="Expand" />
               )}
             </tr>
           </thead>
@@ -140,8 +140,8 @@ function RewardedRow({ era, reward, bd, hasBreakdown, isExpanded, onToggle }) {
   return (
     <>
       <tr className="border-b border-border/50 hover:bg-surface/50 transition-colors">
-        <td className="px-3 py-2.5 font-mono text-text-secondary">{era}</td>
-        <td className="px-3 py-2.5 text-right font-mono text-text">
+        <td className="px-3 py-2.5 font-mono text-text-secondary text-center w-16">{era}</td>
+        <td className="px-3 py-2.5 text-right font-mono text-text w-10">
           {reward ? formatENJ(BigInt(String(reward.amount ?? '0').replace(/[^0-9]/g, '') || '0'), 4) : '—'}
         </td>
         <td className="px-3 py-2.5 text-center hidden md:table-cell">
@@ -163,7 +163,7 @@ function RewardedRow({ era, reward, bd, hasBreakdown, isExpanded, onToggle }) {
           <td className="px-2 py-2.5 text-center">
             <button
               onClick={onToggle}
-              className="btn-icon !min-w-[24px] !min-h-[24px]"
+              className="btn-icon"
               aria-label={isExpanded ? 'Collapse validator detail' : 'Expand validator detail'}
             >
               {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -187,8 +187,8 @@ function MissedRow({ era, bd, hasBreakdown, isExpanded, onToggle }) {
   return (
     <>
       <tr className="bg-danger/5 border-b border-danger/20">
-        <td className="px-3 py-2.5 font-mono text-danger font-semibold">{era}</td>
-        <td className="px-3 py-2.5 text-right text-danger">—</td>
+        <td className="px-3 py-2.5 font-mono text-danger font-semibold text-center w-16">{era}</td>
+        <td className="px-3 py-2.5 text-right text-danger w-10">—</td>
         <td className="px-3 py-2.5 text-center hidden md:table-cell">
           <span className="font-mono text-xs text-dim">0</span>
         </td>
@@ -208,7 +208,7 @@ function MissedRow({ era, bd, hasBreakdown, isExpanded, onToggle }) {
           <td className="px-2 py-2.5 text-center">
             <button
               onClick={onToggle}
-              className="btn-icon !min-w-[24px] !min-h-[24px]"
+              className="btn-icon"
               aria-label={isExpanded ? 'Collapse validator detail' : 'Expand validator detail'}
             >
               {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}

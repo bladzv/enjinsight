@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { findConsecutiveGroups, getSeverity } from '../utils/eraAnalysis.js'
 import { truncateAddress, validatorExplorerUrl } from '../utils/format.js'
@@ -12,7 +12,7 @@ export default function SummarySection({ validators, eraCount }) {
 
   const withGaps   = validators.filter(v => v.missedEras?.length > 0)
   const clean      = validators.filter(v => Array.isArray(v.eraStat) && v.missedEras?.length === 0 && v.eraStat.length > 0)
-  const errorCards = validators.filter(v => v.fetchStatus === 'error')
+  const errorCards = validators.filter(v => v.fetchStatus === 'error' || v.fetchStatus === 'failed')
 
   // Find validators with consecutive misses ≥ 3
   const critical = withGaps
@@ -23,7 +23,9 @@ export default function SummarySection({ validators, eraCount }) {
   const gapPages     = Math.max(1, Math.ceil(withGaps.length / gapPageSize))
   const gapPageItems = withGaps.slice(gapPage * gapPageSize, (gapPage + 1) * gapPageSize)
   const safeGapPage  = Math.min(gapPage, gapPages - 1)
-  if (safeGapPage !== gapPage) setGapPage(safeGapPage)
+  useEffect(() => {
+    if (safeGapPage !== gapPage) setGapPage(safeGapPage)
+  }, [safeGapPage, gapPage])
 
   return (
     <section aria-labelledby="summary-heading" className="space-y-4 animate-fade-in">
@@ -79,7 +81,7 @@ export default function SummarySection({ validators, eraCount }) {
                   href={validatorExplorerUrl(v.address)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="ml-auto flex-shrink-0 btn-icon !min-w-[32px] !min-h-[32px] text-danger"
+                  className="ml-auto flex-shrink-0 btn-icon text-danger"
                   aria-label={`Open ${v.display || 'validator'} on Subscan`}
                 >
                   <ExternalLink size={12} />
@@ -100,16 +102,52 @@ export default function SummarySection({ validators, eraCount }) {
               {withGaps.length}
             </span>
           </div>
-          <div className="scroll-x">
+          <div className="sm:hidden px-3 py-3 space-y-2">
+            {gapPageItems.map(v => {
+              const sev      = getSeverity(v.missedEras.length)
+              const missed   = v.missedEras.length
+              const rewarded = Math.max(0, eraCount - missed)
+              return (
+                <article key={`m-${v.address}`} className="rounded-lg border border-border bg-surface/30 p-3">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-sm text-text truncate">
+                      {v.display || truncateAddress(v.address)}
+                    </p>
+                    <a
+                      href={validatorExplorerUrl(v.address)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-auto text-dim hover:text-cyan"
+                      aria-label="Open on Subscan"
+                    >
+                      <ExternalLink size={12} />
+                    </a>
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                    <p className="text-dim">Checked <span className="text-text-secondary">{eraCount}</span></p>
+                    <p className="text-dim">Rewarded <span className="text-success">{rewarded}</span></p>
+                    <p className="text-dim">Missed <span className="text-danger font-semibold">{missed}</span></p>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <p className="font-mono text-[11px] text-muted truncate">
+                      {v.missedEras.slice(0, 8).join(', ')}{v.missedEras.length > 8 ? '…' : ''}
+                    </p>
+                    <SeverityBadge sev={sev} />
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+          <div className="hidden sm:block scroll-x">
             <table className="w-full text-xs min-w-[520px]">
               <thead>
                 <tr className="bg-surface border-b border-border">
-                  <th className="text-left px-4 py-2.5 font-semibold text-dim">Validator</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-dim">Checked</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-dim">Rewarded</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-dim">Missed</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-dim hidden sm:table-cell">Missing Eras</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-dim">Severity</th>
+                  <th className="sticky top-0 bg-surface text-left px-4 py-2.5 font-semibold text-dim">Validator</th>
+                  <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim">Checked</th>
+                  <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim">Rewarded</th>
+                  <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim">Missed</th>
+                  <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim hidden sm:table-cell">Missing Eras</th>
+                  <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim">Severity</th>
                 </tr>
               </thead>
               <tbody>

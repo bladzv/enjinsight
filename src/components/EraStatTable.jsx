@@ -64,11 +64,11 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
       <table className="w-full text-xs min-w-[520px]">
         <thead>
           <tr className="bg-surface border-b border-border">
-            <th className="text-left px-3 py-2.5 font-semibold text-dim w-16">Era</th>
-            <th className="text-right px-3 py-2.5 font-semibold text-dim">Start Block</th>
-            <th className="text-right px-3 py-2.5 font-semibold text-dim">End Block</th>
-            <th className="text-right px-3 py-2.5 font-semibold text-dim">Reward Point</th>
-            <th className="text-right px-3 py-2.5 font-semibold text-dim">Blocks Produced</th>
+            <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim w-16">Era</th>
+            <th className="sticky top-0 bg-surface text-right px-3 py-2.5 font-semibold text-dim">Start Block</th>
+            <th className="sticky top-0 bg-surface text-right px-3 py-2.5 font-semibold text-dim">End Block</th>
+            <th className="sticky top-0 bg-surface text-right px-3 py-2.5 font-semibold text-dim">Reward Point</th>
+            <th className="sticky top-0 bg-surface text-right px-3 py-2.5 font-semibold text-dim">Blocks Produced</th>
           </tr>
         </thead>
         <tbody>

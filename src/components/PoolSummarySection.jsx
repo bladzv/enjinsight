@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { findConsecutiveGroups, getSeverity } from '../utils/eraAnalysis.js'
 import { poolExplorerUrl, poolLabel } from '../utils/format.js'
 
 const GAP_PAGE_SIZES = [5, 10, 20]
+const MAX_POOL_LABEL_LEN = 40
 
 export default function PoolSummarySection({ pools, eraCount }) {
   const [showClean, setShowClean] = useState(false)
@@ -14,10 +15,11 @@ export default function PoolSummarySection({ pools, eraCount }) {
 
   const withGaps   = pools.filter(p => p.missedEras?.length > 0)
   const clean      = pools.filter(p => Array.isArray(p.eraRewards) && p.missedEras?.length === 0 && p.eraRewards.length > 0)
-  const errorCards = pools.filter(p => p.fetchStatus === 'error')
+  const errorCards = pools.filter(p => p.fetchStatus === 'error' || p.fetchStatus === 'failed')
 
   // Find pools with consecutive misses >= 3
   const critical = withGaps
+    .filter(p => !hasNoNominatedValidators(p))
     .map(p => ({ p, groups: findConsecutiveGroups(p.missedEras) }))
     .filter(({ groups }) => groups.length > 0)
 
@@ -25,7 +27,9 @@ export default function PoolSummarySection({ pools, eraCount }) {
   const gapPages     = Math.max(1, Math.ceil(withGaps.length / gapPageSize))
   const gapPageItems = withGaps.slice(gapPage * gapPageSize, (gapPage + 1) * gapPageSize)
   const safeGapPage  = Math.min(gapPage, gapPages - 1)
-  if (safeGapPage !== gapPage) setGapPage(safeGapPage)
+  useEffect(() => {
+    if (safeGapPage !== gapPage) setGapPage(safeGapPage)
+  }, [safeGapPage, gapPage])
 
   return (
     <section aria-labelledby="pool-summary-heading" className="space-y-4 animate-fade-in">
@@ -71,7 +75,7 @@ export default function PoolSummarySection({ pools, eraCount }) {
                   href={poolExplorerUrl(p.poolId)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="ml-auto flex-shrink-0 btn-icon !min-w-[32px] !min-h-[32px] text-danger"
+                  className="ml-auto flex-shrink-0 btn-icon text-danger"
                   aria-label={`Open Pool #${p.poolId} on Subscan`}
                 >
                   <ExternalLink size={12} />
@@ -92,16 +96,56 @@ export default function PoolSummarySection({ pools, eraCount }) {
               {withGaps.length}
             </span>
           </div>
-          <div className="scroll-x">
+          <div className="sm:hidden px-3 py-3 space-y-2">
+            {gapPageItems.map(p => {
+              const sev      = getSeverity(p.missedEras.length)
+              const missed   = p.missedEras.length
+              const rewarded = Math.max(0, eraCount - missed)
+              return (
+                <article key={`m-${p.poolId}`} className="rounded-lg border border-border bg-surface/30 p-3">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-sm text-text truncate">{poolLabel(p)}</p>
+                    <a
+                      href={poolExplorerUrl(p.poolId)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-auto text-dim hover:text-cyan"
+                      aria-label="Open on Subscan"
+                    >
+                      <ExternalLink size={12} />
+                    </a>
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                    <p className="text-dim">Checked <span className="text-text-secondary">{eraCount}</span></p>
+                    <p className="text-dim">Rewarded <span className="text-success">{rewarded}</span></p>
+                    <p className="text-dim">Missed <span className="text-danger font-semibold">{missed}</span></p>
+                  </div>
+                  {hasNoNominatedValidators(p) && (
+                    <p className="mt-2 text-[11px] text-cyan font-medium">
+                      Reason: No validators nominated (expected no rewards)
+                    </p>
+                  )}
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <p className="font-mono text-[11px] text-muted truncate">
+                      {p.missedEras.slice(0, 8).join(', ')}{p.missedEras.length > 8 ? '…' : ''}
+                    </p>
+                    <SeverityBadge sev={sev} />
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+          <div className="hidden sm:block scroll-x">
             <table className="w-full text-xs min-w-[520px]">
               <thead>
                 <tr className="bg-surface border-b border-border">
-                  <th className="text-left px-4 py-2.5 font-semibold text-dim">Pool</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-dim">Checked</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-dim">Rewarded</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-dim">Missed</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-dim hidden sm:table-cell">Missing Eras</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-dim">Severity</th>
+                  <th className="sticky top-0 bg-surface text-center px-4 py-2.5 font-semibold text-dim w-[40%]">Pool</th>
+                  <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim">Checked</th>
+                  <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim">Rewarded</th>
+                  <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim">Missed</th>
+                  <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim hidden sm:table-cell">Missing Eras</th>
+                  <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim hidden lg:table-cell">Reason</th>
+                  <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim">Severity</th>
                 </tr>
               </thead>
               <tbody>
@@ -112,15 +156,15 @@ export default function PoolSummarySection({ pools, eraCount }) {
                   return (
                     <tr key={p.poolId} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-surface/20' : ''}`}>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-medium text-text truncate max-w-[140px]">
-                            {poolLabel(p)}
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-medium text-text truncate flex-1 min-w-0" title={poolLabel(p)}>
+                            {trimPoolLabel(poolLabel(p))}
                           </span>
                           <a
                             href={poolExplorerUrl(p.poolId)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-dim hover:text-cyan flex-shrink-0"
+                            className="ml-auto text-dim hover:text-cyan flex-shrink-0"
                             aria-label="Open on Subscan"
                           >
                             <ExternalLink size={10} />
@@ -133,6 +177,9 @@ export default function PoolSummarySection({ pools, eraCount }) {
                       <td className="px-3 py-3 font-mono text-muted text-[11px] hidden sm:table-cell max-w-[160px] truncate">
                         {p.missedEras.slice(0, 8).join(', ')}
                         {p.missedEras.length > 8 ? '…' : ''}
+                      </td>
+                      <td className="px-3 py-3 text-[11px] text-cyan hidden lg:table-cell">
+                        {hasNoNominatedValidators(p) ? 'No validators nominated' : '—'}
                       </td>
                       <td className="px-3 py-3 text-center">
                         <SeverityBadge sev={sev} />
@@ -234,6 +281,16 @@ export default function PoolSummarySection({ pools, eraCount }) {
       )}
     </section>
   )
+}
+
+function trimPoolLabel(label) {
+  const safe = String(label ?? '')
+  if (safe.length <= MAX_POOL_LABEL_LEN) return safe
+  return `${safe.slice(0, MAX_POOL_LABEL_LEN - 1)}…`
+}
+
+function hasNoNominatedValidators(pool) {
+  return Array.isArray(pool?.nominatedValidators) && pool.nominatedValidators.length === 0
 }
 
 function StatChip({ value, label, colour, bg }) {

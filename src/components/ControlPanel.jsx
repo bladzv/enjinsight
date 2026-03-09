@@ -1,17 +1,24 @@
 import { useState } from 'react'
-import { Search, RotateCcw, AlertCircle, Settings } from 'lucide-react'
+import { Search, RotateCcw, Square, AlertCircle } from 'lucide-react'
 import { DEFAULT_ERA_COUNT, MIN_ERA_COUNT, MAX_ERA_COUNT } from '../constants.js'
 
 export default function ControlPanel({
+  mode,
   status,
   onRun,
+  onStop,
   onReset,
 }) {
   const [value, setValue]   = useState(String(DEFAULT_ERA_COUNT))
   const [error, setError]   = useState('')
 
   const isLoading = status === 'loading'
-  const isDone    = status === 'done'
+  const isResetState = status === 'done' || status === 'stopped' || status === 'error'
+  const isPoolMode = mode === 'pools'
+  const title = isPoolMode ? 'Check Pool Rewards' : 'Check Validator Rewards'
+  const helper = isPoolMode
+    ? 'Enter the number of recent eras (1 era approx 24 hours) to scan for pool payouts.'
+    : 'Enter the number of recent eras (1 era approx 24 hours) to scan for validator rewards.'
 
   function validate(raw) {
     const trimmed = String(raw).trim()
@@ -29,7 +36,17 @@ export default function ControlPanel({
     setError(validate(raw))
   }
 
-  function handleRun() {
+  function handleAction() {
+    if (isLoading) {
+      onStop?.()
+      return
+    }
+
+    if (isResetState) {
+      onReset?.()
+      return
+    }
+
     const err = validate(value)
     if (err) { setError(err); return }
     setError('')
@@ -37,17 +54,25 @@ export default function ControlPanel({
   }
 
   function handleKeyDown(e) {
-    if (e.key === 'Enter') handleRun()
+    if (e.key === 'Enter') handleAction()
   }
 
+  const btnLabel = isLoading ? 'STOP' : isResetState ? 'RESET' : 'CHECK'
+  const btnAria = isLoading
+    ? 'Stop running scan'
+    : isResetState
+      ? 'Reset scan results'
+      : 'Start scan'
+  const disableAction = !isLoading && !isResetState && !!error
+
   return (
-    <div className="card p-4 sm:p-6">
+    <div id="scan-controls" className="card w-full max-w-xl mx-auto p-4 sm:p-5 text-center">
       {/* Title row */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4">
         <div>
-          <h2 className="text-base font-semibold text-text">Check Validator Rewards</h2>
+          <h2 className="text-base font-semibold text-text">{title}</h2>
           <p className="text-xs text-dim mt-0.5">
-            Enter the number of recent eras (1 era ≈ 24 hours) to scan.
+            {helper}
           </p>
         </div>
       </div>
@@ -55,13 +80,13 @@ export default function ControlPanel({
       {/* Proxy status hint removed — use the built-in serverless proxy in production. */}
 
       {/* Input row */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex-1">
-          <label htmlFor="era-count" className="block text-xs font-medium text-dim mb-1.5">
-            Last N eras to check
-          </label>
+      <div>
+        <label htmlFor="reward-count" className="block text-xs font-medium text-dim mb-1.5">
+          Last N rewards to check
+        </label>
+        <div className="relative w-full sm:w-[37.5%] mx-auto">
           <input
-            id="era-count"
+            id="reward-count"
             type="text"
             inputMode="numeric"
             value={value}
@@ -69,60 +94,52 @@ export default function ControlPanel({
             onKeyDown={handleKeyDown}
             disabled={isLoading}
             placeholder={String(DEFAULT_ERA_COUNT)}
-            aria-describedby={error ? 'era-count-error' : undefined}
+            aria-describedby={error ? 'reward-count-error' : undefined}
             aria-invalid={!!error}
             maxLength={3}
-            className={`w-full h-12 px-4 rounded-lg bg-surface border text-text text-lg font-mono leading-none
+            className={`w-full h-12 pl-0 pr-[108px] rounded-lg bg-surface border text-text text-lg font-mono leading-none text-center
                         focus:outline-none focus:ring-2 focus:ring-primary transition-colors
                         disabled:opacity-50 disabled:cursor-not-allowed
                         ${error ? 'border-danger focus:ring-danger' : 'border-border focus:border-primary'}`}
           />
-          {error && (
-            <p id="era-count-error" role="alert" className="mt-1.5 text-xs text-danger flex items-center gap-1">
-              <AlertCircle size={11} /> {error}
-            </p>
-          )}
-        </div>
-
-        {/* Actions */}
-        <div className="flex gap-2 sm:items-end">
-          {isDone || isLoading ? (
-            <button
-              onClick={onReset}
-              className="btn-ghost flex-1 sm:flex-none h-12 gap-2"
-              aria-label="Reset and start over"
-            >
-              <RotateCcw size={14} />
-              <span>Reset</span>
-            </button>
-          ) : null}
 
           <button
-            onClick={handleRun}
-            disabled={isLoading || !!error}
-            className="btn-primary flex-1 sm:flex-none h-12 min-w-[120px]"
-            aria-label={isLoading ? 'Scanning in progress' : 'Start validator reward check'}
+            onClick={handleAction}
+            disabled={disableAction}
+            aria-label={btnAria}
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 btn-primary h-9 min-w-[104px] px-3 text-sm"
           >
             {isLoading ? (
               <>
-                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Scanning…
+                <Square size={14} className="fill-white stroke-white" />
+                <span>STOP</span>
+              </>
+            ) : isResetState ? (
+              <>
+                <RotateCcw size={14} />
+                <span>RESET</span>
               </>
             ) : (
               <>
-                <Search size={15} />
-                CHECK
+                <Search size={14} />
+                <span>CHECK</span>
               </>
             )}
           </button>
         </div>
+
+        {error && (
+          <p id="reward-count-error" role="alert" className="mt-1.5 text-xs text-danger flex items-center gap-1 justify-center">
+            <AlertCircle size={11} /> {error}
+          </p>
+        )}
       </div>
 
       {/* Hint for large N */}
       {parseInt(value, 10) > 30 && !error && (
-        <p className="mt-2 text-xs text-dim flex items-center gap-1">
+        <p className="mt-2 text-xs text-dim flex items-center gap-1 justify-center">
           <AlertCircle size={11} className="text-warning" />
-          Checking {value} eras may take longer. Large scans are batched automatically.
+          Checking {value} rewards may take longer. Large scans are batched automatically.
         </p>
       )}
     </div>

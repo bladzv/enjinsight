@@ -21,15 +21,17 @@ export default function App() {
   const {
     status: vStatus, validators, logs: vLogs,
     proxyUrl: vProxyUrl, setProxy: vSetProxy,
-    runCheck: vRunCheck, reset: vReset, retryValidator: vRetryValidator,
+    runCheck: vRunCheck, stop: vStop, reset: vReset, retryValidator: vRetryValidator,
+    progress: vProgress,
   } = useValidatorChecker()
 
   // Pool hook
   const {
     status: pStatus, pools, logs: pLogs,
     proxyUrl: pProxyUrl, setProxy: pSetProxy,
-    runCheck: pRunCheck, reset: pReset, retryPoolValidator: pRetryPoolValidator,
+    runCheck: pRunCheck, stop: pStop, reset: pReset, retryPoolValidator: pRetryPoolValidator,
     latestEra: poolLatestEra,
+    progress: pProgress,
   } = usePoolChecker()
 
   // Derive active values based on current mode
@@ -39,6 +41,19 @@ export default function App() {
   const proxyUrl  = isValidatorMode ? vProxyUrl : pProxyUrl
   const isLoading = status === 'loading'
   const isDone    = status === 'done'
+  const activeProgress = isValidatorMode ? vProgress : pProgress
+  const phases = activeProgress?.phases ?? []
+  const activePhase = phases.find(p => p.status === 'in_progress') ?? phases.find(p => p.status === 'pending') ?? phases[phases.length - 1]
+  const activePhasePct = activePhase && activePhase.total > 0
+    ? Math.round((Math.min(activePhase.completed, activePhase.total) / activePhase.total) * 100)
+    : 0
+
+  const allCompleted = phases.length > 0 && phases.every(p => p.status === 'completed')
+  const topLabel = allCompleted
+    ? 'Scan successful!'
+    : (status === 'stopped'
+      ? 'Scan stopped'
+      : (activePhase ? `Step ${Math.max(0, phases.findIndex(p => p.key === activePhase.key)) + 1}: ${activePhase.label}` : 'Scanning'))
 
   const validatorLatestEra = resolveLatestEra(validators)
 
@@ -58,6 +73,11 @@ export default function App() {
     else pReset()
   }
 
+  function handleStop() {
+    if (isValidatorMode) vStop()
+    else pStop()
+  }
+
   function handleModeChange(newMode) {
     if (status === 'loading') return // block switch during scan
     setMode(newMode)
@@ -67,7 +87,7 @@ export default function App() {
     <div className="min-h-dvh bg-ink bg-grid">
       <AppHeader status={status} />
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-4 sm:space-y-5">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-16 sm:pb-20 space-y-4 sm:space-y-5">
 
         {/* Mode selector tabs */}
         <ModeSelector mode={mode} onModeChange={handleModeChange} disabled={isLoading} />
@@ -76,10 +96,54 @@ export default function App() {
 
         {/* Control panel */}
         <ControlPanel
+          mode={mode}
           status={status}
           onRun={handleRun}
+          onStop={handleStop}
           onReset={handleReset}
         />
+
+        {/* Scan progress */}
+        {status !== 'idle' && phases.length > 0 && (
+          <section className="card w-full max-w-xl mx-auto p-3 sm:p-4" aria-live="polite" aria-label="Scan progress">
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <p className="text-dim">{topLabel}</p>
+              <p className="font-mono text-text-secondary">
+                {activePhase?.completed ?? 0} / {activePhase?.total ?? 0} ({activePhasePct}%)
+              </p>
+            </div>
+            <div className="mt-2 h-2 rounded-full bg-border overflow-hidden">
+              <div
+                className="h-full bg-cyan transition-all duration-300"
+                style={{ width: `${activePhasePct}%` }}
+              />
+            </div>
+            <div className="mt-3 w-full space-y-1.5">
+              {phases.map((phase, index) => {
+                const statusClass = phase.status === 'completed'
+                  ? 'text-success'
+                  : phase.status === 'in_progress'
+                    ? 'text-cyan'
+                    : 'text-dim'
+                const statusLabel = phase.status === 'completed'
+                  ? 'Done'
+                  : phase.status === 'in_progress'
+                    ? 'Running'
+                    : 'Pending'
+                return (
+                  <div key={phase.key} className="w-full rounded-md border border-border bg-surface/40 px-2.5 py-2">
+                    <div className="flex items-center justify-between text-[11px] gap-3">
+                      <p className={`font-medium ${statusClass}`}>
+                        Step {index + 1}: {phase.label}
+                      </p>
+                      <p className={`font-semibold ${statusClass}`}>{statusLabel}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Terminal log */}
         {(logs.length > 0 || isLoading) && (
@@ -88,7 +152,7 @@ export default function App() {
 
         {/* ── Validator mode content ──────────────────────────────── */}
         {isValidatorMode && validators.length > 0 && (
-          <section aria-labelledby="validators-heading">
+          <section id="validators-panel" aria-labelledby="validators-heading">
             <div className="flex items-center gap-2 mb-3">
               <h2 id="validators-heading" className="text-base font-semibold text-text">
                 Validators
@@ -127,7 +191,7 @@ export default function App() {
 
         {/* ── Pool mode content ───────────────────────────────────── */}
         {!isValidatorMode && pools.length > 0 && (
-          <section aria-labelledby="pools-heading">
+          <section id="pools-panel" aria-labelledby="pools-heading">
             <div className="flex items-center gap-2 mb-3">
               <h2 id="pools-heading" className="text-base font-semibold text-text">
                 Nomination Pools
@@ -179,8 +243,8 @@ export default function App() {
               </svg>
             </div>
             <h2 className="text-lg font-semibold text-text mb-2">Ready to Scan</h2>
-            <p className="text-sm text-dim max-w-sm mx-auto">
-              Configure your proxy URL (gear icon), enter the number of eras to check, then press <strong className="text-text">CHECK</strong>.
+            <p className="text-sm text-dim max-w-lg mx-auto mb-5">
+              Choose a mode, set how many rewards to check, then run the scan to review missing rewards and risk severity.
             </p>
           </div>
         )}
@@ -190,15 +254,20 @@ export default function App() {
             <p className="text-sm text-danger mb-3">
               {isValidatorMode ? 'Failed to fetch validator list.' : 'Failed to fetch nomination pools.'}
             </p>
-            <p className="text-xs text-dim">Check your proxy URL and try again.</p>
+            <p className="text-xs text-dim mb-4">
+              Verify network connectivity and retry the same era window.
+            </p>
+            <button onClick={() => handleRun(lastEraCount)} className="btn-primary">
+              Retry Scan
+            </button>
           </div>
         )}
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-border mt-12 py-6 text-center text-xs text-muted">
+      <footer className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-ink/95 backdrop-blur py-3 text-center text-xs text-muted">
         <p>
-          Enjin Validator Reward Checker · Data via{' '}
+          Enjin Relaychain Status Checker · Live data from{' '}
           <a
             href="https://enjin.subscan.io"
             target="_blank"
@@ -207,7 +276,7 @@ export default function App() {
           >
             Subscan
           </a>
-          {' '}· Read-only · No wallet connection required
+          {' '}· Read-only monitoring · No wallet connection required
         </p>
       </footer>
     </div>

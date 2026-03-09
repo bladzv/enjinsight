@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { Terminal, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Terminal, ChevronDown, ChevronUp } from 'lucide-react'
 
 const LEVEL_CLASS = {
   INFO: 'log-info',
@@ -12,11 +12,6 @@ const LEVEL_CLASS = {
 export default function TerminalLog({ logs }) {
   const [expanded, setExpanded] = useState(false)
   const endRef = useRef(null)
-
-  // Auto-expand on first log
-  useEffect(() => {
-    if (logs.length === 1) setExpanded(true)
-  }, [logs.length])
 
   const lastLog = logs[logs.length - 1]
 
