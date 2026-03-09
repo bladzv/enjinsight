@@ -3,35 +3,71 @@
 ## Supported Versions
 
 | Version | Supported |
-|---------|-----------|
-| 1.x     | ✅ Yes     |
+| --- | --- |
+| 1.x | Yes |
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in this project, please **do not** open a
-public GitHub issue. Instead, report it privately:
+Do not open a public issue for security findings.
 
-1. Email the repository owner directly (see profile), or
-2. Use GitHub's [private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing/privately-reporting-a-security-vulnerability) feature.
+Report privately via:
+
+1. GitHub private vulnerability reporting (Security tab)
+2. Direct maintainer contact (GitHub profile)
 
 Please include:
-- A description of the vulnerability
-- Steps to reproduce
-- Potential impact
-- Any suggested mitigations
 
-We aim to respond within **72 hours** and to publish a fix within **14 days** for
-confirmed high/critical issues.
+- A clear description of the issue
+- Reproduction steps
+- Impact assessment
+- Suggested fix (if available)
 
-## Scope
+Target response times:
 
-In-scope:
-- XSS or injection via API data rendering
-- CORS proxy bypass or SSRF
-- Input validation bypass
-- Dependency vulnerabilities with active exploits
+- Initial triage: within 72 hours
+- Fix plan for confirmed high/critical issues: within 14 days
 
-Out-of-scope:
-- Denial of service via API flooding (mitigated by batch size; Subscan rate limiting applies)
-- Social engineering
-- Physical security
+## Security Model (Current App)
+
+This project is a read-only monitoring UI with a serverless proxy.
+
+### Frontend Hardening
+
+- No wallet integration or private key handling
+- No `dangerouslySetInnerHTML`
+- Client-side input validation for scan limits
+- BigInt arithmetic for planck/ENJ conversion
+- Sanitized display for addresses and labels
+
+### API & Proxy Hardening
+
+- Subscan endpoint paths are allowlisted in `src/constants.js`
+- Production proxy target URLs must be HTTPS
+- Hostname allowlist is controlled through `PROXY_ALLOWLIST`
+- Optional shared secret via `PROXY_SECRET`
+- Hop-by-hop and sensitive response headers are stripped
+
+## In Scope
+
+- XSS/injection risks in rendered API data
+- Proxy bypass / SSRF-style forwarding abuse
+- Authentication/authorization flaws in proxy secret handling
+- Dependency vulnerabilities with realistic exploit paths
+
+## Out of Scope
+
+- Upstream Subscan outages or rate limits
+- Social engineering and credential phishing
+- Infrastructure outside this repository
+
+## Deployed Instance
+
+Primary deployment:
+
+- https://enjin-status-checker.vercel.app/
+
+For deployment-specific issues, include:
+
+- Exact URL
+- Timestamp (with timezone)
+- Sample request/response (redacted where needed)

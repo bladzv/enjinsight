@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { DEFAULT_ERA_COUNT } from './constants.js'
 import { useValidatorChecker } from './hooks/useValidatorChecker.js'
 import { usePoolChecker }      from './hooks/usePoolChecker.js'
@@ -56,6 +56,23 @@ export default function App() {
       : (activePhase ? `Step ${Math.max(0, phases.findIndex(p => p.key === activePhase.key)) + 1}: ${activePhase.label}` : 'Scanning'))
 
   const validatorLatestEra = resolveLatestEra(validators)
+
+  // Dynamically load Vercel Analytics React component if the package is installed.
+  // This lets the app run without the dependency during development; install
+  // `@vercel/analytics` (or the React integration) to enable page view tracking.
+  const [AnalyticsComponent, setAnalyticsComponent] = useState(null)
+  useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const mod = await import('@vercel/analytics/react')
+        if (mounted && mod && mod.Analytics) setAnalyticsComponent(() => mod.Analytics)
+      } catch (err) {
+        // Package not installed or failed to load — skip analytics silently.
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
 
   // Proxy configuration removed from UI; hooks retain a no-op `setProxy` for compatibility.
 
@@ -279,6 +296,8 @@ export default function App() {
           {' '}· Read-only monitoring · No wallet connection required
         </p>
       </footer>
+      {/* Vercel Analytics (lazy-loaded if dependency installed) */}
+      {AnalyticsComponent && <AnalyticsComponent />}
     </div>
   )
 }
