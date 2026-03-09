@@ -82,7 +82,7 @@ export default function ControlPanel({
       {/* Input row */}
       <div>
         <label htmlFor="reward-count" className="block text-xs font-medium text-dim mb-1.5">
-          Last N rewards to check
+          Number of recent eras to check
         </label>
         <div className="relative w-full sm:w-[37.5%] mx-auto">
           <input

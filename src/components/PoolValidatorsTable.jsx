@@ -157,7 +157,12 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
                   </div>
                 </td>
                 <td className="px-3 py-2.5 text-text-secondary">
-                  {v.display || <span className="text-muted italic">—</span>}
+                  <div className="space-y-0.5">
+                    <span>{v.display || <span className="text-muted italic">—</span>}</span>
+                    <p className="text-[11px] text-dim md:hidden">
+                      Bonded: <span className="font-mono text-text">{formatENJ(v.bonded, 2)}</span>
+                    </p>
+                  </div>
                 </td>
                 <td className="px-3 py-2.5 text-right font-mono text-text hidden md:table-cell">
                   {formatENJ(v.bonded, 2)}

@@ -1,4 +1,4 @@
-import { ExternalLink, Activity } from 'lucide-react'
+import { Activity } from 'lucide-react'
 
 export default function AppHeader({ status }) {
   return (
@@ -23,14 +23,14 @@ export default function AppHeader({ status }) {
             <h1 className="text-sm sm:text-base font-semibold text-text leading-tight truncate">
               Staking Status Checker
             </h1>
-            <p className="text-xs text-dim hidden sm:block leading-none mt-0.5">Enjin Relaychain</p>
+            <p className="text-[11px] sm:text-xs text-dim leading-none mt-0.5">Enjin Relaychain</p>
           </div>
         </div>
 
         {/* Right — links */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           {status === 'loading' && (
-            <span className="hidden sm:flex items-center gap-1.5 text-xs text-cyan font-mono">
+            <span className="flex items-center gap-1 text-[11px] sm:text-xs text-cyan font-mono">
               <Activity size={12} className="animate-pulse" />
               Scanning
             </span>
@@ -42,8 +42,8 @@ export default function AppHeader({ status }) {
             className="btn-ghost text-dim hover:text-cyan"
             aria-label="Open Enjin Subscan in a new tab"
           >
-            <span className="hidden sm:inline">Subscan</span>
-            <ExternalLink size={14} />
+            <span className="text-xs">Subscan</span>
+            
           </a>
         </div>
       </div>

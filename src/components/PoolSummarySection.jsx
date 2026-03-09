@@ -156,19 +156,26 @@ export default function PoolSummarySection({ pools, eraCount }) {
                   return (
                     <tr key={p.poolId} className={`border-b border-border/50 ${i % 2 === 0 ? 'bg-surface/20' : ''}`}>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="font-medium text-text truncate flex-1 min-w-0" title={poolLabel(p)}>
-                            {trimPoolLabel(poolLabel(p))}
-                          </span>
-                          <a
-                            href={poolExplorerUrl(p.poolId)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="ml-auto text-dim hover:text-cyan flex-shrink-0"
-                            aria-label="Open on Subscan"
-                          >
-                            <ExternalLink size={10} />
-                          </a>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="font-medium text-text truncate flex-1 min-w-0" title={poolLabel(p)}>
+                              {trimPoolLabel(poolLabel(p))}
+                            </span>
+                            <a
+                              href={poolExplorerUrl(p.poolId)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ml-auto text-dim hover:text-cyan flex-shrink-0"
+                              aria-label="Open on Subscan"
+                            >
+                              <ExternalLink size={10} />
+                            </a>
+                          </div>
+                          {hasNoNominatedValidators(p) && (
+                            <p className="mt-0.5 text-[11px] text-cyan lg:hidden truncate">
+                              Reason: No validators nominated
+                            </p>
+                          )}
                         </div>
                       </td>
                       <td className="px-3 py-3 text-center text-text-secondary">{eraCount}</td>

@@ -67,7 +67,8 @@ export default function App() {
       try {
         // use a variable for the path so Rollup doesn’t try to resolve it at build
         const path = '@vercel/analytics/react'
-        const mod = await import(path)
+        // Suppress Vite's dynamic-import analysis warning -- resolved at runtime if package installed
+        const mod = await import(/* @vite-ignore */ path)
         if (mounted && mod && mod.Analytics) setAnalyticsComponent(() => mod.Analytics)
       } catch (err) {
         // Package not installed or failed to load — skip analytics silently.
@@ -263,7 +264,7 @@ export default function App() {
             </div>
             <h2 className="text-lg font-semibold text-text mb-2">Ready to Scan</h2>
             <p className="text-sm text-dim max-w-lg mx-auto mb-5">
-              Choose a mode, set how many rewards to check, then run the scan to review missing rewards and risk severity.
+              Choose a mode, set how many recent eras to check, then run the scan to review missing rewards and risk severity.
             </p>
           </div>
         )}

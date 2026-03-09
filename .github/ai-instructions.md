@@ -26,7 +26,7 @@ A browser-based web application that checks the reward cadence of every active v
 - **State Management:** React `useReducer` + `useCallback` (local, no external store)
 - **Build Tool:** Vite 5 with `base: './'` for subdirectory-compatible static output
 - **CORS Proxy:** Cloudflare Worker (free tier) — pure passthrough with strict allowlist
-- **Hosting:** GitHub Pages (via GitHub Actions), Netlify, Vercel, or any static host
+- **Hosting:** Netlify, Vercel, or any static host
 - **Security:** OWASP Top 10 compliance adapted for a client-side static app, CSP, input sanitisation, no `dangerouslySetInnerHTML`, BigInt for on-chain values
 
 ### Documentation
@@ -1166,7 +1166,7 @@ export function validatorExplorerUrl(address) {
 
 The Cloudflare Worker in `PROXY.md` is the reference implementation. Key rules:
 
-- `ALLOWED_ORIGIN` in the Worker must exactly match the deployed app domain (e.g. `https://myname.github.io`)
+- `ALLOWED_ORIGIN` in the Worker must exactly match the deployed app domain (e.g. `https://app.example.com`)
 - `ALLOWED_PATHS` in the Worker must match `Object.values(ENDPOINTS)` from `src/constants.js`
 - The Worker constructs the upstream URL as `UPSTREAM_BASE + path` — no client-supplied host
 - The Worker validates `Content-Type: application/json` on both the inbound request and the upstream response

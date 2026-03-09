@@ -71,11 +71,11 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
             )}
           </div>
           {/* Line 2 — commission + bonded (mobile only wraps here) */}
-          <div className="flex items-center gap-3 mt-0.5">
+          <div className="flex items-center gap-x-3 gap-y-1 mt-0.5 flex-wrap">
             <span className="text-xs text-dim">
               Commission: <span className="text-text-secondary">{commission}%</span>
             </span>
-            <span className="text-xs text-dim hidden sm:inline">Bonded: <span className="font-mono text-text-secondary">{formatENJ(bondedTotal, 2)}</span></span>
+            <span className="text-xs text-dim">Bonded: <span className="font-mono text-text-secondary">{formatENJ(bondedTotal, 2)}</span></span>
           </div>
         </div>
 

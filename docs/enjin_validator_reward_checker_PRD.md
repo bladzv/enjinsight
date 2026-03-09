@@ -112,7 +112,7 @@ A community member shares a screenshot of the Summary section to publicly docume
 | **HTTP Client** | Native Fetch API (browser) |
 | **State Management** | React `useState` / `useReducer` (local) |
 | **Data Format** | JSON over HTTPS (Subscan WebAPI) |
-| **Hosting** | Static file host (e.g. Vercel, Netlify, GitHub Pages) |
+| **Hosting** | Static file host (e.g. Vercel, Netlify) |
 
 ### 3.2 CORS Strategy
 

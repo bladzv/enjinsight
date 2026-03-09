@@ -87,7 +87,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry }) {
                 Commission: <span className="text-text-secondary">{commission}%</span>
               </span>
             )}
-            <span className="text-xs text-dim hidden sm:inline">
+            <span className="text-xs text-dim">
               Bonded: <span className="font-mono text-text-secondary">{formatENJ(totalBonded, 2)}</span>
             </span>
           </div>
@@ -133,7 +133,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry }) {
                 missedEras?.length
                   ? `${missedEras.length} missed`
                   : eraRewards?.length
-                    ? `${eraRewards.length} eras`
+                    ? `${eraRewards.length} rewards`
                     : null
               }
               badgeVariant={missedEras?.length ? 'warn' : 'neutral'}

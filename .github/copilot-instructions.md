@@ -5,7 +5,7 @@ These notes are aimed at any AI coding agent that needs to be immediately produc
 ## Big‑Picture Architecture
 
 - **Static frontend only.**  There is no server component other than a separate CORS proxy (see `PROXY.md`).  All business logic runs in the browser.
-- **Frameworks:** React 18 with Vite 5 (see `vite.config.js`), TailwindCSS v3 for styling and Lucide‑React for icons.  The app is built for GitHub Pages/Netlify/Vercel or any static host.
+- **Frameworks:** React 18 with Vite 5 (see `vite.config.js`), TailwindCSS v3 for styling and Lucide‑React for icons. The app is built for static hosts such as Netlify or Vercel, or any static host.
 - **Data flow:** user enters era count → `src/hooks/useValidatorChecker.js` dispatches actions to a reducer → `src/utils/api.js` performs POSTs to the Subscan API (paths defined in `src/constants.js`) → results (validators, nominators, era stats) are batched via `runInBatches()` and reduced into state → `src/components/*` render cards, tables and the terminal log progressively.
 - **State management:** local `useReducer`/`useCallback` inside the custom hook; no external store.  Reducer actions are dispatched per‑validator to allow partial rendering and error isolation.
 
