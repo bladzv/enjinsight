@@ -37,11 +37,34 @@ jobs:
   deploy:
     name: Deploy
     needs: build
+    # Disabled by default: this job will only run when a repository secret
+    # `DEPLOY_PAGES` is set to the string 'true'. This prevents accidental
+    # GitHub Pages deployments. To re-enable, set the secret or remove this
+    # condition.
+    if: ${{ secrets.DEPLOY_PAGES == 'true' }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
     steps:
       - name: Configure Pages
+        # If you add a personal access token with Pages/write permissions
+        # as a repo secret named `PAGES_PAT`, this step will try to enable
+        # GitHub Pages automatically. Otherwise it falls back to the
+        # default behavior (reads site metadata only).
+        uses: actions/configure-pages@v4
+        # If you want automatic enablement, create a PAT and set
+        # repository secret `PAGES_PAT`, then uncomment the step below
+        # and remove the simple step above.
+
+      - name: Configure Pages (enable if PAT present)
+        if: ${{ secrets.PAGES_PAT != '' }}
+        uses: actions/configure-pages@v4
+        with:
+          token: ${{ secrets.PAGES_PAT }}
+          enablement: 'true'
+
+      - name: Configure Pages (fallback)
+        if: ${{ secrets.PAGES_PAT == '' }}
         uses: actions/configure-pages@v4
 
       - name: Deploy to GitHub Pages

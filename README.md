@@ -4,7 +4,6 @@
   <a href="https://enjin-status-checker.vercel.app/"><img alt="Live Demo" src="https://img.shields.io/badge/Live%20Demo-Vercel-111111?style=flat-square&logo=vercel" /></a>
   <a href="https://enjin-status-checker.vercel.app/"><img alt="enjin-status-checker.vercel.app" src="https://img.shields.io/badge/enjin--status--checker.vercel.app-online-00C7B7?style=flat-square" /></a>
   <a href="https://github.com/bladzv/enjin-status-checker/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/bladzv/enjin-status-checker/ci.yml?branch=main&style=flat-square&label=CI" /></a>
-  <img alt="Node >=18" src="https://img.shields.io/badge/node-%3E%3D18-339933?style=flat-square&logo=node.js" />
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/bladzv/enjin-status-checker?style=flat-square" /></a>
 </p>
 
