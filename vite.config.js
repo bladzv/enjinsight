@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   // './' base makes the app work at any subdirectory path,
-  // including GitHub Pages (e.g. username.github.io/repo-name/)
+  // including use in relative subdirectories for static hosts
   base: './',
   build: {
     outDir: 'dist',

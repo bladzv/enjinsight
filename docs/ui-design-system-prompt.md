@@ -980,7 +980,7 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: './',        // relative — works at any subdirectory path (GitHub Pages, etc.)
+  base: './',        // relative — works at any subdirectory path on static hosts
   build: {
     outDir: 'dist',
     sourcemap: false, // never expose source maps in production

@@ -158,6 +158,14 @@ function RewardedRow({ era, reward, bd, hasBreakdown, isExpanded, onToggle }) {
             <CheckCircle2 size={12} />
             <span className="text-[11px] font-semibold">Rewarded</span>
           </span>
+          <div className="mt-1 flex items-center justify-center gap-2 text-[10px] text-dim md:hidden">
+            <span>
+              Rewarded: <span className="font-mono text-success">{rewardedCount}</span>
+            </span>
+            <span>
+              No Reward: <span className={`font-mono ${noRewardCount > 0 ? 'text-warning' : 'text-dim'}`}>{noRewardCount}</span>
+            </span>
+          </div>
         </td>
         {hasBreakdown && (
           <td className="px-2 py-2.5 text-center">
@@ -203,6 +211,14 @@ function MissedRow({ era, bd, hasBreakdown, isExpanded, onToggle }) {
             <XCircle size={12} />
             <span className="text-[11px] font-semibold">No Reward</span>
           </span>
+          <div className="mt-1 flex items-center justify-center gap-2 text-[10px] text-dim md:hidden">
+            <span>
+              Rewarded: <span className="font-mono text-dim">0</span>
+            </span>
+            <span>
+              No Reward: <span className={`font-mono ${noRewardCount > 0 ? 'text-danger' : 'text-dim'}`}>{noRewardCount}</span>
+            </span>
+          </div>
         </td>
         {hasBreakdown && (
           <td className="px-2 py-2.5 text-center">
