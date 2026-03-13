@@ -42,3 +42,19 @@ export const CONSECUTIVE_MISS_THRESHOLD = 3   // eras before critical alert
 
 // ── ENJ precision ─────────────────────────────────────────────────────────
 export const PLANCK_PER_ENJ        = BigInt('1000000000000000000') // 10^18
+
+// ── Endpoint probe configurations (Step 0) ────────────────────────────────
+// probeEndpoint sends {} (empty body) to each path. Subscan responds with
+// HTTP 200 + code 400 ("EOF") when required fields are absent — that is enough
+// to confirm the endpoint path is correct and the API key is accepted.
+export const VALIDATOR_ENDPOINTS_TO_PROBE = [
+  { key: 'validators', label: 'Validators list' },
+  { key: 'nominators', label: 'Nominators'      },
+  { key: 'eraStat',    label: 'Era statistics'  },
+]
+
+export const POOL_ENDPOINTS_TO_PROBE = [
+  { key: 'pools',       label: 'Nomination pools' },
+  { key: 'voted',       label: 'Voted validators' },
+  { key: 'rewardSlash', label: 'Reward events'    },
+]
