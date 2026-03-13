@@ -1,7 +1,7 @@
 import { useReducer, useCallback, useRef } from 'react'
 import {
   fetchAllPools, fetchVoted, fetchEraStat,
-  fetchRewardSlash, delay,
+  fetchRewardSlash, probeEndpoint, delay,
 } from '../utils/api.js'
 import { enqueueRequest } from '../utils/api.js'
 import { computePoolMissedEras } from '../utils/eraAnalysis.js'
@@ -9,6 +9,7 @@ import { nowHHMMSS, safeInt, truncateAddress, poolLabel, parseCommission } from 
 import {
   ERA_VALIDATORS_SAMPLE, API_DELAY_MS,
   DEFAULT_ERA_COUNT, MAX_RETRY_ATTEMPTS,
+  POOL_ENDPOINTS_TO_PROBE, ENDPOINTS,
 } from '../constants.js'
 
 // ── State shape ────────────────────────────────────────────────────────────
@@ -33,10 +34,11 @@ function reducer(state, action) {
         logs: [],
         progress: {
           phases: [
-            { key: 'list', label: 'Fetch Pools', total: 1, completed: 0, status: 'in_progress' },
+            { key: 'probe',      label: 'Check API Endpoints',        total: POOL_ENDPOINTS_TO_PROBE.length, completed: 0, status: 'in_progress' },
+            { key: 'list',       label: 'Fetch Pools',                total: 1, completed: 0, status: 'pending' },
             { key: 'validators', label: 'Fetch Nominated Validators', total: 0, completed: 0, status: 'pending' },
-            { key: 'ranges', label: 'Resolve Era Ranges', total: 1, completed: 0, status: 'pending' },
-            { key: 'rewards', label: 'Confirm Rewards', total: 0, completed: 0, status: 'pending' },
+            { key: 'ranges',     label: 'Resolve Era Ranges',         total: 1, completed: 0, status: 'pending' },
+            { key: 'rewards',    label: 'Confirm Rewards',            total: 0, completed: 0, status: 'pending' },
           ],
         },
       }
@@ -124,16 +126,46 @@ export function usePoolChecker() {
     const signal = abortControllerRef.current.signal
     const runStart = Date.now()
     const phases = [
-      { key: 'list', label: 'Fetch Pools', total: 1, completed: 0, status: 'in_progress' },
+      { key: 'probe',      label: 'Check API Endpoints',        total: POOL_ENDPOINTS_TO_PROBE.length, completed: 0, status: 'in_progress' },
+      { key: 'list',       label: 'Fetch Pools',                total: 1, completed: 0, status: 'pending' },
       { key: 'validators', label: 'Fetch Nominated Validators', total: 0, completed: 0, status: 'pending' },
-      { key: 'ranges', label: 'Resolve Era Ranges', total: 1, completed: 0, status: 'pending' },
-      { key: 'rewards', label: 'Confirm Rewards', total: 0, completed: 0, status: 'pending' },
+      { key: 'ranges',     label: 'Resolve Era Ranges',         total: 1, completed: 0, status: 'pending' },
+      { key: 'rewards',    label: 'Confirm Rewards',            total: 0, completed: 0, status: 'pending' },
     ]
     const syncProgress = () => {
       dispatch({ type: 'SET_PROGRESS', payload: { phases: phases.map(p => ({ ...p })) } })
     }
 
     const elapsed = (since = runStart) => ((Date.now() - since) / 1000).toFixed(1)
+
+    // ── Step 0: Probe required API endpoints ──────────────────────────────
+    log('INFO', `─── Step 0: Checking ${POOL_ENDPOINTS_TO_PROBE.length} required Subscan API endpoints ───`)
+    let probesFailed = false
+    for (let i = 0; i < POOL_ENDPOINTS_TO_PROBE.length; i++) {
+      if (signal.aborted) return
+      const { key, label } = POOL_ENDPOINTS_TO_PROBE[i]
+      log('INFO', `[${i + 1}/${POOL_ENDPOINTS_TO_PROBE.length}] Probing: ${label}…`)
+      const result = await probeEndpoint(ENDPOINTS[key], null, signal)
+      if (signal.aborted) return
+      if (result.ok) {
+        log('OK', `[${i + 1}/${POOL_ENDPOINTS_TO_PROBE.length}] ${label}: reachable ✔`)
+      } else {
+        log('ERR', `[${i + 1}/${POOL_ENDPOINTS_TO_PROBE.length}] ${label}: FAILED — ${result.error}`)
+        probesFailed = true
+      }
+      phases[0] = { ...phases[0], completed: i + 1 }
+      syncProgress()
+    }
+    if (probesFailed) {
+      log('ERR', 'One or more required endpoints failed. Check your API key and network connection, then retry.')
+      dispatch({ type: 'ERROR' })
+      return
+    }
+    log('OK', 'All endpoints reachable. Proceeding with scan.')
+    phases[0] = { ...phases[0], status: 'completed' }
+    phases[1] = { ...phases[1], status: 'in_progress' }
+    syncProgress()
+    if (signal.aborted) return
 
     log('INFO', '─── Step 1: Fetching nomination pools ───')
     const s1 = Date.now()
@@ -175,8 +207,8 @@ export function usePoolChecker() {
 
     log('OK', `Found ${pools.length} nomination pool(s). Step 1 completed in ${elapsed(s1)}s.`)
     dispatch({ type: 'SET_POOLS', payload: pools })
-    phases[0] = { ...phases[0], completed: 1, status: 'completed' }
-    phases[1] = { ...phases[1], total: pools.length, completed: 0, status: 'in_progress' }
+    phases[1] = { ...phases[1], completed: 1, status: 'completed' }
+    phases[2] = { ...phases[2], total: pools.length, completed: 0, status: 'in_progress' }
     syncProgress()
     if (signal.aborted) return
 
@@ -215,12 +247,12 @@ export function usePoolChecker() {
         poolValidatorsMap.set(p.poolId, [])
         log('WARN', `[${idx + 1}/${pools.length}] Voted fetch failed for Pool #${p.poolId}: ${err?.message || 'unknown error'}.`)
       }
-      phases[1] = { ...phases[1], completed: idx + 1 }
+      phases[2] = { ...phases[2], completed: idx + 1 }
       syncProgress()
       await delay(API_DELAY_MS)
     }
-    phases[1] = { ...phases[1], status: 'completed' }
-    phases[2] = { ...phases[2], total: 1, completed: 0, status: 'in_progress' }
+    phases[2] = { ...phases[2], status: 'completed' }
+    phases[3] = { ...phases[3], total: 1, completed: 0, status: 'in_progress' }
     syncProgress()
     if (signal.aborted) return
 
@@ -321,8 +353,8 @@ export function usePoolChecker() {
     const latestCompletedEra = completedEras[0] ?? 0
     const erasAscending = [...completedEras].sort((a, b) => a - b).join(', ')
     log('OK', `Era block ranges resolved: current era ${currentEra} (excluded), ${completedEras.length} completed era(s): ${erasAscending}. Step 3 completed in ${elapsed(s3)}s.`)
-    phases[2] = { ...phases[2], completed: 1, status: 'completed' }
-    phases[3] = { ...phases[3], total: pools.length, completed: 0, status: 'in_progress' }
+    phases[3] = { ...phases[3], completed: 1, status: 'completed' }
+    phases[4] = { ...phases[4], total: pools.length, completed: 0, status: 'in_progress' }
     syncProgress()
     if (signal.aborted) return
 
@@ -397,12 +429,12 @@ export function usePoolChecker() {
         })
         log('ERR', `[${idx + 1}/${pools.length}] Reward check failed for ${label}: ${err?.message || 'unknown error'}.`)
       }
-      phases[3] = { ...phases[3], completed: idx + 1 }
+      phases[4] = { ...phases[4], completed: idx + 1 }
       syncProgress()
     }
 
     if (signal.aborted) return
-    phases[3] = { ...phases[3], status: 'completed' }
+    phases[4] = { ...phases[4], status: 'completed' }
     syncProgress()
     log('OK', `Step 4 completed in ${elapsed(s4)}s. Results: ${poolsOk} all-rewarded, ${poolsMissed} with gaps, ${poolsErrored} errors.`)
     log('DONE', `All pool data loaded. Total elapsed: ${elapsed(runStart)}s. Summary generated below.`)

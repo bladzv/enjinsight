@@ -1,6 +1,19 @@
 // Simple, cautious proxy for Vercel serverless functions.
-// Usage: GET /api/https%3A%2F%2Fapi.subscan.io%2Fapi%2Fscan%2F...
+// Usage: POST /api/https%3A%2F%2Fenjin.api.subscan.io%2Fapi%2Fscan%2F...
 // Security: set PROXY_ALLOWLIST and optionally PROXY_SECRET.
+// Body parsing is disabled so the raw request body is forwarded unchanged.
+// The Subscan API key is injected server-side from SUBSCAN_API_KEY env var.
+export const config = { api: { bodyParser: false } }
+
+/** Read the raw request body into a Buffer. */
+function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = []
+    req.on('data', (chunk) => chunks.push(chunk))
+    req.on('end', () => resolve(Buffer.concat(chunks)))
+    req.on('error', reject)
+  })
+}
 
 export default async function handler(req, res) {
   try {
@@ -60,14 +73,25 @@ export default async function handler(req, res) {
     const originalQuery = raw.includes('?') ? raw.split('?').slice(1).join('?') : '';
     const finalUrl = originalQuery ? `${target}?${originalQuery}` : target;
 
+    // Read the raw body before touching headers so we forward it unchanged.
+    const rawBody = ['GET', 'HEAD'].includes(req.method)
+      ? undefined
+      : await readRawBody(req)
+
     const forwardHeaders = { ...req.headers };
     delete forwardHeaders.host;
+    // Remove the client-supplied x-api-key — we inject it server-side below.
+    delete forwardHeaders['x-api-key'];
     ['connection', 'keep-alive', 'transfer-encoding', 'proxy-authorization', 'proxy-authenticate', 'upgrade'].forEach(h => delete forwardHeaders[h]);
+
+    // Inject the Subscan API key from the server-side environment variable.
+    const apiKey = process.env.SUBSCAN_API_KEY || '';
+    if (apiKey) forwardHeaders['x-api-key'] = apiKey;
 
     const fetchOptions = {
       method: req.method,
       headers: forwardHeaders,
-      body: ['GET', 'HEAD'].includes(req.method) ? undefined : req.body || undefined,
+      body: rawBody,
       redirect: 'manual',
     };
 
@@ -92,3 +116,4 @@ export default async function handler(req, res) {
     res.end('Proxy error');
   }
 }
+

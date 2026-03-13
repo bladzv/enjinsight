@@ -1,10 +1,10 @@
 import { useReducer, useCallback, useRef } from 'react'
 import {
-  fetchValidators, fetchNominators, fetchEraStat, delay,
+  fetchValidators, fetchNominators, fetchEraStat, probeEndpoint, delay,
 } from '../utils/api.js'
 import { computeMissedEras, resolveLatestEra } from '../utils/eraAnalysis.js'
 import { nowHHMMSS, safeInt, parseCommission } from '../utils/format.js'
-import { API_DELAY_MS, MAX_RETRY_ATTEMPTS, DEFAULT_ERA_COUNT } from '../constants.js'
+import { API_DELAY_MS, MAX_RETRY_ATTEMPTS, DEFAULT_ERA_COUNT, VALIDATOR_ENDPOINTS_TO_PROBE, ENDPOINTS } from '../constants.js'
 import { truncateAddress } from '../utils/format.js'
 import { enqueueRequest } from '../utils/api.js'
 
@@ -31,9 +31,10 @@ function reducer(state, action) {
         logs: [],
         progress: {
           phases: [
-            { key: 'list', label: 'Fetch Validators', total: 1, completed: 0, status: 'in_progress' },
-            { key: 'nominators', label: 'Fetch Nominators', total: 0, completed: 0, status: 'pending' },
-            { key: 'eras', label: 'Fetch Era Stats', total: 0, completed: 0, status: 'pending' },
+            { key: 'probe',      label: 'Check API Endpoints', total: VALIDATOR_ENDPOINTS_TO_PROBE.length, completed: 0, status: 'in_progress' },
+            { key: 'list',       label: 'Fetch Validators',    total: 1, completed: 0, status: 'pending' },
+            { key: 'nominators', label: 'Fetch Nominators',    total: 0, completed: 0, status: 'pending' },
+            { key: 'eras',       label: 'Fetch Era Stats',     total: 0, completed: 0, status: 'pending' },
           ],
         },
       }
@@ -134,13 +135,43 @@ export function useValidatorChecker() {
     const proxy = state.proxyUrl
     const signal = abortControllerRef.current.signal
     const phases = [
-      { key: 'list', label: 'Fetch Validators', total: 1, completed: 0, status: 'in_progress' },
-      { key: 'nominators', label: 'Fetch Nominators', total: 0, completed: 0, status: 'pending' },
-      { key: 'eras', label: 'Fetch Era Stats', total: 0, completed: 0, status: 'pending' },
+      { key: 'probe',      label: 'Check API Endpoints', total: VALIDATOR_ENDPOINTS_TO_PROBE.length, completed: 0, status: 'in_progress' },
+      { key: 'list',       label: 'Fetch Validators',    total: 1, completed: 0, status: 'pending' },
+      { key: 'nominators', label: 'Fetch Nominators',    total: 0, completed: 0, status: 'pending' },
+      { key: 'eras',       label: 'Fetch Era Stats',     total: 0, completed: 0, status: 'pending' },
     ]
     const syncProgress = () => {
       dispatch({ type: 'SET_PROGRESS', payload: { phases: phases.map(p => ({ ...p })) } })
     }
+
+    // ── Step 0: Probe required API endpoints ───────────────────────────────
+    log('INFO', `─── Step 0: Checking ${VALIDATOR_ENDPOINTS_TO_PROBE.length} required Subscan API endpoints ───`)
+    let probesFailed = false
+    for (let i = 0; i < VALIDATOR_ENDPOINTS_TO_PROBE.length; i++) {
+      if (signal.aborted) return
+      const { key, label } = VALIDATOR_ENDPOINTS_TO_PROBE[i]
+      log('INFO', `[${i + 1}/${VALIDATOR_ENDPOINTS_TO_PROBE.length}] Probing: ${label}…`)
+      const result = await probeEndpoint(ENDPOINTS[key], null, signal)
+      if (signal.aborted) return
+      if (result.ok) {
+        log('OK', `[${i + 1}/${VALIDATOR_ENDPOINTS_TO_PROBE.length}] ${label}: reachable ✔`)
+      } else {
+        log('ERR', `[${i + 1}/${VALIDATOR_ENDPOINTS_TO_PROBE.length}] ${label}: FAILED — ${result.error}`)
+        probesFailed = true
+      }
+      phases[0] = { ...phases[0], completed: i + 1 }
+      syncProgress()
+    }
+    if (probesFailed) {
+      log('ERR', 'One or more required endpoints failed. Check your API key and network connection, then retry.')
+      dispatch({ type: 'ERROR' })
+      return
+    }
+    log('OK', 'All endpoints reachable. Proceeding with scan.')
+    phases[0] = { ...phases[0], status: 'completed' }
+    phases[1] = { ...phases[1], status: 'in_progress' }
+    syncProgress()
+    if (signal.aborted) return
 
     // ── Step 1: Validator list ──────────────────────────────────────────
     log('INFO', 'Fetching validator list from Subscan…')
@@ -197,8 +228,8 @@ export function useValidatorChecker() {
 
     log('OK', `Found ${validators.length} validators.`)
     dispatch({ type: 'SET_VALIDATORS', payload: validators })
-    phases[0] = { ...phases[0], completed: 1, status: 'completed' }
-    phases[1] = { ...phases[1], total: validators.length, completed: 0, status: 'in_progress' }
+    phases[1] = { ...phases[1], completed: 1, status: 'completed' }
+    phases[2] = { ...phases[2], total: validators.length, completed: 0, status: 'in_progress' }
     syncProgress()
 
     if (signal.aborted) return
@@ -231,13 +262,13 @@ export function useValidatorChecker() {
         dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { nominators: [], fetchStatus: 'failed', lastError: String(err?.message ?? err) } })
         log('WARN', `[${idx + 1}/${validators.length}] Nominators failed for ${truncateAddress(v.address)} — ${String(err?.message ?? '')}`)
       }
-      phases[1] = { ...phases[1], completed: idx + 1 }
+      phases[2] = { ...phases[2], completed: idx + 1 }
       syncProgress()
       await delay(API_DELAY_MS)
       if (signal.aborted) return
     }
-    phases[1] = { ...phases[1], status: 'completed' }
-    phases[2] = { ...phases[2], total: validators.length, completed: 0, status: 'in_progress' }
+    phases[2] = { ...phases[2], status: 'completed' }
+    phases[3] = { ...phases[3], total: validators.length, completed: 0, status: 'in_progress' }
     syncProgress()
     if (signal.aborted) return
 
@@ -286,14 +317,14 @@ export function useValidatorChecker() {
         dispatch({ type: 'PATCH_VALIDATOR', address: v.address, patch: { eraStat: [], fetchStatus: 'failed', lastError: String(err?.message ?? err) } })
         log('ERR', `[${idx + 1}/${validators.length}] Era stat failed for ${truncateAddress(v.address)} — ${String(err?.message ?? '')}`)
       }
-      phases[2] = { ...phases[2], completed: idx + 1 }
+      phases[3] = { ...phases[3], completed: idx + 1 }
       syncProgress()
       await delay(API_DELAY_MS)
       if (signal.aborted) return
     }
     if (signal.aborted) return
 
-    phases[2] = { ...phases[2], status: 'completed' }
+    phases[3] = { ...phases[3], status: 'completed' }
     syncProgress()
     log('DONE', 'All data loaded. Summary generated below.')
     dispatch({ type: 'DONE' })

@@ -53,7 +53,7 @@ export default function App() {
     ? 'Scan successful!'
     : (status === 'stopped'
       ? 'Scan stopped'
-      : (activePhase ? `Step ${Math.max(0, phases.findIndex(p => p.key === activePhase.key)) + 1}: ${activePhase.label}` : 'Scanning'))
+      : (activePhase ? `Step ${phases.findIndex(p => p.key === activePhase.key)}: ${activePhase.label}` : 'Scanning'))
 
   const validatorLatestEra = resolveLatestEra(validators)
 

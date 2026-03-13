@@ -8,40 +8,21 @@ import {
 const ALLOWED_PATHS = new Set(Object.values(ENDPOINTS))
 
 /**
- * Validate that the proxy URL is a safe HTTPS URL.
- * Guards against javascript: URIs and other injection attempts.
+ * Build the full request URL, always routing through the same-origin proxy.
+ * - In dev: Vite's devServer proxy at /api/ intercepts and forwards to Subscan,
+ *   injecting the API key from the server-side SUBSCAN_API_KEY env var.
+ * - In production: the Vercel serverless function at api/[...proxy].js handles it,
+ *   also injecting SUBSCAN_API_KEY server-side.
+ * The API key is NEVER placed in the browser bundle.
+ * Enforce the path allowlist to prevent path traversal / SSRF.
  */
-function validateProxyUrl(proxyUrl) {
-  if (!proxyUrl || typeof proxyUrl !== 'string') return false
-  try {
-    const u = new URL(proxyUrl)
-    return u.protocol === 'https:'
-  } catch {
-    return false
-  }
-}
-
-/**
- * Build the full request URL.
- * - If proxyUrl is provided and valid, prepend it.
- * - Enforce the path is in the allowlist to prevent path traversal / SSRF.
- */
-function buildUrl(proxyUrl, path) {
+function buildUrl(path) {
   if (!ALLOWED_PATHS.has(path)) {
     throw new Error(`Blocked: path "${path}" is not in the allowlist.`)
   }
-  if (proxyUrl) {
-    // Only allow same-origin serverless proxy paths (e.g. '/api').
-    // Disallow external HTTPS proxy roots to prevent SSRF and accidental
-    // exposure of upstream targets from the client UI.
-    if (proxyUrl.startsWith('/')) {
-      const base = proxyUrl.endsWith('/') ? proxyUrl.slice(0, -1) : proxyUrl
-      return `${base}/${encodeURIComponent(`${SUBSCAN_BASE}${path}`)}`
-    }
-
-    throw new Error('External proxy URLs are disallowed. Use a same-origin proxy path (e.g. \'/api\') or omit proxyUrl.')
-  }
-  return `${SUBSCAN_BASE}${path}`
+  // Always use the same-origin proxy — avoids CORS issues and keeps the
+  // API key entirely server-side.
+  return `/api/${encodeURIComponent(`${SUBSCAN_BASE}${path}`)}`
 }
 
 const delay = ms => new Promise(r => setTimeout(r, ms))
@@ -97,8 +78,8 @@ export const enqueueRequest = (fn) => requestQueue.add(fn)
  * - Never surfaces raw server errors to the UI
  * - Input body values are serialised as JSON (no eval, no injection)
  */
-export async function subscanPost(path, body, proxyUrl, options = {}) {
-  const url = buildUrl(proxyUrl, path)
+export async function subscanPost(path, body, _proxyUrl, options = {}) {
+  const url = buildUrl(path)
   const external = options.signal
   const serialisedBody = JSON.stringify(body)
   const attempts = Number.isFinite(options.attempts) ? options.attempts : MAX_RETRY_ATTEMPTS
@@ -232,6 +213,79 @@ export async function fetchEraStat(address, row, proxyUrl, options = {}) {
 
 /** Re-export the delay utility for hooks. */
 export { delay }
+
+/**
+ * Probe a single endpoint to verify it is reachable and the API key is accepted.
+ * Sends an empty JSON body ({}) — Subscan returns HTTP 200 with code 400 ("EOF")
+ * when the body is missing required fields, which is enough to confirm:
+ *   - the endpoint URL is correct (404 = wrong path)
+ *   - the API key is valid (401/403 = auth failure)
+ *   - the network and proxy are working
+ * Returns { ok, status, code, error }.
+ */
+export async function probeEndpoint(path, _body, signal) {
+  if (!ALLOWED_PATHS.has(path)) {
+    return { ok: false, status: null, code: null, error: 'Path not in allowlist' }
+  }
+  const url = buildUrl(path)
+  const controller = new AbortController()
+  const onAbort = () => controller.abort()
+  if (signal) {
+    if (signal.aborted) return { ok: false, status: null, code: null, error: 'Aborted' }
+    signal.addEventListener('abort', onAbort, { once: true })
+  }
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      // Empty body: deliberately omits required fields so Subscan replies with
+      // HTTP 200 + code 400 ("EOF"). This is the lightest possible valid probe.
+      body: '{}',
+      signal: controller.signal,
+    })
+    clearTimeout(timer)
+    if (signal) signal.removeEventListener('abort', onAbort)
+
+    // Try to parse any JSON body — some endpoints return HTTP 400 with
+    // a JSON payload like { code: 400, message: 'EOF' } when required
+    // fields are absent. We accept that as a successful probe.
+    let data = null
+    try { data = await response.json() } catch { /* ignore parse errors */ }
+
+    // 401/403 = API key rejected
+    if (response.status === 401 || response.status === 403) {
+      return { ok: false, status: response.status, code: data?.code ?? null, error: `HTTP ${response.status} — API key may be invalid or missing` }
+    }
+    // 404 = wrong endpoint path
+    if (response.status === 404) {
+      return { ok: false, status: 404, code: data?.code ?? null, error: 'HTTP 404 — endpoint not found' }
+    }
+
+    // HTTP 200 — endpoint reachable and API key accepted.
+    if (response.ok) {
+      return { ok: true, status: response.status, code: data?.code ?? null, error: null }
+    }
+
+    // Some Subscan endpoints respond with HTTP 400 and a body of
+    // `{ code: 400, message: 'EOF' }` when the request body is empty.
+    // Treat that specific case as a successful probe.
+    if (response.status === 400 && data?.code === 400) {
+      return { ok: true, status: response.status, code: data.code, error: null }
+    }
+
+    // Any other non-2xx response is a failure.
+    return { ok: false, status: response.status, code: data?.code ?? null, error: `HTTP ${response.status}` }
+  } catch (err) {
+    clearTimeout(timer)
+    if (signal) signal.removeEventListener('abort', onAbort)
+    if (err.name === 'AbortError') {
+      if (signal && signal.aborted) return { ok: false, status: null, code: null, error: 'Aborted' }
+      return { ok: false, status: null, code: null, error: 'Request timed out' }
+    }
+    return { ok: false, status: null, code: null, error: 'Network error — check proxy or connection' }
+  }
+}
 
 // ── Pool-specific helpers ──────────────────────────────────────────────────
 
