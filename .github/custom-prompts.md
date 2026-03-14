@@ -1,6 +1,6 @@
 # Custom Prompts
 
-# Starting a session
+# Start Session
 
 **START OF INSTRUCTIONS**
 

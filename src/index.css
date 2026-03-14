@@ -59,6 +59,17 @@
            focus-visible:ring-offset-ink;
   }
 
+  /* ── Stop button (danger) ── */
+  .btn-stop {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-lg
+           bg-danger hover:bg-danger/90 active:bg-danger/80
+           text-white font-semibold text-sm tracking-wide
+           transition-all duration-150
+           disabled:opacity-40 disabled:cursor-not-allowed
+           focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2
+           focus-visible:ring-offset-ink;
+  }
+
   /* ── Ghost button ── */
   .btn-ghost {
     @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg

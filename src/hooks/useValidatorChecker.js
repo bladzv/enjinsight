@@ -151,7 +151,7 @@ export function useValidatorChecker() {
       if (signal.aborted) return
       const { key, label } = VALIDATOR_ENDPOINTS_TO_PROBE[i]
       log('INFO', `[${i + 1}/${VALIDATOR_ENDPOINTS_TO_PROBE.length}] Probing: ${label}…`)
-      const result = await probeEndpoint(ENDPOINTS[key], null, signal)
+      const result = await enqueueRequest(() => probeEndpoint(ENDPOINTS[key], null, signal))
       if (signal.aborted) return
       if (result.ok) {
         log('OK', `[${i + 1}/${VALIDATOR_ENDPOINTS_TO_PROBE.length}] ${label}: reachable ✔`)

@@ -107,7 +107,7 @@ export default function ControlPanel({
             onClick={handleAction}
             disabled={disableAction}
             aria-label={btnAria}
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 btn-primary h-9 min-w-[104px] px-3 text-sm"
+            className={`absolute right-1.5 top-1/2 -translate-y-1/2 h-9 min-w-[104px] px-3 text-sm ${isLoading ? 'btn-stop' : 'btn-primary'}`}
           >
             {isLoading ? (
               <>
