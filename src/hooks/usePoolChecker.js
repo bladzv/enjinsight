@@ -145,7 +145,7 @@ export function usePoolChecker() {
       if (signal.aborted) return
       const { key, label } = POOL_ENDPOINTS_TO_PROBE[i]
       log('INFO', `[${i + 1}/${POOL_ENDPOINTS_TO_PROBE.length}] Probing: ${label}…`)
-      const result = await probeEndpoint(ENDPOINTS[key], null, signal)
+      const result = await enqueueRequest(() => probeEndpoint(ENDPOINTS[key], null, signal))
       if (signal.aborted) return
       if (result.ok) {
         log('OK', `[${i + 1}/${POOL_ENDPOINTS_TO_PROBE.length}] ${label}: reachable ✔`)

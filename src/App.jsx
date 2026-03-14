@@ -153,8 +153,8 @@ export default function App() {
                 return (
                   <div key={phase.key} className="w-full rounded-md border border-border bg-surface/40 px-2.5 py-2">
                     <div className="flex items-center justify-between text-[11px] gap-3">
-                      <p className={`font-medium ${statusClass}`}>
-                        Step {index + 1}: {phase.label}
+                        <p className={`font-medium ${statusClass}`}>
+                        Step {index}: {phase.label}
                       </p>
                       <p className={`font-semibold ${statusClass}`}>{statusLabel}</p>
                     </div>
