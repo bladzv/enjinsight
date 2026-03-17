@@ -2,10 +2,6 @@ import { useState } from 'react'
 import { Search, RotateCcw, Square, AlertCircle } from 'lucide-react'
 import {
   DEFAULT_ERA_COUNT, MIN_ERA_COUNT, MAX_ERA_COUNT,
-  API_DELAY_MS,
-  VALIDATOR_ENDPOINTS_TO_PROBE, POOL_ENDPOINTS_TO_PROBE,
-  ERA_VALIDATORS_SAMPLE,
-  TYPICAL_VALIDATOR_COUNT, TYPICAL_POOL_COUNT,
 } from '../constants.js'
 
 export default function ControlPanel({
@@ -71,31 +67,8 @@ export default function ControlPanel({
       : 'Start scan'
   const disableAction = !isLoading && !isResetState && !!error
 
-  // Pre-scan time estimate — hidden during loading, after a run, or when input is invalid.
-  // Formula accounts for rate-limiting delay (API_DELAY_MS) per sequential API call.
-  // Validator time: (probes + list + N×nominators + N×era-stats) × 1s — era count does not
-  //   affect validator scan time (era_stat is one call per validator regardless of era count).
-  // Pool time: (probes + list + P×voted + P×eraCount×reward-slash + consensus-samples) × 1s
-  //   — era count scales pool scan time linearly.
-  const { estCalls, estTimeLabel } = (() => {
-    if (!value || validate(value) || isLoading || isResetState) return { estCalls: null, estTimeLabel: null }
-    const eraCount = parseInt(value, 10)
-    const delayS   = API_DELAY_MS / 1000
-    let calls
-    if (isPoolMode) {
-      const P = TYPICAL_POOL_COUNT
-      calls = POOL_ENDPOINTS_TO_PROBE.length + 1 + P + ERA_VALIDATORS_SAMPLE + P * eraCount
-    } else {
-      const N = TYPICAL_VALIDATOR_COUNT
-      calls = VALIDATOR_ENDPOINTS_TO_PROBE.length + 1 + 2 * N
-    }
-    const secs = Math.round(calls * delayS)
-    let label
-    if (secs < 60)   label = `~${secs}s`
-    else if (secs < 3600) label = `~${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, '0')}s`
-    else              label = `~${Math.floor(secs / 3600)}h ${String(Math.floor((secs % 3600) / 60)).padStart(2, '0')}m`
-    return { estCalls: calls, estTimeLabel: label }
-  })()
+  const showWarning = !error && parseInt(value, 10) > 30
+  const helperTextClass = error ? 'text-danger' : showWarning ? 'text-warning' : 'text-dim'
 
   return (
     <div id="scan-controls" className="card w-full p-4 sm:p-5 text-center">
@@ -114,10 +87,10 @@ export default function ControlPanel({
       {/* Input row */}
       <div>
         <label htmlFor="reward-count" className="block text-xs font-medium text-dim mb-1.5">
-          Number of recent eras to check
+          Number of recent eras to check (max 100)
         </label>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-center gap-3">
-        <div className="relative w-full sm:w-[37.5%]">
+        <div className="relative w-full sm:w-[25%]">
           <input
             id="reward-count"
             type="text"
@@ -160,30 +133,28 @@ export default function ControlPanel({
             )}
           </button>
         </div>
-        {/* Time estimate — shown only before a scan starts, when input is valid */}
-        {estCalls != null && (
-          <span className="text-xs font-mono text-dim flex items-center gap-2 justify-center">
-            <span>~{estCalls.toLocaleString('en')} API calls</span>
-            <span className="text-muted">·</span>
-            <span className="text-cyan/80">{estTimeLabel}</span>
-          </span>
-        )}
         </div>
 
-        {error && (
-          <p id="reward-count-error" role="alert" className="mt-1.5 text-xs text-danger flex items-center gap-1 justify-center">
-            <AlertCircle size={11} /> {error}
-          </p>
-        )}
-      </div>
-
-      {/* Hint for large N */}
-      {parseInt(value, 10) > 30 && !error && (
-        <p className="mt-2 text-xs text-dim flex items-center gap-1 justify-center">
-          <AlertCircle size={11} className="text-warning" />
-          Checking {value} rewards may take longer. Large scans are batched automatically.
+        <p
+          id="reward-count-helper"
+          role={error ? 'alert' : undefined}
+          aria-hidden={!error && !showWarning}
+          className={`mt-2 text-xs flex items-center gap-1 justify-center min-h-[1.25rem] ${helperTextClass}`}
+        >
+          {error ? (
+            <>
+              <AlertCircle size={11} /> {error}
+            </>
+          ) : showWarning ? (
+            <>
+              <AlertCircle size={11} className="text-warning" />
+              Checking {value} rewards may take longer. Large scans are batched automatically.
+            </>
+          ) : (
+            <span className="invisible">placeholder</span>
+          )}
         </p>
-      )}
+      </div>
     </div>
   )
 }
