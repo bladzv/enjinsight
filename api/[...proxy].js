@@ -5,11 +5,22 @@
 // The Subscan API key is injected server-side from SUBSCAN_API_KEY env var.
 export const config = { api: { bodyParser: false } }
 
-/** Read the raw request body into a Buffer. */
+/** Maximum raw body size accepted from the client (32 KB — well above any API payload). */
+const MAX_BODY_BYTES = 32 * 1024
+
+/** Read the raw request body into a Buffer, enforcing a size limit. */
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = []
-    req.on('data', (chunk) => chunks.push(chunk))
+    let totalBytes = 0
+    req.on('data', (chunk) => {
+      totalBytes += chunk.length
+      if (totalBytes > MAX_BODY_BYTES) {
+        req.destroy()
+        return reject(new Error('Request body too large.'))
+      }
+      chunks.push(chunk)
+    })
     req.on('end', () => resolve(Buffer.concat(chunks)))
     req.on('error', reject)
   })
@@ -54,7 +65,7 @@ export default async function handler(req, res) {
 
     const targetUrl = new URL(target);
 
-    const allowlistEnv = process.env.PROXY_ALLOWLIST || '';
+    const allowlistEnv = process.env.PROXY_ALLOWLIST || 'enjin.api.subscan.io';
     const allowlist = allowlistEnv.split(',').map(s => s.trim()).filter(Boolean);
     if (allowlist.length > 0 && !allowlist.includes(targetUrl.hostname)) {
       res.statusCode = 403;
@@ -82,7 +93,13 @@ export default async function handler(req, res) {
     delete forwardHeaders.host;
     // Remove the client-supplied x-api-key — we inject it server-side below.
     delete forwardHeaders['x-api-key'];
-    ['connection', 'keep-alive', 'transfer-encoding', 'proxy-authorization', 'proxy-authenticate', 'upgrade'].forEach(h => delete forwardHeaders[h]);
+    // Strip hop-by-hop and potentially dangerous headers
+    [
+      'connection', 'keep-alive', 'transfer-encoding',
+      'proxy-authorization', 'proxy-authenticate', 'upgrade',
+      'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto',
+      'x-real-ip', 'x-proxy-secret',
+    ].forEach(h => delete forwardHeaders[h]);
 
     // Inject the Subscan API key from the server-side environment variable.
     const apiKey = process.env.SUBSCAN_API_KEY || '';
@@ -105,7 +122,10 @@ export default async function handler(req, res) {
     });
 
     res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+    // Prevent downstream content from being framed or sniffed
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
 
     res.statusCode = upstreamRes.status;
     const text = await upstreamRes.text();

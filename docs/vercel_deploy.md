@@ -2,7 +2,7 @@
 
 This project is deployed at:
 
-- https://enjin-status-checker.vercel.app/
+- https://enjinsight.vercel.app/
 
 The app is a static Vite frontend with a serverless proxy function at `api/[...proxy].js`.
 

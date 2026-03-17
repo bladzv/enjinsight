@@ -10,6 +10,7 @@ yarn-debug.log*
 yarn-error.log*
 .eslintcache
 .env
+new_feature/.env
 .DS_Store
 .vscode/
 .idea/

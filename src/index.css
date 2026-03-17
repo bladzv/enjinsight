@@ -16,6 +16,11 @@
     min-height: 100dvh;
   }
 
+  /* Prevent 300ms tap delay and double-tap zoom on interactive elements */
+  button, [role="button"], a, input, select, textarea {
+    touch-action: manipulation;
+  }
+
   :focus-visible {
     outline: 2px solid theme('colors.primary');
     outline-offset: 2px;

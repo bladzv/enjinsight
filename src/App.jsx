@@ -5,6 +5,8 @@ import { usePoolChecker }      from './hooks/usePoolChecker.js'
 import { resolveLatestEra }    from './utils/eraAnalysis.js'
 
 import AppHeader           from './components/AppHeader.jsx'
+import LandingPage         from './components/LandingPage.jsx'
+import BalanceExplorer     from './components/BalanceExplorer.jsx'
 import ModeSelector        from './components/ModeSelector.jsx'
 import ControlPanel        from './components/ControlPanel.jsx'
 import ValidatorCard       from './components/ValidatorCard.jsx'
@@ -14,6 +16,7 @@ import SummarySection      from './components/SummarySection.jsx'
 import PoolSummarySection  from './components/PoolSummarySection.jsx'
 
 export default function App() {
+  const [view,       setView]       = useState('home')      // 'home' | 'staking' | 'balance'
   const [mode,       setMode]       = useState('validators') // 'validators' | 'pools'
   const [lastEraCount, setLastEraCount] = useState(DEFAULT_ERA_COUNT)
 
@@ -103,25 +106,51 @@ export default function App() {
     setMode(newMode)
   }
 
+  function handleNavigate(dest) {
+    if (status === 'loading') return // block navigation during active scan
+    setView(dest)
+  }
+
+  function handleBack() {
+    if (status === 'loading') return
+    setView('home')
+  }
+
   return (
     <div className="min-h-dvh bg-ink bg-grid">
-      <AppHeader status={status} />
+      <AppHeader status={status} view={view} onBack={handleBack} />
 
+      {/* ── Balance Viewer ──────────────────────────────────────────── */}
+      {view === 'balance' && (
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-16 sm:pb-20">
+          <BalanceExplorer />
+        </main>
+      )}
+
+      {/* ── Home / Landing ──────────────────────────────────────────── */}
+      {view === 'home' && (
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 pb-16 sm:pb-20">
+          <LandingPage onNavigate={handleNavigate} />
+        </main>
+      )}
+
+      {/* ── Staking view ────────────────────────────────────────────── */}
+      {view === 'staking' && (
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-16 sm:pb-20 space-y-4 sm:space-y-5">
 
-        {/* Mode selector tabs */}
-        <ModeSelector mode={mode} onModeChange={handleModeChange} disabled={isLoading} />
+        {/* Mode selector tabs + scan controls (no gap between them) */}
+        <div className="space-y-0">
+          <ModeSelector mode={mode} onModeChange={handleModeChange} disabled={isLoading} />
+          <ControlPanel
+            mode={mode}
+            status={status}
+            onRun={handleRun}
+            onStop={handleStop}
+            onReset={handleReset}
+          />
+        </div>
 
         {/* Proxy setup removed from UI (use serverless proxy in production). */}
-
-        {/* Control panel */}
-        <ControlPanel
-          mode={mode}
-          status={status}
-          onRun={handleRun}
-          onStop={handleStop}
-          onReset={handleReset}
-        />
 
         {/* Scan progress */}
         {status !== 'idle' && phases.length > 0 && (
@@ -283,21 +312,11 @@ export default function App() {
           </div>
         )}
       </main>
+      )}
 
       {/* Footer */}
-      <footer className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-ink/95 backdrop-blur py-3 text-center text-xs text-muted">
-        <p>
-          Enjin Relaychain Status Checker · Live data from{' '}
-          <a
-            href="https://enjin.subscan.io"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-dim hover:text-cyan transition-colors"
-          >
-            Subscan
-          </a>
-          {' '}· Read-only monitoring · No wallet connection required
-        </p>
+      <footer className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-ink/95 backdrop-blur py-2.5 text-center text-xs text-muted">
+        EnjinSight | Read-only | No wallet required
       </footer>
       {/* Vercel Analytics (lazy-loaded if dependency installed) */}
       {AnalyticsComponent && <AnalyticsComponent />}

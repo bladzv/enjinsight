@@ -1,7 +1,7 @@
 {
-  "name": "enjin-validator-checker",
+  "name": "enjinsight",
   "version": "1.0.0",
-  "description": "Monitor Enjin Blockchain validator reward cadence via Subscan API",
+  "description": "Monitoring and analytics utilities for the Enjin Blockchain ecosystem",
   "private": true,
   "type": "module",
   "engines": {
@@ -15,6 +15,9 @@
     "lint": "echo 'no lint configured'"
   },
   "dependencies": {
+    "@noble/hashes": "^1.8.0",
+    "@polkadot/util-crypto": "^14.0.2",
+    "chart.js": "^4.5.1",
     "lucide-react": "^0.263.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
