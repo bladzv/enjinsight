@@ -6,9 +6,9 @@
 
 - When starting a session, read the Session Management Workflow section in `.github/ai-instructions.md` to understand the procedures and guidelines for managing sessions effectively.
 - Delete the content of `.github/actions.md` and `.github/pr_description.md` to start a new session with a clean slate. This will help in keeping the records organized and relevant to the current session, avoiding any confusion with previous sessions' data.
-- Use these commands to clear the content of the files:
-  - `echo "" > .github/actions.md`
-  - `echo "" > .github/pr_description.md`
+- Use these commands to delete the files:
+  - `rm .github/actions.md`
+  - `rm .github/pr_description.md`
 
 **END OF INSTRUCTIONS**
 
@@ -44,8 +44,9 @@ Timestamp: [YYYY-MM-DD HH:MM:SS UTC] Fetch the current time programmatically usi
 ---
 ```
 
-- Read the current content of `.github/actions.md` to understand which actions have already been logged and to avoid duplication of records. This will ensure that the log remains accurate and up-to-date with the latest changes and actions taken during the session.
-- Compare the local codebase with the remote repository main branch and generate a log of changes in `.github/actions.md`. Use the `echo` or `printf` command when doing so. Do not use the heredoc. Use the GitHub MCP to access the repository and retrieve the necessary information.
+- Check if `.github/actions.md` exists before attempting to read or write to it. If it does not exist, create a new blank file.
+- If `.github/actions.md` exists, read the current content to understand which actions have already been logged and to avoid duplication of records. This will ensure that the log remains accurate and up-to-date with the latest changes and actions taken during the session.
+- Compare the local codebase with the remote repository main branch and generate a log of changes in `.github/actions.md`. Use the `printf` command when doing so. Do not use the heredoc or `echo`. Use the GitHub MCP to access the repository and retrieve the necessary information.
 - Make sure all the actions taken in this session including the changes, fixes, and additions made to the codebase are recorded in `.github/actions.md` (use the `printf` command). This log should be comprehensive and provide a clear overview of the work done during this session.
 
 **END OF INSTRUCTIONS**
@@ -122,7 +123,11 @@ Create one-line summary following Conventional Commits format:
 - Match action descriptions to issue titles/descriptions
 
 #### Step 5: Generate PR Description
-Create comprehensive PR description and append to `.github/pr_description.md`:
+
+Use the command `touch .github/pr_description.md` to create the file.
+Create comprehensive PR description and append to `.github/pr_description.md` using `printf` command. 
+
+Follow the template of PR description below:
 
 **PR Description Format:**
 ```markdown

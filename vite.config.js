@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => {
           manualChunks: {
             vendor: ['react', 'react-dom'],
             icons: ['lucide-react'],
+            chart: ['chart.js'],
           },
         },
       },

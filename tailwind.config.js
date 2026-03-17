@@ -11,14 +11,14 @@ export default {
         rim:     '#2A2A45',
         primary: '#7B3FE4',
         'primary-dim': '#5A2DB0',
-        'primary-glow': '#9B5FFF',
+        'primary-glow': '#8A4AEE', // darkened: white-on-glow now 4.83:1 (was 3.65:1)
         cyan:    '#00D4FF',
         'cyan-dim': '#00A3CC',
         success: '#22C55E',
         warning: '#F59E0B',
         danger:  '#EF4444',
         dim:     '#8B8AB0',
-        muted:   '#4A4A6A',
+        muted:   '#7373A8', // lightened: contrast 4.65:1 (was 2.5:1 — WCAG AA fail)
         text:    '#F0EEFF',
         'text-secondary': '#A9A8CC',
         term:    '#050508',

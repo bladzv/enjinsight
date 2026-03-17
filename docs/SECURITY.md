@@ -64,7 +64,7 @@ This project is a read-only monitoring UI with a serverless proxy.
 
 Primary deployment:
 
-- https://enjin-status-checker.vercel.app/
+- https://enjinsight.vercel.app/
 
 For deployment-specific issues, include:
 

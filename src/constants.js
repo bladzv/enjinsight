@@ -43,6 +43,70 @@ export const CONSECUTIVE_MISS_THRESHOLD = 3   // eras before critical alert
 // ── ENJ precision ─────────────────────────────────────────────────────────
 export const PLANCK_PER_ENJ        = BigInt('1000000000000000000') // 10^18
 
+// ── Historical Balance Viewer ──────────────────────────────────────────────
+// Network presets for the archive node dropdown.
+// Only networks with publicly documented archive WS endpoints are listed.
+export const ENJIN_NETWORKS = [
+  {
+    key:          'matrixchain',
+    label:        'Enjin Matrixchain',
+    endpoint:     'wss://archive.matrix.blockchain.enjin.io',
+    addrHint:     'e.g. efTpCuJYg7jnjA8HxYb9dFKp7…',
+    ss58Prefix:   1110,
+  },
+  {
+    key:          'relaychain',
+    label:        'Enjin Relaychain',
+    endpoint:     'wss://archive.relay.blockchain.enjin.io',
+    addrHint:     'e.g. enqFfD3mAaH7dzXxFhHNwxnk2…',
+    ss58Prefix:   2135,
+  },
+  {
+    key:          'canary-matrix',
+    label:        'Canary Matrixchain',
+    endpoint:     'wss://archive.matrix.canary.enjin.io',
+    addrHint:     'e.g. cxLNrtPNJnnEUkZMjWxPiHvNe…',
+    ss58Prefix:   9030,
+  },
+  {
+    key:          'canary-relay',
+    label:        'Canary Relaychain',
+    endpoint:     'wss://archive.relay.canary.enjin.io',
+    addrHint:     'e.g. cnLNrtPNJnnEUkZMjWxPiHvNe…',
+    ss58Prefix:   69,
+  },
+  {
+    key:          'custom',
+    label:        'Custom endpoint…',
+    endpoint:     '',
+    addrHint:     'SS58 wallet address',
+    ss58Prefix:   null,
+  },
+]
+export const WS_DEFAULT_ENDPOINT   = ENJIN_NETWORKS[0].endpoint
+export const WS_CONNECT_TIMEOUT_MS = 10000
+export const WS_CALL_TIMEOUT_MS    = 15000
+export const MAX_RPC_CALLS         = 2000   // upper cap on block-range query size
+export const CHART_MAX_PTS         = 250    // decimate chart data above this many points
+export const MAX_IMPORT_MB         = 10     // maximum import file size in megabytes
+// The IS_NEW_LOGIC flag bit distinguishes the new frozen-field format
+export const IS_NEW_LOGIC_BIT      = 1n << 127n
+// System account prefix for building storage keys (System.Account map)
+export const SYS_ACCT_PREFIX       = '26aa394eea5630e07c48ae0c9558cef7b99d880ec681799c0cf30e8886371da9'
+// Balance chart field definitions (order matters for stacked rendering)
+export const BALANCE_FIELDS = [
+  { key: 'free',       label: 'Free',        color: '#00d9ff', colorBg: 'rgba(0,217,255,.65)'  },
+  { key: 'reserved',   label: 'Reserved',    color: '#ffc400', colorBg: 'rgba(255,196,0,.65)'  },
+  { key: 'miscFrozen', label: 'Misc Frozen', color: '#ff7a35', colorBg: 'rgba(255,122,53,.65)' },
+  { key: 'feeFrozen',  label: 'Fee Frozen',  color: '#ff2d78', colorBg: 'rgba(255,45,120,.65)' },
+]
+
+// ── Typical chain sizes (used for scan-time estimates in ControlPanel) ──────
+// Approximate counts for Enjin Relaychain at time of writing. Used only for
+// pre-scan time estimates; actual counts are determined during the scan itself.
+export const TYPICAL_VALIDATOR_COUNT = 28  // typical active validators on Enjin Relaychain
+export const TYPICAL_POOL_COUNT      = 40  // typical nomination pools on Enjin Relaychain
+
 // ── Endpoint probe configurations (Step 0) ────────────────────────────────
 // probeEndpoint sends {} (empty body) to each path. Subscan responds with
 // HTTP 200 + code 400 ("EOF") when required fields are absent — that is enough
