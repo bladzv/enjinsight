@@ -515,23 +515,29 @@ export function usePoolChecker() {
  * Returns Map<era, { rewarded: [{ address, display }], unrewarded: [{ address, display }] }>
  */
 function buildEraValidatorBreakdown(eraRewards, nominatedValidators, completedEras) {
-  // Group reward events by era → Set of validator_stash addresses that paid
+  // Group reward events by era → Map of validator_stash -> BigInt(amount) summed
   const rewardsByEra = new Map()
   for (const r of eraRewards) {
     if (r.era <= 0 || !r.validatorStash) continue
-    if (!rewardsByEra.has(r.era)) rewardsByEra.set(r.era, new Set())
-    rewardsByEra.get(r.era).add(r.validatorStash)
+    const era = r.era
+    const amtStr = String(r.amount ?? '0').replace(/[^0-9]/g, '') || '0'
+    let amt
+    try { amt = BigInt(amtStr) } catch { amt = 0n }
+    if (!rewardsByEra.has(era)) rewardsByEra.set(era, new Map())
+    const vm = rewardsByEra.get(era)
+    vm.set(r.validatorStash, (vm.get(r.validatorStash) || 0n) + amt)
   }
 
   const breakdown = new Map()
   for (const era of completedEras) {
-    const paid = rewardsByEra.get(era) ?? new Set()
+    const paidMap = rewardsByEra.get(era) ?? new Map()
     const rewarded   = []
     const unrewarded = []
     for (const v of nominatedValidators) {
       if (!v.address) continue
-      const entry = { address: v.address, display: v.display, isActive: !!v.isActive }
-      if (paid.has(v.address)) {
+      const amount = paidMap.get(v.address) || 0n
+      const entry = { address: v.address, display: v.display, isActive: !!v.isActive, amount }
+      if (amount > 0n) {
         rewarded.push(entry)
       } else {
         unrewarded.push(entry)

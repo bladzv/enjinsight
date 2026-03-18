@@ -600,18 +600,6 @@ export function validatorExplorerUrl(address) {
 { era: number, reward: bigint, validatorStake: bigint, nominatorStake: bigint }
 ```
 
-### CORS Proxy Configuration
-
-The Cloudflare Worker in `PROXY.md` is the reference implementation. Key rules:
-
-- `ALLOWED_ORIGIN` in the Worker must exactly match the deployed app domain (e.g. `https://app.example.com`)
-- `ALLOWED_PATHS` in the Worker must match `Object.values(ENDPOINTS)` from `src/constants.js`
-- The Worker constructs the upstream URL as `UPSTREAM_BASE + path` — no client-supplied host
-- The Worker validates `Content-Type: application/json` on both the inbound request and the upstream response
-- The Worker strips `Server` and `X-Powered-By` headers from the upstream response
-
-When deploying to a custom domain, update `ALLOWED_ORIGIN` in the Worker before deploying the app.
-
 ---
 
 ## Code Review Checklist

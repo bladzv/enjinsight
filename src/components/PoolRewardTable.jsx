@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { CheckCircle2, XCircle, ChevronDown, ChevronUp } from 'lucide-react'
-import { formatENJ, truncateAddress } from '../utils/format.js'
+import { CheckCircle2, XCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
+import { formatENJ, truncateAddress, validatorExplorerUrl } from '../utils/format.js'
 
 /**
  * Paginated table showing per-era reward status for a nomination pool.
@@ -21,12 +21,16 @@ export default function PoolRewardTable({
 
   const missedSet = new Set(missedEras ?? [])
 
-  // Build a lookup from era → reward record
-  const rewardMap = new Map()
+  // Build a lookup from era → summed reward amount (BigInt)
+  const rewardTotals = new Map()
   if (Array.isArray(eraRewards)) {
     for (const r of eraRewards) {
       const era = parseInt(String(r.era), 10)
-      if (Number.isFinite(era)) rewardMap.set(era, r)
+      if (!Number.isFinite(era)) continue
+      const amtStr = String(r.amount ?? '0').replace(/[^0-9]/g, '') || '0'
+      let amt
+      try { amt = BigInt(amtStr) } catch { amt = 0n }
+      rewardTotals.set(era, (rewardTotals.get(era) || 0n) + amt)
     }
   }
 
@@ -34,7 +38,7 @@ export default function PoolRewardTable({
   const allEras = Array.from({ length: eraCount }, (_, i) => latestEra - i)
   const rows = allEras.map(era => ({
     era,
-    reward: rewardMap.get(era) ?? null,
+    rewardTotal: rewardTotals.get(era) ?? 0n,
     missed: missedSet.has(era),
   }))
 
@@ -99,7 +103,7 @@ export default function PoolRewardTable({
             </tr>
           </thead>
           <tbody>
-            {pageItems.map(({ era, reward, missed }) => {
+              {pageItems.map(({ era, rewardTotal, missed }) => {
               const bd = hasBreakdown ? eraValidatorBreakdown.get(era) : null
               const isExpanded = expandedEra === era
               return missed ? (
@@ -115,7 +119,7 @@ export default function PoolRewardTable({
                 <RewardedRow
                   key={`era-${era}`}
                   era={era}
-                  reward={reward}
+                  rewardTotal={rewardTotal}
                   bd={bd}
                   hasBreakdown={hasBreakdown}
                   isExpanded={isExpanded}
@@ -131,7 +135,7 @@ export default function PoolRewardTable({
 }
 
 /** Rewarded era row with optional validator breakdown expansion. */
-function RewardedRow({ era, reward, bd, hasBreakdown, isExpanded, onToggle }) {
+function RewardedRow({ era, rewardTotal, bd, hasBreakdown, isExpanded, onToggle }) {
   const rewardedCount = bd?.rewarded?.length ?? 0
   // Exclude inactive validators from "no reward" count
   const activeUnrewarded = bd?.unrewarded?.filter(v => v.isActive) ?? []
@@ -142,7 +146,7 @@ function RewardedRow({ era, reward, bd, hasBreakdown, isExpanded, onToggle }) {
       <tr className="border-b border-border/50 hover:bg-surface/50 transition-colors">
         <td className="px-3 py-2.5 font-mono text-text-secondary text-center w-16">{era}</td>
         <td className="px-3 py-2.5 text-right font-mono text-text w-10">
-          {reward ? formatENJ(BigInt(String(reward.amount ?? '0').replace(/[^0-9]/g, '') || '0'), 4) : '—'}
+          {rewardTotal && rewardTotal > 0n ? formatENJ(rewardTotal, 4) : '—'}
         </td>
         <td className="px-3 py-2.5 text-center hidden md:table-cell">
           <span className="font-mono text-xs text-success">{rewardedCount}</span>
@@ -254,13 +258,37 @@ function BreakdownDetail({ era, bd, colSpan }) {
               <p className="text-success font-semibold mb-1 flex items-center gap-1">
                 <CheckCircle2 size={11} /> Rewarded ({bd.rewarded.length})
               </p>
-              <ul className="space-y-0.5 ml-4">
-                {bd.rewarded.map(v => (
-                  <li key={`${era}-r-${v.address}`} className="text-text-secondary font-mono text-[11px] truncate">
-                    {v.display || truncateAddress(v.address)}
-                  </li>
-                ))}
-              </ul>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs min-w-[240px]">
+                  <thead>
+                    <tr>
+                      <th className="text-left px-2 py-1 text-dim font-semibold">Validator</th>
+                      <th className="text-right px-2 py-1 text-dim font-semibold">ENJ Reward</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bd.rewarded.map(v => (
+                      <tr key={`${era}-r-${v.address}`} className="border-b border-border/30">
+                        <td className="px-2 py-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-text-secondary font-mono text-[11px] truncate">{v.display || truncateAddress(v.address)}</span>
+                            <a
+                              href={validatorExplorerUrl(v.address)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn-ghost btn-icon"
+                              aria-label="Open validator in Subscan"
+                            >
+                              <ExternalLink size={12} />
+                            </a>
+                          </div>
+                        </td>
+                        <td className="px-2 py-1 text-right font-mono text-text">{formatENJ(v.amount ?? 0n, 4)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
           {/* Active unrewarded validators */}
@@ -272,7 +300,18 @@ function BreakdownDetail({ era, bd, colSpan }) {
               <ul className="space-y-0.5 ml-4">
                 {activeUnrewarded.map(v => (
                   <li key={`${era}-u-${v.address}`} className="text-text-secondary font-mono text-[11px] truncate">
-                    {v.display || truncateAddress(v.address)}
+                    <div className="flex items-center gap-2">
+                      <span className="truncate">{v.display || truncateAddress(v.address)}</span>
+                      <a
+                        href={validatorExplorerUrl(v.address)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-ghost btn-icon"
+                        aria-label="Open validator in Subscan"
+                      >
+                        <ExternalLink size={12} />
+                      </a>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -287,7 +326,18 @@ function BreakdownDetail({ era, bd, colSpan }) {
               <ul className="space-y-0.5 ml-4">
                 {inactiveUnrewarded.map(v => (
                   <li key={`${era}-i-${v.address}`} className="text-muted font-mono text-[11px] truncate">
-                    {v.display || truncateAddress(v.address)}
+                    <div className="flex items-center gap-2">
+                      <span className="truncate">{v.display || truncateAddress(v.address)}</span>
+                      <a
+                        href={validatorExplorerUrl(v.address)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-ghost btn-icon"
+                        aria-label="Open validator in Subscan"
+                      >
+                        <ExternalLink size={12} />
+                      </a>
+                    </div>
                   </li>
                 ))}
               </ul>
