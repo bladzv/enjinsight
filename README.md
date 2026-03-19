@@ -77,7 +77,15 @@ https://enjinsight.vercel.app/
 ├── api/
 │   └── [...proxy].js       # Vercel serverless proxy — injects API key server-side,
 │                           # enforces PROXY_ALLOWLIST, 32 KB body limit
-├── docs/                   # Security policy, deployment notes, product docs
+├── docs/
+│   ├── SECURITY.md                              # Security policy and vulnerability reporting
+│   ├── enjin_reward_tracker_PRD_v3.1.md         # PRD v3.1 — per-era ENJ reward tracker
+│   ├── enjin_reward_tracker_prototype.jsx        # UI prototype reference for reward tracker PRD
+│   ├── nomination_pool_api_reference.md          # Nomination pool API guide (concept + endpoints)
+│   ├── nomination_pool_scan_sample_data.md       # Captured sample responses from a full pool scan
+│   ├── ui_design_system.md                       # Dark-tech UI/UX design system reference
+│   ├── validator_reward_checker_PRD_v1.md        # PRD v1 — validator reward checker (original)
+│   └── vercel_deployment_guide.md               # Step-by-step Vercel deployment instructions
 ├── public/                 # Static assets (logo, favicons, site.webmanifest)
 ├── src/
 │   ├── components/
@@ -165,16 +173,22 @@ All Subscan requests are routed through a same-origin proxy so the API key is **
 Browser
   └── POST /api/<encodeURIComponent(https://enjin.api.subscan.io/...)>
         │
-        ├── Dev:  Vite dev-server proxy (vite.config.js)
+        ├── Local dev (npm run dev):
+        │         Vite dev-server proxy (vite.config.js)
         │         decodes target, rewrites path, injects x-api-key from SUBSCAN_API_KEY
+        │         ──→ no external proxy server required
         │
-        └── Prod: Vercel serverless function (api/[...proxy].js)
+        └── Production on Vercel (https://enjinsight.vercel.app):
+                  Vercel serverless function (api/[...proxy].js)
                   decodes target, validates hostname against PROXY_ALLOWLIST,
                   enforces 32 KB body limit, injects x-api-key from SUBSCAN_API_KEY,
                   strips client-supplied x-api-key and forwarding headers
+                  ──→ no external proxy server required
 ```
 
 `buildUrl()` in `api.js` always constructs `/api/<encodedUrl>` — direct Subscan requests are never made from the browser regardless of environment.
+
+**The Cloudflare Worker proxy described in [`PROXY.md`](./PROXY.md) is only needed if you deploy this app to a static-only host** (e.g. GitHub Pages, plain Nginx, Cloudflare Pages without a Worker) that cannot run serverless functions. For local development and for Vercel deployments, the proxy is handled automatically — no external proxy setup is required.
 
 The Balance Viewer connects via WebSocket **directly** from the browser to public archive nodes (no proxy needed); those connections never carry any secret.
 
