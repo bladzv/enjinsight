@@ -1,7 +1,21 @@
 # CORS Proxy Setup (Cloudflare Worker)
 
+> **Do you actually need this?**
+>
+> | Scenario | Proxy needed? |
+> |---|---|
+> | Local development (`npm run dev`) | **No** — the Vite dev-server proxy in `vite.config.js` handles all Subscan requests and API-key injection automatically. |
+> | Deployed to **Vercel** (including the live demo at [enjinsight.vercel.app](https://enjinsight.vercel.app)) | **No** — the serverless function at `api/[...proxy].js` acts as the proxy. No external Worker required. |
+> | Deployed to a **static-only host** (GitHub Pages, plain Nginx, Cloudflare Pages without a Worker, etc.) that cannot run serverless functions | **Yes** — set up the Cloudflare Worker below so the app has a proxy endpoint to route Subscan requests through. |
+>
+> If you are running the app locally or deploying to Vercel, stop here — you do not need this file.
+
+---
+
 The Subscan API restricts cross-origin requests to `https://enjin.subscan.io`. This
-worker forwards requests from your deployed app and rewrites the `Origin` header.
+Cloudflare Worker forwards requests from a statically-hosted app and rewrites the `Origin` header.
+
+> **Note:** This guide has not been validated end-to-end with the current codebase. It serves as a reasonable starting point based on Cloudflare Workers documentation and the app's proxy interface, but you may need to adapt the worker code and URL routing to match `api/[...proxy].js` expectations. Treat it as a baseline — test thoroughly before relying on it in production.
 
 ## Step 1 — Create the Worker
 
