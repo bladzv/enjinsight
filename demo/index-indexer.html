@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Enjin Staking Rewards Explorer</title>
+    <style>
+        /* ── Reset & Base ──────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-from:       #0a0e1a;
+            --bg-to:         #0f1729;
+            --glass-bg:      rgba(255,255,255,0.04);
+            --glass-border:  rgba(255,255,255,0.10);
+            --glass-hover:   rgba(255,255,255,0.07);
+            --accent:        #7c6aff;
+            --accent-glow:   rgba(124,106,255,0.35);
+            --accent2:       #00d4aa;
+            --accent2-glow:  rgba(0,212,170,0.25);
+            --text-primary:  #e8eaf6;
+            --text-secondary:#8892b0;
+            --text-dim:      #4a5568;
+            --success:       #00d4aa;
+            --warning:       #f6ad55;
+            --danger:        #fc8181;
+            --info:          #63b3ed;
+            --border-radius: 16px;
+            --shadow:        0 8px 32px rgba(0,0,0,0.5);
+            --log-bg:        #050810;
+            --log-text:      #4ade80;
+            --log-dim:       #386641;
+            --log-info:      #63b3ed;
+            --log-warn:      #f6ad55;
+            --log-error:     #fc8181;
+            --log-height:    320px;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, var(--bg-from) 0%, var(--bg-to) 100%);
+            min-height: 100vh;
+            color: var(--text-primary);
+            padding-bottom: calc(var(--log-height) + 52px);
+            overflow-x: hidden;
+        }
+
+        /* ── Animated background particles ──────────────────────────── */
+        .bg-orbs {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 0;
+        }
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.12;
+            animation: orb-drift 20s ease-in-out infinite alternate;
+        }
+        .orb1 { width:500px;height:500px;background:var(--accent);top:-100px;left:-100px;animation-duration:22s; }
+        .orb2 { width:400px;height:400px;background:var(--accent2);bottom:-80px;right:-80px;animation-duration:18s;animation-delay:-6s; }
+        .orb3 { width:300px;height:300px;background:#ff6b9d;top:40%;left:60%;animation-duration:25s;animation-delay:-12s; }
+
+        @keyframes orb-drift {
+            0%   { transform: translate(0,0) scale(1); }
+            50%  { transform: translate(40px,-30px) scale(1.08); }
+            100% { transform: translate(-20px,50px) scale(0.95); }
+        }
+
+        /* ── Layout ──────────────────────────────────────────────────── */
+        main {
+            position: relative;
+            z-index: 1;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 24px 32px;
+        }
+
+        /* ── Header ──────────────────────────────────────────────────── */
+        .app-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .app-header .logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 4px 24px var(--accent-glow);
+        }
+        .app-header h1 {
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(120deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .app-header p {
+            color: var(--text-secondary);
+            font-size: 15px;
+        }
+
+        /* ── Glass card ──────────────────────────────────────────────── */
+        .card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--border-radius);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 28px 32px;
+            box-shadow: var(--shadow);
+            margin-bottom: 24px;
+        }
+        .card-title {
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+
+        /* ── Form ────────────────────────────────────────────────────── */
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 16px;
+        }
+        @media (min-width: 680px) {
+            .form-grid { grid-template-columns: 2fr 1fr 1fr; }
+            .form-grid .full-row { grid-column: 1 / -1; }
+        }
+
+        .field { display: flex; flex-direction: column; gap: 6px; }
+        .field label {
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+        .field input {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--glass-border);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: inherit;
+            padding: 12px 16px;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .field input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+        .field input::placeholder { color: var(--text-dim); }
+
+        .btn-row {
+            display: flex;
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            padding: 12px 24px;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), #5e4fd6);
+            color: #fff;
+            box-shadow: 0 4px 16px var(--accent-glow);
+        }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 24px var(--accent-glow); }
+        .btn-primary:active { transform: translateY(0); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .btn-ghost {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            color: var(--text-secondary);
+        }
+        .btn-ghost:hover { background: var(--glass-hover); color: var(--text-primary); }
+
+        /* ── Status bar ──────────────────────────────────────────────── */
+        .status-bar {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 18px;
+            background: rgba(124,106,255,0.08);
+            border: 1px solid rgba(124,106,255,0.2);
+            border-radius: 10px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+        .status-bar.visible { display: flex; }
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(124,106,255,0.3);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            flex-shrink: 0;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Summary stats ───────────────────────────────────────────── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            padding: 18px 20px;
+            text-align: center;
+        }
+        .stat-card .stat-value {
+            font-size: 22px;
+            font-weight: 800;
+            background: linear-gradient(120deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.2;
+            margin-bottom: 4px;
+        }
+        .stat-card .stat-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-secondary);
+        }
+
+        /* ── Pool summary table ──────────────────────────────────────── */
+        .pool-summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .pool-summary-table th {
+            text-align: left;
+            padding: 8px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--glass-border);
+        }
+        .pool-summary-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            color: var(--text-primary);
+        }
+        .pool-summary-table tr:last-child td { border-bottom: none; }
+        .pool-summary-table tr:hover td { background: var(--glass-hover); }
+        .enj-amount { font-family: 'JetBrains Mono', monospace; }
+        .apy-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            background: rgba(0,212,170,0.12);
+            color: var(--accent2);
+        }
+        .total-row td {
+            border-top: 1px solid var(--glass-border) !important;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        /* ── Pool detail accordion ───────────────────────────────────── */
+        .pool-block { margin-bottom: 16px; }
+        .pool-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.15s;
+            user-select: none;
+        }
+        .pool-header:hover { background: var(--glass-hover); }
+        .pool-header.open { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: none; }
+        .pool-header-left { display: flex; align-items: center; gap: 14px; }
+        .pool-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+        .pool-name { font-weight: 700; font-size: 15px; }
+        .pool-meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+        .pool-header-right { display: flex; align-items: center; gap: 16px; }
+        .pool-total { font-size: 15px; font-weight: 700; font-family: monospace; color: var(--accent2); }
+        .chevron { font-size: 18px; color: var(--text-dim); transition: transform 0.2s; }
+        .pool-header.open .chevron { transform: rotate(180deg); }
+
+        .era-table-wrap {
+            display: none;
+            background: rgba(0,0,0,0.2);
+            border: 1px solid var(--glass-border);
+            border-top: none;
+            border-bottom-left-radius: 12px;
+            border-bottom-right-radius: 12px;
+            overflow-x: auto;
+        }
+        .era-table-wrap.open { display: block; }
+
+        .era-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            min-width: 760px;
+        }
+        .era-table th {
+            text-align: left;
+            padding: 10px 14px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            white-space: nowrap;
+            position: sticky;
+            top: 0;
+            background: rgba(5,8,16,0.9);
+        }
+        .era-table td {
+            padding: 9px 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            color: var(--text-primary);
+            white-space: nowrap;
+        }
+        .era-table tr:last-child td { border-bottom: none; }
+        .era-table tr:hover td { background: rgba(124,106,255,0.04); }
+        .era-number { font-weight: 700; color: var(--accent); }
+        .mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+
+        /* ── Empty / Error states ────────────────────────────────────── */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+        .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+        .empty-state h3 { font-size: 18px; color: var(--text-primary); margin-bottom: 8px; }
+
+        .error-banner {
+            display: none;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 16px 20px;
+            background: rgba(252,129,129,0.07);
+            border: 1px solid rgba(252,129,129,0.25);
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        .error-banner.visible { display: flex; }
+        .error-banner .icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+        .error-banner h4 { font-size: 14px; font-weight: 700; color: var(--danger); margin-bottom: 4px; }
+        .error-banner p { font-size: 13px; color: var(--text-secondary); }
+
+        /* ── Results section ─────────────────────────────────────────── */
+        #results { display: none; }
+        #results.visible { display: block; }
+
+        /* ── Log Drawer ──────────────────────────────────────────────── */
+        .log-drawer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            height: var(--log-height);
+            transform: translateY(calc(100% - 52px));
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+        }
+        .log-drawer.open { transform: translateY(0); }
+
+        .log-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            height: 52px;
+            background: #0d111f;
+            border-top: 1px solid rgba(74,222,128,0.15);
+            cursor: pointer;
+            user-select: none;
+            flex-shrink: 0;
+        }
+        .log-header-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .log-dots {
+            display: flex;
+            gap: 5px;
+        }
+        .log-dot {
+            width: 11px;
+            height: 11px;
+            border-radius: 50%;
+        }
+        .log-dot:nth-child(1) { background: #fc8181; }
+        .log-dot:nth-child(2) { background: #f6ad55; }
+        .log-dot:nth-child(3) { background: #4ade80; }
+        .log-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: rgba(74,222,128,0.6);
+            letter-spacing: 0.5px;
+        }
+        .log-badge {
+            font-family: monospace;
+            font-size: 11px;
+            color: #4ade80;
+            background: rgba(74,222,128,0.1);
+            border: 1px solid rgba(74,222,128,0.2);
+            border-radius: 20px;
+            padding: 2px 10px;
+            display: none;
+        }
+        .log-badge.visible { display: block; }
+        .log-toggle {
+            font-family: monospace;
+            font-size: 12px;
+            color: rgba(74,222,128,0.5);
+            transition: color 0.2s;
+        }
+        .log-drawer.open .log-toggle { color: rgba(74,222,128,0.8); }
+
+        .log-body {
+            flex: 1;
+            background: var(--log-bg);
+            overflow-y: auto;
+            padding: 12px 20px;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 12px;
+            line-height: 1.7;
+            scroll-behavior: smooth;
+        }
+        .log-body::-webkit-scrollbar { width: 5px; }
+        .log-body::-webkit-scrollbar-track { background: transparent; }
+        .log-body::-webkit-scrollbar-thumb { background: rgba(74,222,128,0.2); border-radius: 3px; }
+
+        .log-line { display: flex; gap: 10px; }
+        .log-time { color: var(--log-dim); flex-shrink: 0; }
+        .log-prefix { flex-shrink: 0; }
+        .log-text { color: var(--log-text); word-break: break-all; }
+        .log-text.info { color: var(--log-info); }
+        .log-text.warn { color: var(--log-warn); }
+        .log-text.error { color: var(--log-error); }
+        .log-text.dim { color: var(--log-dim); }
+        .log-text.accent { color: #c4b5fd; }
+        .log-cursor {
+            display: inline-block;
+            width: 8px;
+            height: 14px;
+            background: var(--log-text);
+            margin-left: 2px;
+            vertical-align: middle;
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0;} }
+    </style>
+</head>
+<body>
+
+<!-- Background orbs -->
+<div class="bg-orbs">
+    <div class="orb orb1"></div>
+    <div class="orb orb2"></div>
+    <div class="orb orb3"></div>
+</div>
+
+<main>
+
+    <!-- Header -->
+    <div class="app-header">
+        <div class="logo">
+            <div class="logo-icon">⚡</div>
+            <h1>Staking Rewards Explorer</h1>
+        </div>
+        <p>Query per-pool per-era staking rewards for any Enjin relaychain address</p>
+    </div>
+
+    <!-- Query Form -->
+    <div class="card">
+        <div class="card-title">Query Parameters</div>
+        <div class="form-grid">
+            <div class="field full-row">
+                <label>Wallet Address (SS58 Relaychain Format)</label>
+                <input type="text" id="address"
+                    placeholder="e.g. enDKgXiUMeV4SHNkCYtKcYBnhXBZxY1UhkAFNUC7TXQtDU2v3"
+                    autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="field">
+                <label>Start Era</label>
+                <input type="number" id="startEra" placeholder="e.g. 100" min="0" />
+            </div>
+            <div class="field">
+                <label>End Era</label>
+                <input type="number" id="endEra" placeholder="e.g. 150" min="0" />
+            </div>
+            <div class="field full-row">
+                <label>GraphQL Endpoint</label>
+                <input type="url" id="endpoint"
+                    value="http://localhost:4000/graphql"
+                    placeholder="http://localhost:4000/graphql" />
+            </div>
+        </div>
+        <div class="btn-row" style="margin-top: 20px;">
+            <button class="btn btn-primary" id="queryBtn" onclick="runQuery()">
+                <span>⚡</span> Query Rewards
+            </button>
+            <button class="btn btn-ghost" onclick="clearResults()">Clear</button>
+        </div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="status-bar" id="statusBar">
+        <div class="spinner"></div>
+        <span id="statusText">Connecting to indexer...</span>
+    </div>
+
+    <!-- Error banner -->
+    <div class="error-banner" id="errorBanner">
+        <div class="icon">⚠️</div>
+        <div>
+            <h4>Query Failed</h4>
+            <p id="errorMsg"></p>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div id="results">
+
+        <!-- Stats row -->
+        <div class="stats-grid" id="statsGrid"></div>
+
+        <!-- Pool summary -->
+        <div class="card">
+            <div class="card-title">Pool Summary</div>
+            <div style="overflow-x: auto;">
+                <table class="pool-summary-table" id="summaryTable">
+                    <thead>
+                        <tr>
+                            <th>Pool</th>
+                            <th>State</th>
+                            <th>Eras</th>
+                            <th>Current APY</th>
+                            <th>Total Reward</th>
+                        </tr>
+                    </thead>
+                    <tbody id="summaryTbody"></tbody>
+                    <tfoot id="summaryTfoot"></tfoot>
+                </table>
+            </div>
+        </div>
+
+        <!-- Per-pool per-era detail -->
+        <div class="card">
+            <div class="card-title">Per-Pool Per-Era Detail</div>
+            <div id="poolBlocks"></div>
+        </div>
+
+    </div>
+
+    <!-- Empty state (shown before first query) -->
+    <div class="empty-state" id="emptyState">
+        <div class="icon">🔍</div>
+        <h3>Ready to Query</h3>
+        <p>Enter a relaychain address and era range, then click "Query Rewards".</p>
+    </div>
+
+</main>
+
+<!-- ── Log Drawer ─────────────────────────────────────────────────────────── -->
+<div class="log-drawer" id="logDrawer">
+    <div class="log-header" onclick="toggleLog()">
+        <div class="log-header-left">
+            <div class="log-dots">
+                <div class="log-dot"></div>
+                <div class="log-dot"></div>
+                <div class="log-dot"></div>
+            </div>
+            <span class="log-title">indexer — log output</span>
+            <span class="log-badge" id="logBadge">0 lines</span>
+        </div>
+        <span class="log-toggle" id="logToggleBtn">▲ show logs</span>
+    </div>
+    <div class="log-body" id="logBody"></div>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let logLineCount = 0;
+let queryAborted = false;
+
+// ── Log Drawer ───────────────────────────────────────────────────────────────
+function toggleLog() {
+    const drawer = document.getElementById('logDrawer');
+    const btn = document.getElementById('logToggleBtn');
+    const isOpen = drawer.classList.toggle('open');
+    btn.textContent = isOpen ? '▼ hide logs' : '▲ show logs';
+}
+
+function openLog() {
+    const drawer = document.getElementById('logDrawer');
+    if (!drawer.classList.contains('open')) {
+        drawer.classList.add('open');
+        document.getElementById('logToggleBtn').textContent = '▼ hide logs';
+    }
+}
+
+function log(message, type = 'normal') {
+    logLineCount++;
+    const body = document.getElementById('logBody');
+    const badge = document.getElementById('logBadge');
+
+    const now = new Date();
+    const ts = now.toTimeString().slice(0, 8);
+
+    const prefixMap = {
+        normal:  '›',
+        info:    '○',
+        success: '✓',
+        warn:    '⚠',
+        error:   '✗',
+        dim:     '·',
+        accent:  '◆',
+    };
+    const prefix = prefixMap[type] || '›';
+
+    const line = document.createElement('div');
+    line.className = 'log-line';
+    line.innerHTML = `
+        <span class="log-time">${ts}</span>
+        <span class="log-prefix" style="color:${typeColor(type)}">${prefix}</span>
+        <span class="log-text ${type === 'normal' ? '' : type}">${escHtml(message)}</span>
+    `;
+    body.appendChild(line);
+    body.scrollTop = body.scrollHeight;
+
+    badge.textContent = `${logLineCount} line${logLineCount !== 1 ? 's' : ''}`;
+    badge.classList.add('visible');
+}
+
+function typeColor(type) {
+    const map = {
+        normal: '#4ade80',
+        info: '#63b3ed',
+        success: '#4ade80',
+        warn: '#f6ad55',
+        error: '#fc8181',
+        dim: '#386641',
+        accent: '#c4b5fd',
+    };
+    return map[type] || '#4ade80';
+}
+
+function clearLog() {
+    document.getElementById('logBody').innerHTML = '';
+    logLineCount = 0;
+    document.getElementById('logBadge').textContent = '0 lines';
+}
+
+function escHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+// ── UI Helpers ───────────────────────────────────────────────────────────────
+function setStatus(text, visible = true) {
+    const bar = document.getElementById('statusBar');
+    const label = document.getElementById('statusText');
+    label.textContent = text;
+    bar.classList.toggle('visible', visible);
+}
+
+function setError(msg) {
+    const banner = document.getElementById('errorBanner');
+    document.getElementById('errorMsg').textContent = msg;
+    banner.classList.add('visible');
+    log(`ERROR: ${msg}`, 'error');
+}
+
+function clearError() {
+    document.getElementById('errorBanner').classList.remove('visible');
+}
+
+function setQueryBtnState(loading) {
+    const btn = document.getElementById('queryBtn');
+    btn.disabled = loading;
+    btn.innerHTML = loading
+        ? '<span class="spinner" style="width:14px;height:14px;"></span> Querying...'
+        : '<span>⚡</span> Query Rewards';
+}
+
+// ── BigInt helpers (GraphQL returns bigints as strings) ───────────────────────
+function toENJ(raw) {
+    if (raw === null || raw === undefined) return 0n;
+    try {
+        return BigInt(raw);
+    } catch { return 0n; }
+}
+
+function formatENJ(raw, decimals = 6) {
+    const val = toENJ(raw);
+    const whole = val / 1_000_000_000_000_000_000n;
+    const frac = val % 1_000_000_000_000_000_000n;
+    const fracStr = frac.toString().padStart(18, '0').slice(0, decimals);
+    return `${whole.toLocaleString()}.${fracStr}`;
+}
+
+function fmtDate(iso) {
+    if (!iso) return '—';
+    return iso.slice(0, 10);
+}
+
+function fmtPct(val) {
+    if (val == null) return '—';
+    return `${parseFloat(val).toFixed(2)}%`;
+}
+
+function poolEmoji(poolId) {
+    const emojis = ['💎','⚡','🔥','🌊','🌟','🎯','🚀','💫','🔮','🌈'];
+    return emojis[parseInt(poolId) % emojis.length] || '🪙';
+}
+
+// ── GraphQL ──────────────────────────────────────────────────────────────────
+const QUERY = `
+query StakingRewards(
+    $address: String!
+    $startEra: Int!
+    $endEra: Int!
+    $limit: Int!
+    $offset: Int!
+) {
+    poolMemberRewards(
+        where: {
+            member: { account: { id_eq: $address } }
+            eraIndex_gte: $startEra
+            eraIndex_lte: $endEra
+        }
+        orderBy: eraIndex_ASC
+        limit: $limit
+        offset: $offset
+    ) {
+        id
+        eraIndex
+        rewards
+        accumulatedRewards
+        points
+        pool {
+            id
+            name
+            apy
+            rate
+            state
+        }
+        reward {
+            id
+            apy
+            averageApy
+            reinvested
+            active
+            rate
+            era {
+                index
+                startAt
+                endAt
+                startBlock
+            }
+        }
+    }
+}
+`;
+
+async function graphqlFetch(endpoint, variables) {
+    log(`POST ${endpoint}`, 'dim');
+    log(`  variables: ${JSON.stringify(variables)}`, 'dim');
+
+    const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        },
+        body: JSON.stringify({ query: QUERY, variables }),
+    });
+
+    log(`  HTTP ${resp.status} ${resp.statusText}`, resp.ok ? 'dim' : 'warn');
+
+    if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+    }
+
+    const json = await resp.json();
+
+    if (json.errors && json.errors.length > 0) {
+        const msg = json.errors.map(e => e.message).join('; ');
+        throw new Error(`GraphQL error: ${msg}`);
+    }
+
+    const rows = json.data.poolMemberRewards;
+    log(`  received ${rows.length} record(s)`, 'dim');
+    return rows;
+}
+
+async function fetchAll(endpoint, address, startEra, endEra) {
+    const PAGE = 1000;
+    let allRows = [];
+    let offset = 0;
+    let page = 1;
+
+    while (true) {
+        log(`Fetching page ${page} (offset=${offset}, limit=${PAGE})...`, 'info');
+        const batch = await graphqlFetch(endpoint, {
+            address, startEra, endEra,
+            limit: PAGE,
+            offset,
+        });
+        allRows = allRows.concat(batch);
+        log(`Page ${page} complete — ${batch.length} records fetched (total: ${allRows.length})`, 'success');
+
+        if (batch.length < PAGE) break;
+        offset += PAGE;
+        page++;
+    }
+
+    return allRows;
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
+function groupByPool(rows) {
+    const pools = new Map();
+    for (const row of rows) {
+        const id = row.pool.id;
+        if (!pools.has(id)) {
+            pools.set(id, { meta: row.pool, rows: [] });
+        }
+        pools.get(id).rows.push(row);
+    }
+    return pools;
+}
+
+function renderStats(rows, pools, startEra, endEra) {
+    const grandTotal = rows.reduce((sum, r) => sum + toENJ(r.rewards), 0n);
+    const eraSet = new Set(rows.map(r => r.eraIndex));
+
+    const statsData = [
+        { label: 'Total Reward', value: formatENJ(grandTotal) + ' ENJ' },
+        { label: 'Pools Found', value: pools.size },
+        { label: 'Eras with Rewards', value: eraSet.size },
+        { label: 'Total Records', value: rows.length },
+    ];
+
+    document.getElementById('statsGrid').innerHTML = statsData.map(s => `
+        <div class="stat-card">
+            <div class="stat-value">${escHtml(String(s.value))}</div>
+            <div class="stat-label">${escHtml(s.label)}</div>
+        </div>
+    `).join('');
+}
+
+function renderSummary(pools) {
+    const tbody = document.getElementById('summaryTbody');
+    const tfoot = document.getElementById('summaryTfoot');
+    let grandTotal = 0n;
+
+    tbody.innerHTML = '';
+    let rows = [];
+    for (const [poolId, data] of pools) {
+        const poolTotal = data.rows.reduce((sum, r) => sum + toENJ(r.rewards), 0n);
+        grandTotal += poolTotal;
+        rows.push({ poolId, meta: data.meta, count: data.rows.length, total: poolTotal });
+    }
+
+    tbody.innerHTML = rows.map(r => `
+        <tr>
+            <td>${escHtml(r.meta.name || `Pool #${r.poolId}`)} <small style="color:var(--text-dim)">ID: ${escHtml(r.poolId)}</small></td>
+            <td><span style="color:var(--text-secondary); font-size:12px">${escHtml(r.meta.state || '')}</span></td>
+            <td>${r.count}</td>
+            <td><span class="apy-badge">${fmtPct(r.meta.apy)}</span></td>
+            <td class="enj-amount" style="color:var(--accent2)">${formatENJ(r.total)} ENJ</td>
+        </tr>
+    `).join('');
+
+    tfoot.innerHTML = `
+        <tr class="total-row">
+            <td colspan="4" style="color:var(--text-secondary);">Grand Total</td>
+            <td class="enj-amount" style="color:var(--success)">${formatENJ(grandTotal)} ENJ</td>
+        </tr>
+    `;
+}
+
+function renderPoolBlocks(pools) {
+    const container = document.getElementById('poolBlocks');
+    container.innerHTML = '';
+
+    let poolIndex = 0;
+    for (const [poolId, data] of pools) {
+        const poolName = data.meta.name || `Pool #${poolId}`;
+        const poolTotal = data.rows.reduce((sum, r) => sum + toENJ(r.rewards), 0n);
+        const poolApy = data.meta.apy;
+        const eraCount = data.rows.length;
+        const i = poolIndex++;
+
+        const block = document.createElement('div');
+        block.className = 'pool-block';
+
+        const header = document.createElement('div');
+        header.className = 'pool-header' + (i === 0 ? ' open' : '');
+        header.innerHTML = `
+            <div class="pool-header-left">
+                <div class="pool-icon">${poolEmoji(poolId)}</div>
+                <div>
+                    <div class="pool-name">${escHtml(poolName)}</div>
+                    <div class="pool-meta">Pool ID: ${escHtml(poolId)} &nbsp;·&nbsp; ${eraCount} era${eraCount !== 1 ? 's' : ''} &nbsp;·&nbsp; APY: ${fmtPct(poolApy)} &nbsp;·&nbsp; ${escHtml(data.meta.state || '')}</div>
+                </div>
+            </div>
+            <div class="pool-header-right">
+                <div class="pool-total">${formatENJ(poolTotal)} ENJ</div>
+                <div class="chevron">⌄</div>
+            </div>
+        `;
+
+        const tableWrap = document.createElement('div');
+        tableWrap.className = 'era-table-wrap' + (i === 0 ? ' open' : '');
+
+        const table = document.createElement('table');
+        table.className = 'era-table';
+        table.innerHTML = `
+            <thead>
+                <tr>
+                    <th>Era</th>
+                    <th>Start Date</th>
+                    <th>End Date</th>
+                    <th>Start Block</th>
+                    <th>sENJ Points</th>
+                    <th>Reward (ENJ)</th>
+                    <th>Acc. Reward (ENJ)</th>
+                    <th>Era APY</th>
+                    <th>Avg APY</th>
+                    <th>Pool Reinvested</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${data.rows.map(row => {
+                    const era = row.reward?.era || {};
+                    const rewardInfo = row.reward || {};
+                    const reinvested = toENJ(rewardInfo.reinvested);
+                    return `
+                    <tr>
+                        <td><span class="era-number">${row.eraIndex ?? '—'}</span></td>
+                        <td class="mono">${escHtml(fmtDate(era.startAt))}</td>
+                        <td class="mono">${escHtml(fmtDate(era.endAt))}</td>
+                        <td class="mono" style="color:var(--text-secondary)">${era.startBlock ?? '—'}</td>
+                        <td class="mono">${formatENJ(row.points, 4)}</td>
+                        <td class="mono" style="color:var(--accent2)">${formatENJ(row.rewards)}</td>
+                        <td class="mono" style="color:var(--text-secondary)">${formatENJ(row.accumulatedRewards)}</td>
+                        <td><span class="apy-badge">${fmtPct(rewardInfo.apy)}</span></td>
+                        <td style="color:var(--text-secondary)">${fmtPct(rewardInfo.averageApy)}</td>
+                        <td class="mono" style="color:var(--text-dim)">${formatENJ(reinvested)}</td>
+                    </tr>`;
+                }).join('')}
+            </tbody>
+        `;
+
+        tableWrap.appendChild(table);
+
+        header.addEventListener('click', () => {
+            const isOpen = header.classList.toggle('open');
+            tableWrap.classList.toggle('open', isOpen);
+        });
+
+        block.appendChild(header);
+        block.appendChild(tableWrap);
+        container.appendChild(block);
+    }
+}
+
+// ── Main Query Runner ─────────────────────────────────────────────────────────
+async function runQuery() {
+    const address = document.getElementById('address').value.trim();
+    const startEra = parseInt(document.getElementById('startEra').value, 10);
+    const endEra = parseInt(document.getElementById('endEra').value, 10);
+    const endpoint = document.getElementById('endpoint').value.trim();
+
+    // Validate
+    if (!address) { setError('Please enter a wallet address.'); return; }
+    if (isNaN(startEra) || isNaN(endEra)) { setError('Please enter valid era numbers.'); return; }
+    if (startEra > endEra) { setError('Start era must be ≤ end era.'); return; }
+    if (!endpoint) { setError('Please enter a GraphQL endpoint URL.'); return; }
+
+    // Reset
+    clearError();
+    clearResults(false);
+    clearLog();
+    openLog();
+    setQueryBtnState(true);
+    setStatus('Connecting to indexer...');
+
+    log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'dim');
+    log('Enjin Staking Rewards Explorer', 'accent');
+    log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'dim');
+    log(`Address  : ${address}`, 'info');
+    log(`Era range: ${startEra} → ${endEra}  (${endEra - startEra + 1} eras requested)`, 'info');
+    log(`Endpoint : ${endpoint}`, 'info');
+    log('─────────────────────────────────────────', 'dim');
+    log('Building GraphQL query...', 'normal');
+    log('Query: poolMemberRewards(where: { member.account.id_eq, eraIndex_gte, eraIndex_lte }, orderBy: eraIndex_ASC)', 'dim');
+    log('─────────────────────────────────────────', 'dim');
+
+    try {
+        setStatus('Fetching data from indexer...');
+        log('Initiating paginated fetch (page size: 1000)...', 'normal');
+
+        const rows = await fetchAll(endpoint, address, startEra, endEra);
+
+        log('─────────────────────────────────────────', 'dim');
+        log(`Fetch complete — ${rows.length} total records`, 'success');
+
+        if (rows.length === 0) {
+            log('No rewards found for the given address and era range.', 'warn');
+            log('Possible reasons:', 'warn');
+            log('  • Address has never joined a nomination pool', 'dim');
+            log('  • No rewards in the selected era range', 'dim');
+            log('  • Address format may be incorrect', 'dim');
+            setStatus('', false);
+            setQueryBtnState(false);
+            document.getElementById('emptyState').innerHTML = `
+                <div class="icon">📭</div>
+                <h3>No Rewards Found</h3>
+                <p>No staking rewards were found for this address in eras ${startEra}–${endEra}.</p>
+            `;
+            document.getElementById('emptyState').style.display = 'block';
+            return;
+        }
+
+        log('─────────────────────────────────────────', 'dim');
+        log('Processing data...', 'normal');
+
+        const pools = groupByPool(rows);
+        log(`Grouped into ${pools.size} pool(s)`, 'info');
+
+        for (const [poolId, data] of pools) {
+            const poolTotal = data.rows.reduce((sum, r) => sum + toENJ(r.rewards), 0n);
+            log(`  Pool #${poolId} "${data.meta.name || 'unnamed'}": ${data.rows.length} era(s), total: ${formatENJ(poolTotal)} ENJ`, 'accent');
+        }
+
+        log('─────────────────────────────────────────', 'dim');
+        log('Rendering results...', 'normal');
+
+        renderStats(rows, pools, startEra, endEra);
+        renderSummary(pools);
+        renderPoolBlocks(pools);
+
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('results').classList.add('visible');
+
+        log('Done! All results rendered.', 'success');
+        log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'dim');
+
+        setStatus('', false);
+
+    } catch (err) {
+        log(`FAILED: ${err.message}`, 'error');
+        log('Check the endpoint URL and your network connection.', 'warn');
+        setError(err.message);
+        setStatus('', false);
+    } finally {
+        setQueryBtnState(false);
+    }
+}
+
+function clearResults(showEmpty = true) {
+    document.getElementById('results').classList.remove('visible');
+    document.getElementById('statsGrid').innerHTML = '';
+    document.getElementById('summaryTbody').innerHTML = '';
+    document.getElementById('summaryTfoot').innerHTML = '';
+    document.getElementById('poolBlocks').innerHTML = '';
+    clearError();
+    setStatus('', false);
+    if (showEmpty) {
+        document.getElementById('emptyState').style.display = 'block';
+        document.getElementById('emptyState').innerHTML = `
+            <div class="icon">🔍</div>
+            <h3>Ready to Query</h3>
+            <p>Enter a relaychain address and era range, then click "Query Rewards".</p>
+        `;
+    }
+}
+
+// Allow Enter key to submit
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.target.tagName === 'INPUT')) {
+        runQuery();
+    }
+});
+</script>
+</body>
+</html>

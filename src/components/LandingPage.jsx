@@ -2,9 +2,19 @@
  * LandingPage — entry screen shown when view === 'home'.
  * Renders two feature cards: Staking Rewards Cadence and Historical Balance Viewer.
  */
-import { BarChart3, LineChart } from 'lucide-react'
+import { BarChart3, LineChart, Layers } from 'lucide-react'
 
 const FEATURES = [
+  {
+    key: 'era',
+    icon: Layers,
+    title: 'Era Block Explorer',
+    description:
+      'Explore historical era and session boundaries on the Enjin Relaychain. ' +
+      'Look up start/end blocks and UTC timestamps for any past era.',
+    label: 'Open Era Explorer',
+    resource: 'Relaychain RPC Endpoint',
+  },
   {
     key: 'staking',
     icon: BarChart3,
@@ -13,7 +23,7 @@ const FEATURES = [
       'Scan validators and nomination pools for missing reward payouts across recent eras on the Enjin Relaychain. ' +
       'Identify risk severity and track nominator exposure at a glance.',
     label: 'Open Staking Checker',
-    resource: 'Subscan',
+    resource: 'Subscan API Endpoint',
   },
   {
     key: 'balance',
@@ -48,7 +58,7 @@ export default function LandingPage({ onNavigate }) {
       </div>
 
       {/* Feature cards */}
-      <div className="grid sm:grid-cols-2 gap-5 sm:gap-6 max-w-2xl mx-auto">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 max-w-5xl mx-auto">
         {FEATURES.map(({ key, icon: Icon, title, description, label, resource }) => (
           <div key={key} className="card flex flex-col gap-5 p-6 sm:p-7 hover:border-primary/40 transition-colors">
             {/* Icon + title */}
@@ -76,7 +86,7 @@ export default function LandingPage({ onNavigate }) {
                                bg-surface border border-border text-[11px] font-medium text-muted
                                tracking-wide">
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan/60 flex-shrink-0" />
-                via {resource}
+                Data Source: {resource}
               </span>
             </div>
           </div>

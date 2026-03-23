@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Enjin Relay — Era Block Explorer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0e0e10; --surface: #1a1a1e; --surface2: #222228;
+    --border: rgba(255,255,255,0.08); --border2: rgba(255,255,255,0.14);
+    --text: #e8e8ec; --muted: #888890; --hint: #555560;
+    --accent: #1D9E75; --info: #378ADD;
+    --info-bg: rgba(55,138,221,0.1); --info-border: rgba(55,138,221,0.3);
+    --ok-bg: rgba(29,158,117,0.1); --ok: #1D9E75; --ok-border: rgba(29,158,117,0.25);
+    --warn-bg: rgba(186,117,23,0.12); --warn: #BA7517; --warn-border: rgba(186,117,23,0.25);
+    --err: #E24B4A; --err-bg: rgba(226,75,74,0.08); --err-border: rgba(226,75,74,0.2);
+    --mono: 'JetBrains Mono','Fira Code','Cascadia Code','Courier New',monospace;
+  }
+  body { background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,sans-serif; min-height:100vh; padding:2.5rem 1.25rem; line-height:1.5; }
+  .page { max-width:860px; margin:0 auto; }
+  h1 { font-size:18px; font-weight:500; margin-bottom:4px; }
+  .sub { font-size:12px; color:var(--muted); font-family:var(--mono); margin-bottom:1.75rem; }
+  .topbar { display:flex; align-items:center; gap:10px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px 14px; margin-bottom:1.5rem; flex-wrap:wrap; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--err); flex-shrink:0; transition:background 0.4s; }
+  .dot.live { background:var(--accent); animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+  .status-text { font-size:12px; color:var(--muted); font-family:var(--mono); flex:1; min-width:140px; }
+  .badge { font-size:11px; padding:2px 9px; border-radius:6px; background:var(--surface2); color:var(--hint); border:1px solid var(--border); font-family:var(--mono); }
+  .retry-btn { font-size:11px; padding:3px 12px; border-radius:6px; background:transparent; color:var(--muted); border:1px solid var(--border2); cursor:pointer; font-family:inherit; display:none; }
+  .retry-btn:hover { background:var(--surface2); color:var(--text); }
+  .lbl { font-size:10px; color:var(--hint); text-transform:uppercase; letter-spacing:0.1em; font-weight:600; margin-bottom:12px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:1.25rem; }
+  .card { background:var(--surface); border-radius:10px; border:1px solid var(--border); padding:14px 16px; }
+  .card.ib { border-color:var(--info-border); }
+  .cl { font-size:10px; color:var(--hint); text-transform:uppercase; letter-spacing:0.07em; font-weight:600; margin-bottom:8px; }
+  .cv { font-size:22px; font-weight:500; font-family:var(--mono); color:var(--text); }
+  .cv.dim { color:var(--hint); } .cv.info { color:var(--info); }
+  .cs { font-size:10px; color:var(--hint); margin-top:4px; font-family:var(--mono); }
+  .flash { animation:fl 0.35s ease; }
+  @keyframes fl { 0%,100%{opacity:1} 50%{opacity:0.2} }
+  .pr { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; }
+  .pr span { font-size:12px; color:var(--muted); }
+  .pp { font-family:var(--mono); font-weight:600; color:var(--text) !important; }
+  .pt { height:4px; background:var(--surface2); border-radius:2px; overflow:hidden; margin-bottom:1.75rem; border:1px solid var(--border); }
+  .pf { height:100%; background:var(--info); border-radius:2px; width:0%; transition:width 0.9s ease; }
+  .divider { border:none; border-top:1px solid var(--border); margin:1.75rem 0; }
+  .lookup { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:18px; margin-bottom:1.5rem; }
+  .hint { font-size:11px; color:var(--hint); margin-bottom:14px; line-height:1.65; font-family:var(--mono); }
+  .irow { display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+  .irow label { font-size:13px; color:var(--muted); white-space:nowrap; }
+  .irow input { width:110px; background:var(--surface2); color:var(--text); border:1px solid var(--border2); border-radius:7px; font-family:var(--mono); font-size:13px; padding:6px 10px; outline:none; }
+  .irow input:focus { border-color:rgba(55,138,221,0.5); }
+  .irow button { background:var(--info-bg); color:var(--info); border:1px solid var(--info-border); border-radius:7px; font-size:13px; padding:6px 16px; cursor:pointer; font-family:inherit; }
+  .irow button:hover { background:rgba(55,138,221,0.2); }
+  .irow button:disabled { opacity:0.45; cursor:not-allowed; }
+  .rg { display:none; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px; }
+  .rc { background:var(--surface2); border-radius:8px; padding:12px 14px; border:1px solid var(--border); }
+  .rl { font-size:10px; color:var(--hint); text-transform:uppercase; letter-spacing:0.07em; font-weight:600; margin-bottom:6px; }
+  .rv { font-size:16px; font-weight:500; font-family:var(--mono); color:var(--text); }
+  .rv.dim { color:var(--hint); }
+  .pill { display:inline-block; font-size:9px; padding:2px 7px; border-radius:4px; margin-top:5px; font-family:var(--mono); font-weight:600; }
+  .pill-rpc  { background:var(--info-bg);  color:var(--info); border:1px solid var(--info-border); }
+  .pill-math { background:var(--ok-bg);    color:var(--ok);   border:1px solid var(--ok-border); }
+  .alert { font-size:11px; line-height:1.65; padding:10px 12px; border-radius:7px; margin-top:12px; font-family:var(--mono); display:none; }
+  .alert.warn { background:var(--warn-bg); color:var(--warn); border:1px solid var(--warn-border); }
+  .alert.err  { background:var(--err-bg);  color:var(--err);  border:1px solid var(--err-border); }
+  .alert.info { background:var(--info-bg); color:var(--info); border:1px solid var(--info-border); }
+  .alert.ok   { background:var(--ok-bg);   color:var(--ok);   border:1px solid var(--ok-border); }
+  .dbp { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:1.5rem; }
+  .dbt { width:100%; background:none; border:none; color:var(--muted); font-size:11px; font-family:var(--mono); padding:10px 14px; cursor:pointer; text-align:left; display:flex; justify-content:space-between; }
+  .dbt:hover { background:var(--surface2); }
+  .dbb { display:none; border-top:1px solid var(--border); padding:12px 14px; }
+  .dbb.open { display:block; }
+  .dbr { display:grid; grid-template-columns:180px 1fr; gap:8px; font-size:11px; font-family:var(--mono); margin-bottom:5px; align-items:start; }
+  .dbk { color:var(--hint); } .dbv { color:var(--muted); word-break:break-all; }
+  .dbv.ok { color:var(--ok); } .dbv.bad { color:var(--err); } .dbv.warn { color:var(--warn); }
+  .log-box { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; max-height:200px; overflow-y:auto; }
+  .le { display:grid; grid-template-columns:62px 1fr; gap:8px; font-size:11px; line-height:1.65; margin-bottom:1px; }
+  .lt { color:var(--hint); font-family:var(--mono); }
+  .lb { font-family:var(--mono); color:var(--muted); word-break:break-all; }
+  .lm { color:var(--info); } .lr { color:var(--hint); } .le-err { color:var(--err); }
+  .csv-row { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+  .csv-row label { font-size:12px; color:var(--muted); white-space:nowrap; }
+  .csv-row input[type=file] { font-size:11px; color:var(--muted); font-family:var(--mono); background:var(--surface2); border:1px solid var(--border2); border-radius:6px; padding:4px 8px; cursor:pointer; }
+  .csv-status { font-size:11px; font-family:var(--mono); padding:3px 9px; border-radius:5px; display:none; }
+  .csv-status.ok   { display:inline-block; background:var(--ok-bg);   color:var(--ok);   border:1px solid var(--ok-border); }
+  .csv-status.warn { display:inline-block; background:var(--warn-bg); color:var(--warn); border:1px solid var(--warn-border); }
+  .date-toggle { display:inline-block; box-sizing:border-box; width:170px; height:41px; text-align:center; font-family:var(--mono); font-size:12px; padding:6px 10px; border-radius:6px; background:transparent; color:var(--info); border:1px solid var(--info-border); cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Enjin Relay · Era Block Explorer</h1>
+  <div class="sub">wss://rpc.relay.blockchain.enjin.io — dynamic pallet discovery via xxHash64</div>
+
+  <div class="topbar">
+    <div class="dot" id="dot"></div>
+    <span class="status-text" id="statusText">Connecting…</span>
+    <span class="badge" id="palletBadge" style="display:none"></span>
+    <span class="badge" id="csvBadge" style="display:none"></span>
+    <button class="retry-btn" id="retryBtn" onclick="manualRetry()">Retry</button>
+  </div>
+
+  <div class="lbl">Current era</div>
+  <div class="grid">
+    <div class="card ib"><div class="cl">Active era</div><div class="cv info dim" id="eraIndex">—</div></div>
+    <div class="card"><div class="cl">Era start block</div><div class="cv dim" id="eraStart">—</div><div class="cs">via session index</div></div>
+    <div class="card"><div class="cl">Era end block</div><div class="cv dim" id="eraEnd">—</div><div class="cs">start + 14,399</div></div>
+    <div class="card"><div class="cl">Current block</div><div class="cv dim" id="curBlock">—</div></div>
+    <div class="card"><div class="cl">Blocks remaining</div><div class="cv dim" id="remaining">—</div></div>
+    <div class="card"><div class="cl">Session index</div><div class="cv dim" id="sessionIdx">—</div><div class="cs" id="sessInEraLabel"></div></div>
+  </div>
+  <div class="pr"><span>Era progress</span><span class="pp" id="progPct">—</span></div>
+  <div class="pt"><div class="pf" id="progFill"></div></div>
+
+  <hr class="divider">
+
+  <div class="lbl">Past era lookup</div>
+  <div class="lookup">
+    <div class="hint" id="hintText">Discovering pallets and syncing live data…</div>
+    <div class="irow">
+      <label>Era index</label>
+      <input type="number" id="eraInput" placeholder="e.g. 100" min="0" />
+      <button id="lookupBtn" disabled>Look up</button>
+    </div>
+    <div class="rg" id="rg">
+      <div class="rc"><div class="rl">Start block</div><div class="rv dim" id="resStart">—</div><div class="pill" id="startPill"></div></div>
+      <div class="rc"><div class="rl">End block</div><div class="rv dim" id="resEnd">—</div><div class="pill" id="endPill"></div></div>
+      <div class="rc" id="resDateCard" style="display:none">
+        <div class="rl">Start UTC</div>
+        <div class="rv dim" id="resStartDate">—</div>
+        <div style="margin-top:8px"><button id="resStartDateBtn" class="date-toggle" style="font-family:var(--mono);font-size:12px;padding:6px 10px;border-radius:6px;background:transparent;color:var(--info);border:1px solid var(--info-border);cursor:pointer">Show in my local time</button></div>
+      </div>
+      <div class="rc" id="resEndDateCard" style="display:none">
+        <div class="rl">End UTC</div>
+        <div class="rv dim" id="resEndDate">—</div>
+        <div style="margin-top:8px"><button id="resEndDateBtn" class="date-toggle" style="font-family:var(--mono);font-size:12px;padding:6px 10px;border-radius:6px;background:transparent;color:var(--info);border:1px solid var(--info-border);cursor:pointer">Show in my local time</button></div>
+      </div>
+      <div class="rc" id="resHashCard" style="display:none;grid-column:1/-1">
+        <div class="rl">Start block hash</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="rv dim" id="resHash" style="font-size:10px;word-break:break-all">—</div>
+          <button id="copyResHashBtn" title="Copy hash" style="font-family:var(--mono);font-size:11px;padding:6px 8px;border-radius:6px;background:transparent;color:var(--info);border:1px solid var(--info-border);cursor:pointer">📋</button>
+        </div>
+      </div>
+    </div>
+    <div class="alert" id="alertBox"></div>
+  </div>
+
+  <div class="dbp">
+    <button class="dbt" onclick="toggleDebug()"><span>Debug / pallet discovery</span><span id="dbArrow">▶</span></button>
+    <div class="dbb" id="dbb">
+      <div class="dbr"><span class="dbk">ws.state</span>       <span class="dbv" id="dbWs">—</span></div>
+      <div class="dbr"><span class="dbk">staking pallet</span> <span class="dbv" id="dbStakingPallet">searching…</span></div>
+      <div class="dbr"><span class="dbk">session pallet</span> <span class="dbv" id="dbSessionPallet">searching…</span></div>
+      <div class="dbr"><span class="dbk">activeEra key</span>  <span class="dbv" id="dbEraKey">—</span></div>
+      <div class="dbr"><span class="dbk">activeEra hex</span>  <span class="dbv" id="dbEraHex">—</span></div>
+      <div class="dbr"><span class="dbk">activeEra dec</span>  <span class="dbv" id="dbEraDec">—</span></div>
+      <div class="dbr"><span class="dbk">sessionIdx key</span> <span class="dbv" id="dbSessKey">—</span></div>
+      <div class="dbr"><span class="dbk">sessionIdx hex</span> <span class="dbv" id="dbSessHex">—</span></div>
+      <div class="dbr"><span class="dbk">sessionIdx dec</span> <span class="dbv" id="dbSessDec">—</span></div>
+      <div class="dbr"><span class="dbk">currentBlock hex</span><span class="dbv" id="dbBlkHex">—</span></div>
+      <div class="dbr"><span class="dbk">currentBlock dec</span><span class="dbv" id="dbBlkDec">—</span></div>
+      <div class="dbr"><span class="dbk">last error</span>     <span class="dbv bad" id="dbErr">—</span></div>
+    </div>
+  </div>
+
+  <div class="lbl">RPC call log</div>
+  <div class="log-box" id="logBox"></div>
+</div>
+
+<script>
+// ─── Constants ────────────────────────────────────────────────────────────────
+const WSS = 'wss://rpc.relay.blockchain.enjin.io';
+const ERA_LEN = 14400, SESSION_LEN = 2400, SESSIONS_PER_ERA = 6, HISTORY_DEPTH = 84;
+
+// Candidate pallet names to try during discovery
+// Enjin may register pallet_staking under a non-standard identifier
+const STAKING_CANDIDATES = ['Staking', 'EnjinStaking', 'ParachainStaking', 'RelayStaking', 'PoAStaking'];
+const STAKING_ERA_ITEM   = ['ActiveEra', 'CurrentEra', 'active_era', 'current_era'];
+const SESSION_CANDIDATES = ['Session', 'EnjinSession', 'ParachainSession'];
+const SESSION_IDX_ITEM   = ['CurrentIndex', 'current_index', 'Index'];
+// ErasStartSessionIndex map item (under staking pallet)
+const ERA_START_ITEM     = 'ErasStartSessionIndex';
+
+
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let ws, pending = {}, reqId = 1;
+let S = { era: null, session: null, block: null, eraStartBlock: null };
+let KEYS = { activeEra: null, sessionIdx: null, eraStartPrefix: null };
+let eraSessionKeys = null;
+let connectAttempts = 0, killed = false;
+
+  // ─── CSV cache (auto-loaded on startup) ────────────────────────
+const csvEraCache   = {};  // era → { start_block, end_block, start_block_hash, start_datetime_utc, end_datetime_utc }
+const eraBlockCache = {};  // era → start block number (pre-populated from CSV)
+let lockedEraIndex  = null;  // era index for which eraStart is currently locked
+let lockedEraStart  = null;  // stable era start block — only changes when era changes
+
+// ─── xxHash64 (pure JS, BigInt) ───────────────────────────────────────────────
+// Used to dynamically compute Substrate TwoX128 storage keys
+function xxh64(data, seed) {
+  const P1=11400714785074694791n, P2=14029467366897019727n,
+        P3=1609587929392839161n,  P4=9650029242287828579n,
+        P5=2870177450012600261n,  M=(1n<<64n)-1n;
+  const lo = x => x & M;
+  const mul = (a,b) => lo(a*b);
+  const add = (a,b) => lo(a+b);
+  const rotl = (x,r) => lo((x<<r)|(x>>(64n-r)));
+  const round = (acc,inp) => mul(rotl(add(acc, mul(inp,P2)), 31n), P1);
+  const merge = (acc,val) => add(mul(lo(acc ^ round(0n,val)), P1), P4);
+  const s = BigInt(seed);
+  const dv = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const n = data.length;
+  let p=0, h;
+  if (n >= 32) {
+    let v1=add(add(s,P1),P2), v2=add(s,P2), v3=s, v4=lo(s-P1);
+    while (p<=n-32) {
+      v1=round(v1,dv.getBigUint64(p,true));   p+=8;
+      v2=round(v2,dv.getBigUint64(p,true));   p+=8;
+      v3=round(v3,dv.getBigUint64(p,true));   p+=8;
+      v4=round(v4,dv.getBigUint64(p,true));   p+=8;
+    }
+    h = add(add(add(rotl(v1,1n),rotl(v2,7n)),rotl(v3,12n)),rotl(v4,18n));
+    h = merge(merge(merge(merge(h,v1),v2),v3),v4);
+  } else { h = add(s,P5); }
+  h = add(h, BigInt(n));
+  while (p<=n-8) { h=add(mul(rotl(lo(h^round(0n,dv.getBigUint64(p,true))),27n),P1),P4); p+=8; }
+  if (p<=n-4)    { h=add(mul(rotl(lo(h^mul(BigInt(dv.getUint32(p,true)),P1)),23n),P2),P3); p+=4; }
+  while (p<n)    { h=mul(rotl(lo(h^mul(BigInt(data[p]),P5)),11n),P1); p++; }
+  h=mul(lo(h^(h>>33n)),P2); h=mul(lo(h^(h>>29n)),P3); return lo(h^(h>>32n));
+}
+
+function twox128(text) {
+  const b = new TextEncoder().encode(text);
+  const leHex = h => { let s=''; for(let i=0;i<8;i++) s+=Number((h>>(8n*BigInt(i)))&0xFFn).toString(16).padStart(2,'0'); return s; };
+  return leHex(xxh64(b,0)) + leHex(xxh64(b,1));
+}
+
+// Compute 32-byte storage key: TwoX128(pallet) + TwoX128(item)
+function storageKey(pallet, item) { return '0x' + twox128(pallet) + twox128(item); }
+// 16-byte prefix: just TwoX128(pallet)
+function palletPrefix(pallet) { return '0x' + twox128(pallet); }
+
+// Self-test: verify known value for "Staking"+"ActiveEra"
+const EXPECTED_ERA_KEY = '0x5f3e4907f716ac89b6347d15ececedca422adb579f1dbf4f3886c5cfa3bb8cc2';
+const computed = storageKey('Staking','ActiveEra');
+if (computed !== EXPECTED_ERA_KEY) {
+  console.error('xxHash64 self-test FAILED:', computed, 'expected', EXPECTED_ERA_KEY);
+} else {
+  console.log('xxHash64 self-test PASSED');
+}
+
+// ─── SCALE helpers ────────────────────────────────────────────────────────────
+function h2b(hex) {
+  hex=hex.replace('0x',''); const b=new Uint8Array(hex.length/2);
+  for(let i=0;i<hex.length;i+=2) b[i/2]=parseInt(hex.substr(i,2),16); return b;
+}
+function u32LE(b,o=0) { return (b[o]|b[o+1]<<8|b[o+2]<<16|b[o+3]*16777216)>>>0; }
+function hexToNum(h)  { return parseInt(h,16); }
+
+// activeEra may be bare u32 or Option<{index:u32, start:Option<u64>}>
+function decodeActiveEra(hex) {
+  if (!hex) return null;
+  const b = h2b(hex);
+  // Try Option<T> prefix (0x01 + u32)
+  if (b.length >= 5 && b[0] === 0x01) { const v=u32LE(b,1); if (v<1000000) return v; }
+  // Try bare u32
+  if (b.length >= 4) { const v=u32LE(b,0); if (v<1000000) return v; }
+  return null;
+}
+function decodeU32(hex) {
+  if (!hex) return null;
+  const b=h2b(hex); return b.length>=4 ? u32LE(b,0) : null;
+}
+
+// ─── Logging ──────────────────────────────────────────────────────────────────
+function ts() { return new Date().toTimeString().slice(0,8); }
+function log(m,r,isErr=false) {
+  const box=document.getElementById('logBox');
+  const e=document.createElement('div'); e.className='le';
+  const rv=r!=null?' → '+String(r).slice(0,70):'';
+  e.innerHTML=`<span class="lt">${ts()}</span><span class="lb"><span class="${isErr?'le-err':'lm'}">${m}</span><span class="lr">${rv}</span></span>`;
+  box.insertBefore(e,box.firstChild); while(box.children.length>32) box.removeChild(box.lastChild);
+}
+
+// ─── Debug helpers ────────────────────────────────────────────────────────────
+function db(id,v,cls=null) { const el=document.getElementById(id); if(!el)return; el.textContent=String(v); if(cls) el.className='dbv '+cls; }
+function toggleDebug() { const b=document.getElementById('dbb'),a=document.getElementById('dbArrow'); b.classList.toggle('open'); a.textContent=b.classList.contains('open')?'▼':'▶'; }
+
+// ─── UI ───────────────────────────────────────────────────────────────────────
+function fmt(n) { return n!=null?Number(n).toLocaleString():'—'; }
+function setV(id,v) {
+  const el=document.getElementById(id), s=String(v);
+  if(el.textContent!==s){el.textContent=s;el.classList.remove('dim');el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),400);}
+}
+function setStatus(ok,msg) {
+  document.getElementById('dot').className='dot'+(ok?' live':'');
+  document.getElementById('statusText').textContent=msg;
+  document.getElementById('retryBtn').style.display=ok?'none':'block';
+  db('dbWs',ok?'OPEN':'CLOSED',ok?'ok':'bad');
+}
+function showAlert(msg,type='info') { const el=document.getElementById('alertBox'); el.textContent=msg; el.className='alert '+type; el.style.display='block'; }
+function hideAlert() { document.getElementById('alertBox').style.display='none'; }
+
+function updateUI() {
+  const {era,session,block}=S;
+  if (era==null||block==null) return;
+
+  // Recompute era start only when era changes (or if not yet resolved for this era)
+  if (era !== lockedEraIndex || (lockedEraStart === null && (eraBlockCache[era] !== undefined || session !== null))) {
+    lockedEraIndex = era;
+    if (eraBlockCache[era] !== undefined) {
+      lockedEraStart = eraBlockCache[era];
+      log('era start', 'CSV → ' + lockedEraStart.toLocaleString());
+    } else if (session != null) {
+      const sessInEra   = Math.max(0, session - era*SESSIONS_PER_ERA);
+      const blockInSess = block % SESSION_LEN;
+      const into        = Math.min(ERA_LEN-1, sessInEra*SESSION_LEN + blockInSess);
+      lockedEraStart = block - into;
+      log('era start', 'session math → ' + lockedEraStart.toLocaleString());
+    } else {
+      lockedEraStart = null;
+    }
+    S.eraStartBlock = lockedEraStart;
+  }
+
+  if (lockedEraStart == null) return;
+
+  const eraEnd    = lockedEraStart + ERA_LEN - 1;
+  const remaining = Math.max(0, eraEnd - block);
+  const into      = Math.max(0, block - lockedEraStart);
+  const pct       = Math.min(100, Math.round(into / ERA_LEN * 100));
+
+  setV('eraIndex',  fmt(era));
+  setV('eraStart',  fmt(lockedEraStart));
+  setV('eraEnd',    fmt(eraEnd));
+  setV('curBlock',  fmt(block));
+  setV('remaining', fmt(remaining));
+  if (session!=null) {
+    setV('sessionIdx',fmt(session));
+    const sessInEra = Math.max(0, session - era*SESSIONS_PER_ERA);
+    document.getElementById('sessInEraLabel').textContent=`session ${sessInEra+1}/${SESSIONS_PER_ERA} in era`;
+  }
+  setV('progPct',pct+'%');
+  document.getElementById('progFill').style.width=pct+'%';
+  document.getElementById('lookupBtn').disabled=false;
+  updateHint();
+}
+
+function updateHint() {
+  const csvCount = Object.keys(csvEraCache).length;
+  const csvInfo  = csvCount > 0 ? `CSV: ${csvCount} eras  ·  ` : '';
+  document.getElementById('hintText').textContent = `${csvInfo}Current era: ${S.era ?? '…'}  ·  History depth: ~${HISTORY_DEPTH} eras  ·  Within-history: erasStartSessionIndex  ·  Older: block math`;
+}
+
+// ─── Date formatting helpers ───────────────────────────────────────────────
+function pad2(n){return String(n).padStart(2,'0');}
+function formatUTC(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth()+1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())} UTC`;
+}
+function formatLocal(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  // Local formatted as YYYY-MM-DD HH:MM:SS with UTC offset (e.g. "UTC-07:00")
+  const yyyy = d.getFullYear();
+  const mm = pad2(d.getMonth()+1);
+  const dd = pad2(d.getDate());
+  const hh = pad2(d.getHours());
+  const mi = pad2(d.getMinutes());
+  const ss = pad2(d.getSeconds());
+  const offsetMin = -d.getTimezoneOffset(); // minutes ahead of UTC
+  const sign = offsetMin >= 0 ? '+' : '-';
+  const offH = pad2(Math.floor(Math.abs(offsetMin) / 60));
+  const offM = pad2(Math.abs(offsetMin) % 60);
+  const tzLabel = `UTC${sign}${offH}:${offM}`;
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss} ${tzLabel}`;
+}
+
+function attachDateToggle(buttonId, displayId) {
+  const btn = document.getElementById(buttonId);
+  const disp = document.getElementById(displayId);
+  if (!btn || !disp) return;
+  btn.addEventListener('click', () => {
+    const utc = disp.dataset.utc;
+    if (!utc) return;
+    const state = disp.dataset.state || 'utc';
+    if (state === 'utc') {
+      disp.textContent = formatLocal(utc);
+      disp.dataset.state = 'local';
+      btn.textContent = 'Show in UTC';
+    } else {
+      disp.textContent = formatUTC(utc);
+      disp.dataset.state = 'utc';
+      btn.textContent = 'Show in my local time';
+    }
+  });
+}
+// ─── Clipboard helper ─────────────────────────────────────────────────────
+async function copyToClipboard(text) {
+  if (!text) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+  ta.select(); try { document.execCommand('copy'); } finally { document.body.removeChild(ta); }
+}
+
+// ─── RPC wrapper ──────────────────────────────────────────────────────────────
+function rpc(method,params,ms=15000) {
+  return new Promise((res,rej) => {
+    if(!ws||ws.readyState!==WebSocket.OPEN) return rej(new Error('not connected'));
+    const id=reqId++;
+    const t=setTimeout(()=>{ delete pending[id]; rej(new Error(`timeout:${method}`)); },ms);
+    pending[id]={ resolve:v=>{clearTimeout(t);res(v);}, reject:e=>{clearTimeout(t);rej(e);} };
+    ws.send(JSON.stringify({jsonrpc:'2.0',id,method,params:params||[]}));
+    log(method,null);
+  });
+}
+
+// ─── Fetch current block immediately ─────────────────────────────────────────
+async function fetchBlock() {
+  try {
+    const h=await rpc('chain_getHeader',[]);
+    if (h?.number) { const bn=hexToNum(h.number); S.block=bn; db('dbBlkHex',h.number,'ok'); db('dbBlkDec',bn.toLocaleString(),'ok'); log('chain_getHeader','block='+bn.toLocaleString()); return; }
+  } catch(e) { log('chain_getHeader',e.message,true); db('dbErr',e.message,'bad'); }
+  try {
+    const hash=await rpc('chain_getFinalizedHead',[]);
+    const h=await rpc('chain_getHeader',[hash]);
+    if (h?.number) { const bn=hexToNum(h.number); S.block=bn; db('dbBlkHex',h.number,'ok'); db('dbBlkDec',bn.toLocaleString(),'ok'); log('getFinalizedHead+getHeader','block='+bn.toLocaleString()); }
+  } catch(e) { log('block fallback',e.message,true); db('dbErr','block fetch: '+e.message,'bad'); }
+}
+
+// ─── Dynamic pallet discovery ─────────────────────────────────────────────────
+// For each candidate pallet name, check if state_getStorage returns non-null
+// for each candidate storage item name under that pallet.
+async function discoverKeys() {
+  log('discover', 'trying staking pallet candidates…');
+  db('dbStakingPallet','searching…','warn');
+  db('dbSessionPallet','searching…','warn');
+
+  // ── Find staking pallet + ActiveEra item ──
+  let foundStakingKey = null, foundStakingName = null;
+  outer:
+  for (const pallet of STAKING_CANDIDATES) {
+    for (const item of STAKING_ERA_ITEM) {
+      const key = storageKey(pallet, item);
+      try {
+        const val = await rpc('state_getStorage',[key]);
+        if (val !== null && val !== undefined) {
+          foundStakingKey = key;
+          foundStakingName = `${pallet}.${item}`;
+          log('discover','found staking key: '+foundStakingName);
+          db('dbStakingPallet', foundStakingName, 'ok');
+          db('dbEraKey', key, 'ok');
+          KEYS.activeEra = key;
+          // Decode
+          const dec = decodeActiveEra(val);
+          db('dbEraHex', val, 'ok');
+          db('dbEraDec', dec!=null?String(dec):'decode failed', dec!=null?'ok':'bad');
+          if (dec!=null) { S.era=dec; log('decode era','era='+dec); }
+          // Build ErasStartSessionIndex prefix using same pallet name
+          KEYS.eraStartPrefix = '0x' + twox128(pallet) + twox128(ERA_START_ITEM);
+          break outer;
+        }
+      } catch(e) { /* try next */ }
+    }
+  }
+  if (!foundStakingKey) {
+    db('dbStakingPallet','NOT FOUND — pallet not discovered','bad');
+    log('discover','staking pallet not found in any candidate',true);
+    db('dbErr','staking pallet not found. Chain may use unknown pallet name.','bad');
+    // Last resort: use state_getKeys with the standard staking prefix to see what IS there
+    try {
+      const stdPrefix = palletPrefix('Staking');
+      const keys = await rpc('state_getKeys',[stdPrefix]);
+      if (keys && keys.length > 0) {
+        log('discover','std Staking prefix has '+keys.length+' keys — re-checking storage');
+        // The pallet exists but maybe with different item names — try first key directly
+        db('dbStakingPallet','Found via getKeys (item name mismatch?)','warn');
+      } else {
+        log('discover','std Staking prefix: 0 keys on this chain',true);
+      }
+    } catch(e) { log('state_getKeys staking',e.message,true); }
+  }
+
+  // ── Find session pallet + CurrentIndex item ──
+  let foundSessionKey = null;
+  outer2:
+  for (const pallet of SESSION_CANDIDATES) {
+    for (const item of SESSION_IDX_ITEM) {
+      const key = storageKey(pallet, item);
+      try {
+        const val = await rpc('state_getStorage',[key]);
+        if (val !== null && val !== undefined) {
+          foundSessionKey = key;
+          log('discover','found session key: '+pallet+'.'+item);
+          db('dbSessionPallet', pallet+'.'+item, 'ok');
+          db('dbSessKey', key, 'ok');
+          KEYS.sessionIdx = key;
+          const dec = decodeU32(val);
+          db('dbSessHex', val, 'ok');
+          db('dbSessDec', dec!=null?String(dec):'decode failed', dec!=null?'ok':'bad');
+          if (dec!=null) { S.session=dec; log('decode session','session='+dec); }
+          break outer2;
+        }
+      } catch(e) { /* try next */ }
+    }
+  }
+  if (!foundSessionKey) {
+    db('dbSessionPallet','NOT FOUND','bad');
+    log('discover','session pallet not found',true);
+  }
+
+  // Update badge
+  if (foundStakingKey || foundSessionKey) {
+    const badge = document.getElementById('palletBadge');
+    badge.textContent = foundStakingName || 'pallet discovered';
+    badge.style.display = 'inline';
+  }
+
+  updateUI();
+}
+
+// ─── Re-query known keys (after discovery) ────────────────────────────────────
+async function queryChain() {
+  await fetchBlock();
+  if (!KEYS.activeEra && !KEYS.sessionIdx) {
+    await discoverKeys();
+    return;
+  }
+  try {
+    const calls = [];
+    if (KEYS.activeEra)  calls.push(rpc('state_getStorage',[KEYS.activeEra]));
+    if (KEYS.sessionIdx) calls.push(rpc('state_getStorage',[KEYS.sessionIdx]));
+    const results = await Promise.all(calls);
+    let i = 0;
+    if (KEYS.activeEra)  { const v=results[i++]; if(v){const d=decodeActiveEra(v);if(d!=null){S.era=d;db('dbEraDec',String(d),'ok');}}}
+    if (KEYS.sessionIdx) { const v=results[i++]; if(v){const d=decodeU32(v);     if(d!=null){S.session=d;db('dbSessDec',String(d),'ok');}}}
+    updateUI();
+  } catch(e) { log('queryChain',e.message,true); }
+}
+
+// ─── Past era: RPC (erasStartSessionIndex) ────────────────────────────────────
+async function rpcLookup(targetEra) {
+  if (!KEYS.eraStartPrefix) return null;
+  try {
+    if (!eraSessionKeys) {
+      const keys = await rpc('state_getKeys',[KEYS.eraStartPrefix]);
+      if (!keys||keys.length===0) { log('state_getKeys','no ErasStartSessionIndex keys',true); return null; }
+      eraSessionKeys = keys;
+      log('state_getKeys','cached '+keys.length+' era keys');
+    }
+    for (const k of eraSessionKeys) {
+      const raw=k.replace('0x','');
+      // Key = 32-byte prefix (64 hex) + 8-byte xxHash64 (16 hex) + 4-byte era u32LE (8 hex)
+      const eraPart=raw.slice(-8);
+      if (u32LE(h2b('0x'+eraPart))===targetEra) {
+        const val=await rpc('state_getStorage',[k]);
+        if (val) { const si=decodeU32(val); log('erasStartSessionIndex',`era=${targetEra} → session=${si}`); return si*SESSION_LEN; }
+      }
+    }
+    log('erasStartSessionIndex',`era=${targetEra} not in key set`);
+    return null;
+  } catch(e) { log('rpcLookup',e.message,true); return null; }
+}
+
+// ─── Past era: math ───────────────────────────────────────────────────────────
+function mathLookup(era) {
+  // Use CSV cache first (exact), then fall back to live session math
+  if (eraBlockCache[era] !== undefined) return eraBlockCache[era];
+  if (S.eraStartBlock==null||S.era==null) return null;
+  return S.eraStartBlock - (S.era - era)*ERA_LEN;
+}
+
+// ─── Lookup button ────────────────────────────────────────────────────────────
+document.getElementById('lookupBtn').addEventListener('click', async () => {
+  const targetEra=parseInt(document.getElementById('eraInput').value,10);
+  hideAlert(); document.getElementById('rg').style.display='none';
+  // Hide optional CSV-sourced cards until we know they have data
+  ['resDateCard','resEndDateCard','resHashCard'].forEach(id=>document.getElementById(id).style.display='none');
+  if (isNaN(targetEra)||targetEra<0) { showAlert('Enter a valid era number.','err'); return; }
+  if (S.era==null)   { showAlert('Still syncing — try again shortly.','warn'); return; }
+  if (targetEra>S.era) { showAlert(`Era ${targetEra} is in the future. Current: ${S.era}.`,'err'); return; }
+  if (targetEra===S.era) { showAlert(`Era ${targetEra} is the current era — see metrics above.`,'info'); return; }
+  const btn=document.getElementById('lookupBtn'); btn.textContent='Loading…'; btn.disabled=true;
+
+  // ── 1. CSV cache (exact data from CSV) ─────────────────────
+  const csvRow = csvEraCache[targetEra] || null;
+  let fStart = null, fEnd = null, source = null;
+
+  if (csvRow && !isNaN(csvRow.start_block)) {
+    fStart = csvRow.start_block;
+    fEnd   = !isNaN(csvRow.end_block) ? csvRow.end_block : fStart + ERA_LEN - 1;
+    source = 'CSV';
+    log('CSV', `era=${targetEra} → start=${fStart.toLocaleString()} end=${fEnd.toLocaleString()}`);
+  } else {
+    // ── 2. On-chain via erasStartSessionIndex (within history depth) ──────
+    const withinHistory=targetEra>=(S.era-HISTORY_DEPTH);
+    let rpcStart=null;
+    if (withinHistory) rpcStart=await rpcLookup(targetEra);
+
+    // ── 3. Math fallback ──────────────────────────────────────────────────
+    const mathStart=mathLookup(targetEra);
+    if (rpcStart==null&&mathStart==null) {
+      btn.textContent='Look up'; btn.disabled=false;
+      showAlert('Could not compute. Ensure live data is synced.','err'); return;
+    }
+    fStart = rpcStart ?? mathStart;
+    fEnd   = fStart + ERA_LEN - 1;
+    source = rpcStart!=null ? 'erasStartSessionIndex' : (withinHistory?'math (key not found)':'math · beyond history');
+
+    if (rpcStart!=null&&mathStart!=null&&rpcStart!==mathStart) {
+      showAlert(`Cross-check: RPC (${fmt(rpcStart)}) vs math (${fmt(mathStart)}) differ by ${Math.abs(rpcStart-mathStart)} blocks. RPC value used.`,'warn');
+    }
+  }
+
+  btn.textContent='Look up'; btn.disabled=false;
+
+  document.getElementById('resStart').textContent=fmt(fStart);
+  document.getElementById('resEnd').textContent=fmt(fEnd);
+  ['resStart','resEnd'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('dim'); });
+
+  const isCsv = source === 'CSV';
+  const sp = document.getElementById('startPill'), ep = document.getElementById('endPill');
+  if (isCsv) {
+    // When CSV is the source, hide the small source pills for start/end
+    if (sp) { sp.style.display = 'none'; }
+    if (ep) { ep.style.display = 'none'; }
+  } else {
+    if (sp) {
+      sp.style.display = '';
+      sp.textContent = source;
+      sp.className = 'pill ' + (source.startsWith('erasStart') ? 'pill-rpc' : 'pill-math');
+    }
+    if (ep) {
+      ep.style.display = '';
+      ep.textContent = 'start + 14,399';
+      ep.className = 'pill pill-math';
+    }
+  }
+
+  // Show CSV extra fields if available
+  if (csvRow) {
+    if (csvRow.start_datetime_utc) {
+      const el = document.getElementById('resStartDate');
+      el.textContent = formatUTC(csvRow.start_datetime_utc);
+      el.dataset.utc = csvRow.start_datetime_utc;
+      el.dataset.state = 'utc';
+      document.getElementById('resDateCard').style.display = '';
+      attachDateToggle('resStartDateBtn','resStartDate');
+    }
+    if (csvRow.end_datetime_utc) {
+      const el = document.getElementById('resEndDate');
+      el.textContent = formatUTC(csvRow.end_datetime_utc);
+      el.dataset.utc = csvRow.end_datetime_utc;
+      el.dataset.state = 'utc';
+      document.getElementById('resEndDateCard').style.display = '';
+      attachDateToggle('resEndDateBtn','resEndDate');
+    }
+    if (csvRow.start_block_hash) {
+      const hEl = document.getElementById('resHash');
+      hEl.textContent = csvRow.start_block_hash;
+      document.getElementById('resHashCard').style.display = '';
+      const copyBtn = document.getElementById('copyResHashBtn');
+      if (copyBtn) {
+        copyBtn.onclick = async () => {
+          try {
+            await copyToClipboard(csvRow.start_block_hash);
+            const prev = copyBtn.textContent;
+            copyBtn.textContent = 'Copied';
+            setTimeout(() => { copyBtn.textContent = prev; }, 1500);
+          } catch (e) {
+            copyBtn.textContent = 'Copy';
+            setTimeout(() => { copyBtn.textContent = '📋'; }, 1500);
+          }
+        };
+      }
+    }
+  }
+
+  document.getElementById('rg').style.display='grid';
+});
+// ─── CSV auto-load ─────────────────────────────────────────────────
+const CSV_CANDIDATES = [
+  'era-reference.csv',
+  '../new/scripts/era-reference.csv',
+  'scripts/era-reference.csv',
+  '../scripts/era-reference.csv',
+];
+
+function parseCsvText(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return 0;
+  const header = lines[0].split(',').map(s => s.trim());
+  let count = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(',');
+    if (cols.length < 2) continue;
+    const row = {};
+    header.forEach((h, j) => { row[h] = (cols[j] ?? '').trim(); });
+    const era = parseInt(row.era, 10);
+    if (isNaN(era)) continue;
+    const sb = parseInt(row.start_block, 10);
+    if (isNaN(sb)) continue;
+    const ebRaw = row.end_block ? parseInt(row.end_block, 10) : NaN;
+    const eb    = isNaN(ebRaw) ? null : ebRaw;
+    csvEraCache[era] = {
+      start_block:        sb,
+      end_block:          eb,
+      start_block_hash:   row.start_block_hash   || null,
+      start_datetime_utc: row.start_datetime_utc || null,
+      end_datetime_utc:   row.end_datetime_utc   || null,
+    };
+    eraBlockCache[era] = sb;
+    if (eb !== null) eraBlockCache[era + 1] = eb + 1;
+    count++;
+  }
+  return count;
+}
+
+async function tryAutoLoadCsv() {
+  for (const path of CSV_CANDIDATES) {
+    try {
+      const resp = await fetch(path, { credentials: 'same-origin' });
+      if (!resp.ok) continue;
+      const text = await resp.text();
+      if (!text.trimStart().startsWith('era,')) continue;
+      const count = parseCsvText(text);
+      if (count === 0) continue;
+      log('CSV', 'loaded ' + count + ' eras from ' + path);
+      const badge = document.getElementById('csvBadge');
+      if (badge) { badge.textContent = 'CSV: ' + count + ' eras'; badge.style.display = 'inline'; }
+      // If era is already locked from session math, update with the accurate CSV value
+      if (lockedEraIndex !== null && eraBlockCache[lockedEraIndex] !== undefined) {
+        const accurate = eraBlockCache[lockedEraIndex];
+        if (lockedEraStart !== accurate) {
+          log('CSV', 'correcting era ' + lockedEraIndex + ' start → ' + accurate.toLocaleString());
+          lockedEraStart = accurate;
+          S.eraStartBlock = accurate;
+          if (S.block != null) updateUI();
+        }
+      }
+      updateHint();
+      return;
+    } catch (_) {}
+  }
+  log('CSV', 'not found — RPC / math only');
+}
+// ─── WebSocket lifecycle ──────────────────────────────────────────────────────
+function connect() {
+  if (killed) return;
+  connectAttempts++;
+  setStatus(false,`Connecting… (attempt ${connectAttempts})`);
+  try { ws=new WebSocket(WSS); } catch(e) { db('dbErr','ws init: '+e.message,'bad'); setStatus(false,'WebSocket failed — click Retry'); return; }
+  ws.onopen = async () => {
+    connectAttempts=0; eraSessionKeys=null; KEYS={activeEra:null,sessionIdx:null,eraStartPrefix:null}; lockedEraIndex=null; lockedEraStart=null;
+    setStatus(true,'Connected · discovering pallets…');
+    log('ws.open',WSS);
+    await queryChain();
+    if (S.era!=null) setStatus(true,'Connected · Enjin Relay RPC');
+    try { await rpc('chain_subscribeNewHeads',[]); log('subscribeNewHeads','ok'); } catch(e) { log('subscribeNewHeads',e.message,true); }
+  };
+  ws.onmessage = ev => {
+    let msg; try{msg=JSON.parse(ev.data);}catch{return;}
+    if (msg.id!=null&&pending[msg.id]) {
+      msg.error ? pending[msg.id].reject(new Error(JSON.stringify(msg.error))) : pending[msg.id].resolve(msg.result);
+      delete pending[msg.id]; return;
+    }
+    if (msg.method==='chain_newHead'&&msg.params?.result) {
+      const bn=hexToNum(msg.params.result.number);
+      if (bn!==S.block) { S.block=bn; db('dbBlkHex',msg.params.result.number,'ok'); db('dbBlkDec',bn.toLocaleString(),'ok'); updateUI(); log('chain_newHead','block='+bn.toLocaleString()); }
+      if (bn%20===0) queryChain();
+    }
+  };
+  ws.onerror = () => { log('ws.error','',true); db('dbErr','WebSocket error','bad'); setStatus(false,'Error'); };
+  ws.onclose = e => { log('ws.close','code='+e.code,true); setStatus(false,'Disconnected — reconnecting in 5s…'); if(!killed) setTimeout(connect,5000); };
+}
+function manualRetry() { killed=false; connectAttempts=0; KEYS={activeEra:null,sessionIdx:null,eraStartPrefix:null}; lockedEraIndex=null; lockedEraStart=null; if(ws)try{ws.close();}catch{} connect(); }
+tryAutoLoadCsv();
+connect();
+</script>
+</body>
+</html>

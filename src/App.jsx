@@ -7,6 +7,7 @@ import { resolveLatestEra }    from './utils/eraAnalysis.js'
 import AppHeader           from './components/AppHeader.jsx'
 import LandingPage         from './components/LandingPage.jsx'
 import BalanceExplorer     from './components/BalanceExplorer.jsx'
+import EraBlockExplorer    from './components/EraBlockExplorer.jsx'
 import ModeSelector        from './components/ModeSelector.jsx'
 import ControlPanel        from './components/ControlPanel.jsx'
 import ValidatorCard       from './components/ValidatorCard.jsx'
@@ -16,9 +17,21 @@ import SummarySection      from './components/SummarySection.jsx'
 import PoolSummarySection  from './components/PoolSummarySection.jsx'
 
 export default function App() {
-  const [view,       setView]       = useState('home')      // 'home' | 'staking' | 'balance'
+  // Persist active view in URL hash so page refresh stays on current tool
+  const [view, setView] = useState(() => {
+    const hash = window.location.hash.slice(1)
+    return ['home', 'staking', 'balance', 'era'].includes(hash) ? hash : 'home'
+  })
   const [mode,       setMode]       = useState('validators') // 'validators' | 'pools'
   const [lastEraCount, setLastEraCount] = useState(DEFAULT_ERA_COUNT)
+
+  // Sync URL hash when view changes
+  useEffect(() => {
+    window.history.replaceState(
+      null, '',
+      view === 'home' ? window.location.pathname : `#${view}`
+    )
+  }, [view])
 
   // Validator hook
   const {
@@ -120,23 +133,33 @@ export default function App() {
     <div className="min-h-dvh bg-ink bg-grid">
       <AppHeader status={status} view={view} onBack={handleBack} />
 
+      {/* ── Era Block Explorer ────────────────────────────────────── */}
+      {view === 'era' && (
+        <EraBlockExplorer />
+      )}
+
       {/* ── Balance Viewer ──────────────────────────────────────────── */}
       {view === 'balance' && (
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-16 sm:pb-20">
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-20 sm:pb-24">
           <BalanceExplorer />
         </main>
       )}
 
       {/* ── Home / Landing ──────────────────────────────────────────── */}
       {view === 'home' && (
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 pb-16 sm:pb-20">
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 pb-16 sm:pb-20 relative">
           <LandingPage onNavigate={handleNavigate} />
+          <footer className="fixed inset-x-0 bottom-0 border-t border-border/40 bg-ink/95 backdrop-blur py-3 text-center text-xs text-muted z-50">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6">
+              EnjinSight | Read-only | No wallet required
+            </div>
+          </footer>
         </main>
       )}
 
       {/* ── Staking view ────────────────────────────────────────────── */}
       {view === 'staking' && (
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-16 sm:pb-20 space-y-4 sm:space-y-5">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-20 space-y-4 sm:space-y-5">
 
         {/* Mode selector tabs + scan controls (no gap between them) */}
         <div className="space-y-0">
@@ -192,11 +215,6 @@ export default function App() {
               })}
             </div>
           </section>
-        )}
-
-        {/* Terminal log */}
-        {(logs.length > 0 || isLoading) && (
-          <TerminalLog logs={logs} />
         )}
 
         {/* ── Validator mode content ──────────────────────────────── */}
@@ -314,10 +332,11 @@ export default function App() {
       </main>
       )}
 
-      {/* Footer */}
-      <footer className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-ink/95 backdrop-blur py-2.5 text-center text-xs text-muted">
-        EnjinSight | Read-only | No wallet required
-      </footer>
+      {/* Sticky terminal log — always shown on staking view */}
+      {view === 'staking' && (
+        <TerminalLog logs={logs} sticky />
+      )}
+
       {/* Vercel Analytics (lazy-loaded if dependency installed) */}
       {AnalyticsComponent && <AnalyticsComponent />}
     </div>
