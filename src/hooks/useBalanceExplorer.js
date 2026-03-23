@@ -230,6 +230,9 @@ export default function useBalanceExplorer() {
     try { storKey = buildStorageKey(address) }
     catch (e) { dispatch({ type: 'ERROR', payload: `Invalid address: ${e.message}` }); return }
 
+    log('info', `Storage key: ${storKey.slice(0, 18)}…${storKey.slice(-8)} (System.Account + Blake2_128Concat)`)
+    log('info', `Archive endpoint: ${ep}`)
+
     // ── Build block list ────────────────────────────────────────────────
     const blocks = []
     for (let b = start; b <= end; b += stepN) blocks.push(b)
@@ -265,8 +268,8 @@ export default function useBalanceExplorer() {
         })
 
         const hash = await rpc.call('chain_getBlockHash', [blk])
-        if (!hash || !isValidBlockHash(hash)) {
-          log('warn', `Block #${blk.toLocaleString('en')}: no valid hash returned (skipped)`)
+        if (!hash || !isValidBlockHash(hash) || /^0x0{64}$/.test(hash)) {
+          log('warn', `Block #${blk.toLocaleString('en')}: no valid hash returned — block may not exist in the archive (skipped)`)
           results.push({
             block: blk, blockHash: '', free: 0n, reserved: 0n,
             miscFrozen: 0n, feeFrozen: 0n, nonce: 0, newFormat: false,
@@ -274,7 +277,15 @@ export default function useBalanceExplorer() {
           continue
         }
 
-        const raw = await rpc.call('state_getStorageAt', [storKey, hash])
+        const raw = await rpc.call('state_getStorage', [storKey, hash])
+        if (!raw || raw === '0x') {
+          log('warn', `Block #${blk.toLocaleString('en')}: no account storage at this block — account may not exist yet or has zero balance`)
+          results.push({
+            block: blk, blockHash: hash, free: 0n, reserved: 0n,
+            miscFrozen: 0n, feeFrozen: 0n, nonce: 0, newFormat: false,
+          })
+          continue
+        }
         const dec = decodeAccountInfo(raw)
         log('info', `Block #${blk.toLocaleString('en')} → free=${dec.free} res=${dec.reserved}${dec.newFormat ? ' [new-fmt]' : ''}`)
         results.push({ block: blk, blockHash: hash, ...dec })

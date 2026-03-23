@@ -300,6 +300,7 @@ export async function probeEndpoint(path, _body, signal) {
 export async function fetchAllPools(proxyUrl, signal, onPage) {
   const allPools = []
   let page = 0
+  let totalCount = null
   while (true) {
     const data = await subscanPost(
       ENDPOINTS.pools,
@@ -308,9 +309,15 @@ export async function fetchAllPools(proxyUrl, signal, onPage) {
       { signal },
     )
     const list = data?.data?.list ?? []
+    // Capture the total count from the first page so we can stop as soon
+    // as we have fetched all pools, even if each page returns exactly POOLS_PAGE_SIZE items.
+    if (totalCount === null && data?.data?.count != null) {
+      totalCount = data.data.count
+    }
     allPools.push(...list)
     if (onPage) onPage(page, list.length)
     if (list.length < POOLS_PAGE_SIZE) break
+    if (totalCount !== null && allPools.length >= totalCount) break
     page++
     await delay(API_DELAY_MS)
   }

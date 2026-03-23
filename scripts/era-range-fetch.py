@@ -2,23 +2,23 @@
 """
 Enjin Era Reference Builder
 ============================
-Automatically maintains era-reference.csv with era start/end blocks,
+Automatically maintains relay-era-reference.csv with era start/end blocks,
 block hashes, and UTC timestamps for every era on the Enjin Relaychain.
 
 Run with no arguments — the script figures out what to do on its own:
 
-  • If era-reference.csv does not exist, it queries the archive node for
+  • If relay-era-reference.csv does not exist, it queries the archive node for
     every era from era 1 up to the current chain era and creates the file.
 
-  • If era-reference.csv already exists, it reads the latest era recorded,
+  • If relay-era-reference.csv already exists, it reads the latest era recorded,
     then fetches only the subsequent eras and appends them. Any previously
     current era whose end_block was left blank is also back-filled.
 
 Usage:
-    python era-reference.py
-    python era-reference.py --endpoint wss://your-node
+    python relay-era-reference.py
+    python relay-era-reference.py --endpoint wss://your-node
 
-Output: era-reference.csv
+Output: relay-era-reference.csv
     era               - Era index
     start_block       - First block of this era
     end_block         - Last block of this era (blank if era is still ongoing)
@@ -40,6 +40,7 @@ import csv
 import os
 import sys
 import time
+import ssl
 from datetime import datetime, timezone
 
 try:
@@ -59,10 +60,10 @@ ENJ_SS58_PREFIX  = 2135
 DEFAULT_ENDPOINT = os.getenv("RPC_ENDPOINT", "wss://archive.relay.blockchain.enjin.io")
 
 # Resolve CSV path relative to this script's location so it always writes to
-# <project-root>/public/era-reference.csv regardless of the working directory.
+# <project-root>/public/relay-era-reference.csv regardless of the working directory.
 _SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_SCRIPT_DIR)
-CSV_FILE     = os.path.join(_PROJECT_ROOT, 'public', 'era-reference.csv')
+CSV_FILE     = os.path.join(_PROJECT_ROOT, 'public', 'relay-era-reference.csv')
 
 
 # ── CSV helpers ───────────────────────────────────────────────────────────────
@@ -86,7 +87,7 @@ def _ms_to_iso(ms):
 
 def read_csv():
     # type: () -> list
-    """Read era-reference.csv and return a list of row dicts sorted by era."""
+    """Read relay-era-reference.csv and return a list of row dicts sorted by era."""
     rows = []
     try:
         with open(CSV_FILE, newline='', encoding='utf-8') as f:
@@ -117,7 +118,7 @@ def read_csv():
 
 def write_csv(rows):
     # type: (list) -> None
-    """Write all rows to era-reference.csv, overwriting any previous content."""
+    """Write all rows to relay-era-reference.csv, overwriting any previous content."""
     with open(CSV_FILE, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(CSV_COLUMNS)
@@ -214,7 +215,7 @@ def find_era_start_block(api, era, chain_head):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Build and maintain era-reference.csv — era block boundaries, hashes, and timestamps for the Enjin Relaychain.",
+        description="Build and maintain relay-era-reference.csv — era block boundaries, hashes, and timestamps for the Enjin Relaychain.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -245,9 +246,13 @@ def main():
             url=args.endpoint,
             ss58_format=ENJ_SS58_PREFIX,
             type_registry_preset="polkadot",
+            ws_options={
+                'sslopt': {'cert_reqs': ssl.CERT_NONE},
+            },
         )
     except Exception as e:
         print("\n  ERROR: Cannot connect to {}\n  {}".format(args.endpoint, e))
+        print("  Hint: Ensure system trusts the endpoint certificate, or run with --endpoint ws://... if available.")
         sys.exit(1)
 
     chain_head       = api.get_block_number(api.get_chain_head())
