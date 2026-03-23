@@ -55,11 +55,12 @@ export const ENJIN_NETWORKS = [
     ss58Prefix:   1110,
   },
   {
-    key:          'relaychain',
-    label:        'Enjin Relaychain',
-    endpoint:     'wss://archive.relay.blockchain.enjin.io',
-    addrHint:     'e.g. enqFfD3mAaH7dzXxFhHNwxnk2…',
-    ss58Prefix:   2135,
+    key:              'relaychain',
+    label:            'Enjin Relaychain',
+    endpoint:         'wss://archive.relay.blockchain.enjin.io',
+    addrHint:         'e.g. enqFfD3mAaH7dzXxFhHNwxnk2…',
+    ss58Prefix:       2135,
+    supportsDateRange: true,   // relay-era-reference.csv covers this network
   },
   {
     key:          'canary-matrix',

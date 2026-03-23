@@ -1,8 +1,9 @@
 /**
  * LandingPage — entry screen shown when view === 'home'.
- * Renders two feature cards: Staking Rewards Cadence and Historical Balance Viewer.
+ * Renders four feature cards: Era Block Explorer, Staking Rewards Cadence, 
+ * Historical Balance Viewer, and Reward History Viewer (placeholder).
  */
-import { BarChart3, LineChart, Layers } from 'lucide-react'
+import { BarChart3, LineChart, Layers, TrendingUp } from 'lucide-react'
 
 const FEATURES = [
   {
@@ -35,6 +36,17 @@ const FEATURES = [
     label: 'Open Balance Viewer',
     resource: 'Archive RPC Endpoint',
   },
+  {
+    key: 'reward-history',
+    icon: TrendingUp,
+    title: 'Reward History Viewer',
+    description:
+      'Track staking reward payouts over time for any Relaychain wallet address. ' +
+      'Visualise reward trends, identify patterns, and export historical reward data for analysis and record-keeping.',
+    label: 'Coming Soon',
+    resource: 'Subscan API / Archive RPC Endpoint',
+    disabled: true,
+  },
 ]
 
 export default function LandingPage({ onNavigate }) {
@@ -59,8 +71,10 @@ export default function LandingPage({ onNavigate }) {
 
       {/* Feature cards */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 max-w-5xl mx-auto">
-        {FEATURES.map(({ key, icon: Icon, title, description, label, resource }) => (
-          <div key={key} className="card flex flex-col gap-5 p-6 sm:p-7 hover:border-primary/40 transition-colors">
+        {FEATURES.map(({ key, icon: Icon, title, description, label, resource, disabled }) => (
+          <div key={key} className={`card flex flex-col gap-5 p-6 sm:p-7 transition-colors ${
+            disabled ? 'opacity-60 hover:border-border' : 'hover:border-primary/40'
+          }`}>
             {/* Icon + title */}
             <div className="flex items-start gap-4">
               <div className="w-11 h-11 flex-shrink-0 rounded-xl bg-primary/15 border border-primary/30
@@ -76,8 +90,11 @@ export default function LandingPage({ onNavigate }) {
             {/* Resource chip + CTA */}
             <div className="flex flex-col items-center gap-3">
               <button
-                onClick={() => onNavigate(key)}
-                className="btn-primary focus-visible:ring-2 focus-visible:ring-primary/50"
+                onClick={() => !disabled && onNavigate(key)}
+                disabled={disabled}
+                className={`btn-primary focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                  disabled ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
                 aria-label={label}
               >
                 {label}

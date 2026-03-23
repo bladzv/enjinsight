@@ -21,7 +21,7 @@ let _eraCache = null
 
 async function loadEraData() {
   if (_eraCache) return _eraCache
-  const resp = await fetch('/era-reference.csv')
+  const resp = await fetch('/relay-era-reference.csv')
   const text = await resp.text()
   const lines = text.trim().split('\n').slice(1)
   _eraCache = lines.map(line => {
@@ -101,9 +101,15 @@ export default function BalanceExplorer() {
   const addrDebounceRef = useRef(null)
 
   // Derived: active network preset + resolved endpoint
-  const activeNetwork = ENJIN_NETWORKS.find(n => n.key === networkKey) ?? ENJIN_NETWORKS[0]
-  const isCustom      = networkKey === 'custom'
-  const endpoint      = isCustom ? customEndpoint : activeNetwork.endpoint
+  const activeNetwork       = ENJIN_NETWORKS.find(n => n.key === networkKey) ?? ENJIN_NETWORKS[0]
+  const isCustom            = networkKey === 'custom'
+  const endpoint            = isCustom ? customEndpoint : activeNetwork.endpoint
+  const isDateRangeSupported = activeNetwork.supportsDateRange === true && !isCustom
+
+  // Auto-switch back to block range when the selected network doesn't support date range
+  useEffect(() => {
+    if (!isDateRangeSupported && rangeMode === 'date') setRangeMode('block')
+  }, [networkKey, isDateRangeSupported]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * Validate `rawAddr` against `network`'s SS58 prefix using @polkadot/util-crypto.
@@ -380,8 +386,10 @@ export default function BalanceExplorer() {
                 <button
                   type="button"
                   onClick={() => setRangeMode('date')}
-                  disabled={isLoading}
+                  disabled={isLoading || !isDateRangeSupported}
+                  title={!isDateRangeSupported ? 'Date Range is only available for Enjin Relaychain archive endpoint' : undefined}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors
+                    disabled:opacity-40 disabled:cursor-not-allowed
                     ${rangeMode === 'date' ? 'bg-primary/20 text-primary' : 'text-dim hover:text-text'}`}
                 >
                   <Calendar size={12} />
@@ -555,7 +563,12 @@ export default function BalanceExplorer() {
                   <Square size={14} />
                   STOP
                 </button>
-              ) : status === STATUS.IDLE ? (
+              ) : hasResults ? (
+                <button onClick={reset} className="btn-primary w-full sm:w-auto sm:min-w-[200px]">
+                  <RotateCcw size={14} />
+                  RESET
+                </button>
+              ) : (
                 <button
                   onClick={handleFetch}
                   className="btn-primary w-full sm:w-auto sm:min-w-[200px]"
@@ -566,11 +579,6 @@ export default function BalanceExplorer() {
                 >
                   <Activity size={14} />
                   Fetch Balance
-                </button>
-              ) : (
-                <button onClick={reset} className="btn-primary w-full sm:w-auto sm:min-w-[200px]">
-                  <RotateCcw size={14} />
-                  RESET
                 </button>
               )}
               {estCalls != null && (

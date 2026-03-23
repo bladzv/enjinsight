@@ -75,73 +75,112 @@ Three cards are displayed in a responsive grid (one per row on mobile, up to thr
 
 ## Tool 1 — Era Block Explorer
 
-This tool opens inside an embedded frame that fills the entire page below the header. It connects live to the Enjin Relaychain and displays real-time and historical era/block information.
+This tool is a React-native dashboard (no embedded iframe). It connects to the Enjin Relaychain in two sequential phases to display live and historical era/block data.
 
-### Current Era section
+### Connection sequence
 
-A heading "Current Era" separates this section from the rest of the page.
+When the tool loads it initialises in two stages:
 
-A two-column layout shows a grid of stat cards on the left and a live monitor on the right.
+1. **Archive sync phase** — Opens a WebSocket to the archive node, discovers on-chain staking and session pallet storage keys, reads the active era, and performs a binary search to find the precise start block of the current era. The status bar shows a pulsing cyan dot and the label "Syncing from archive node…"
+2. **Live connection phase** — Closes the archive connection and opens a persistent WebSocket to the live relay node. Subscribes to new block headers to update block, session, and progress stats in real time. Status progresses to "Connecting to live node…" (amber dot), then to "Live" (solid green dot) once data is streaming.
 
-#### Stat cards (left column — 2 rows × 3 columns)
-Each card shows a label at the top and a number beneath it.
+If the archive sync step fails (e.g. network timeout), the tool logs a warning and continues to the live connection phase so that at minimum the block and session counters still update.
 
-| Card label | What it shows |
-|---|---|
-| **Active Era** | The current era number, highlighted in purple. |
-| **Era Start Block** | The block number where the current era began. |
-| **Era End Block** | The estimated block number where the current era will end. A note reads "start + 14,399 (est.)". |
-| **Session Index** | The current session number within the era. |
-| **Current Block** | The latest block number on the chain. |
-| **Blocks Remaining** | How many blocks are left until the current era ends. |
+---
+
+### Status bar
+
+A narrow strip at the very top of the tool area. A small coloured dot on the left and a text label describe the current state.
+
+| Dot colour | Label | Meaning |
+|---|---|---|
+| Grey (static) | Idle | Tool has not started yet. |
+| Cyan (pulsing) | Syncing from archive node… | Archive WebSocket is open; binary-searching era start block. |
+| Amber (pulsing) | Connecting to live node… | Archive work complete; opening the live block-subscription WebSocket. |
+| Green (static) | Live | All data is streaming in real time. |
+| Red (static) | Disconnected — reconnecting… | Live connection dropped; automatic reconnect pending. |
+
+On the right side of the status bar, a grey monospace label shows the number of eras preloaded from the CSV reference file (e.g. "85 eras preloaded"), when available.
+
+---
+
+### Stats grid + EKG monitor
+
+The main panel below the status bar splits into two columns on desktop, stacking vertically on mobile.
+
+#### Left column — Stat cards (3 columns × 2 rows on desktop, 2 columns on mobile)
+
+Each card shows a small uppercase label and a bold monospace value.
+
+| Card label | Accent colour | What it shows |
+|---|---|---|
+| **Active Era** | Cyan | The current era number. |
+| **Era Starts** | Default | Block number where the current era began. Populated after archive sync completes. |
+| **Era Ends** | Default | Estimated last block of the current era (Era Starts + 14,399). |
+| **Session** | Default | The current session index within the era. |
+| **Block** | Cyan | The latest block number, updating live with each new block. |
+| **Blocks Left** | Default | Blocks remaining until the estimated era end. |
+
+All values display "—" until the relevant data has arrived. "Era Starts", "Era Ends", and "Blocks Left" remain "—" until the archive sync phase completes successfully.
 
 #### Right column
-- **Block Activity monitor** — A live animated waveform (EKG-style graph) that pulses with each new block. Labelled "Block Activity".
-- **Era progress card** — Shows the label "Era progress", a percentage figure, and a coloured animated progress bar filling left to right.
+
+- **Block Activity monitor** — A canvas panel showing an EKG-style animated waveform on a near-black background. Each new block triggers a glowing cyan heartbeat pulse that sweeps left to right. Labelled "Block Activity" in small uppercase text at the top of the panel.
+- **Era progress card** — A smaller card below the canvas. Shows "Era progress" on the left, the current percentage (e.g. "47%") on the right, and a thin gradient progress bar (purple → cyan) that advances smoothly as each new block arrives.
 
 ---
 
-### Past Era Lookup section
+### Past Era Lookup
 
-A heading "Past Era Lookup" separates this section.
+A card below the stats panel.
 
-A card contains the entire lookup interface:
+- **Heading** — "Past Era Lookup" in small semibold text.
+- **Era number input** — A monospace number field. Placeholder: "Era number". Accepts non-negative integers only.
+- **"Look Up" button** — Submits the lookup. Idle state: search icon + "Look Up" label. In-progress state: pulsing text "Searching…". Disabled when the input is empty.
 
-- **Hint text** — A short status or instruction message (e.g. "Discovering pallets and syncing live data…" while loading, or instructions once ready).
-- **"Era index" label** — Text label for the input field.
-- **Era index input** — A number field where the user types any past era number (e.g. "100").
-- **"Look up" button** — Triggers the lookup. Disabled until the app has connected to the chain.
+The lookup first checks the preloaded CSV reference (`relay-era-reference.csv`). If found, results appear immediately. Otherwise the tool opens a short archive WebSocket session and binary-searches the chain for the start block.
 
-Once a valid era is looked up, four result cards appear:
+#### Lookup result cards
 
-| Result card label | What it shows |
-|---|---|
-| **Start Block** | The block number where that era began. A pill badge below indicates whether the value came from the live RPC or from a pre-computed CSV reference. |
-| **End Block** | The block number where that era ended. Same pill badge. |
-| **Start UTC** | The UTC date and time when that era started. |
-| **End UTC** | The UTC date and time when that era ended. |
+On success, a responsive grid of result cards fades in below the form.
 
-Each date/time card also has:
-- **"Show in my local time" toggle** — A button that switches the displayed time between UTC and the user's local timezone.
+| Result card | Grid span | What it shows |
+|---|---|---|
+| **Era** | Narrow column | The queried era number, highlighted in cyan. |
+| **Start Block** | 1 column | Block number where that era began, in monospace. |
+| **End Block** | 1 column | Block number where that era ended, in monospace. |
+| **Source** | 1 column | Short text indicating data origin — either "CSV reference" (fast) or the archive RPC path. |
+| **Start (UTC)** | 2 columns | ISO-format UTC date and time when the era started. Shown only when CSV date data is available. |
+| **End (UTC)** | 2 columns | ISO-format UTC date and time when the era ended. Shown only when CSV date data is available. |
+| **Start Block Hash** | Full width | Full hex hash of the era's first block, wrapping on small screens. Shown only when the archive RPC returned it. |
 
-An additional result card may appear:
-- **Start Block Hash** — The cryptographic hash of the era's starting block, displayed in truncated form. Includes a **copy icon button** to copy the full hash to the clipboard.
+#### Error state
 
-**Alert box** — A coloured message strip that may appear below the result cards to show warnings, errors, or informational notes.
+If the lookup fails, a red-tinted message strip appears below the form with the error description.
 
 ---
 
-### Debug / Pallet Discovery panel
+### Debug panel
 
-A collapsible panel below the lookup card. Its header shows a bug icon and the label "Debug / Pallet Discovery" with a collapse arrow.
+A collapsible card below the lookup.
 
-When expanded, it shows a table of raw technical diagnostics including WebSocket connection state, discovered pallet names, storage key values, and the last error — useful for troubleshooting connectivity issues.
+- **Header bar** — Dark background with the small uppercase label "Debug" on the left and a chevron arrow on the right. Clicking the bar toggles the panel.
+- **Expanded content** — A two-column grid of raw diagnostic key-value pairs in monospace:
+  - WS state · Staking pallet · Session pallet
+  - Block hex · Block dec
+  - Era hex · Era raw
+  - Session hex · Session raw
+  - Last error
 
 ---
 
 ### RPC Call Log (sticky footer)
 
-A thin bar fixed at the very bottom of the screen. It shows the terminal icon, the label "LOGS" or "RPC Call Log", and a preview of the last log message. Clicking it expands a scrollable log panel showing all timestamped messages from the live RPC connection.
+A thin collapsible bar fixed at the bottom of the screen.
+
+- **Toggle bar** — Always visible. Shows a terminal icon, the label "LOGS" in small uppercase, a preview of the most recent log message, and a count badge with the total number of entries. Clicking the bar expands or collapses the full log.
+- **Log body** — Scrollable list of timestamped messages with colour-coded level tags: **[INFO]**, **[OK]**, **[WARN]**, **[ERR]**.
+- **Idle state** — Before any messages arrive, the preview shows "—".
 
 ---
 
@@ -390,7 +429,7 @@ A small section heading labelled "RPC CONFIGURATION".
 A toggle row labelled "QUERY RANGE" switches between two range modes:
 
 - **"Block Range" toggle button** — Select this to enter block numbers directly.
-- **"Date Range" toggle button** (with a calendar icon) — Select this to enter calendar dates.
+- **"Date Range" toggle button** (with a calendar icon) — Select this to enter calendar dates. **This button is only enabled when the selected endpoint is the Enjin Relaychain archive node** (`wss://archive.relay.blockchain.enjin.io`), because date-to-block resolution relies on the `relay-era-reference.csv` reference file which covers the Relaychain only. For all other networks (Matrixchain, custom endpoints) the button is visually greyed out and non-interactive. Hovering over the disabled button shows a tooltip: "Date Range is only available for Enjin Relaychain archive endpoint". If the user switches away from the Relaychain while Date Range mode is active, the tool automatically reverts to Block Range mode.
 
 **When "Block Range" is selected:**
 - **"Start Block" label** and number input — Placeholder: "e.g. 1000000"
@@ -415,13 +454,17 @@ Below the range inputs, an informational line shows:
 
 #### Action buttons
 
-- **"FETCH" button** (primary, blue/purple) — Starts the query. Disabled if required fields are missing.
-- **"CANCEL" button** (red stop button, visible while fetching) — Stops the in-progress WebSocket query.
-- **"RESET" button** (with a rotate icon, visible after results are loaded) — Clears results and resets the form.
+Exactly one primary button is shown at any given time, cycling through three states:
 
-**Progress bar** — Visible while a fetch is in progress. Shows a colour gradient bar with percentage text.
+- **"Fetch Balance" button** (primary colour, activity/waveform icon) — Shown when no results are loaded and a fetch is not running. Starts the archive-node query. Disabled if the address field is empty or the required range fields are not filled.
+- **"STOP" button** (red, square icon) — Replaces "Fetch Balance" while a query is in progress. Immediately cancels the WebSocket connection and halts further RPC calls.
+- **"RESET" button** (primary colour, rotate/undo icon) — Replaces "Fetch Balance" only after results have been returned (at least one balance record exists). Clears all results and returns the tool to its initial empty state. If a query fails or is cancelled with no results loaded, the "Fetch Balance" button is shown again rather than RESET, so the user can retry immediately without needing to reset.
 
-**Error message** — A red alert strip that appears if the connection or query fails.
+**Progress bar** — Visible during an active fetch. Shows the block-fetch progress as text (e.g. "Block 1,000,500 / 1,001,000") and a percentage, with a cyan fill bar advancing left to right.
+
+**Estimate row** — Below the range inputs (not the action buttons). Shows the estimated number of RPC calls and estimated time for the current range and step values, e.g. "~250 RPC calls · ~2m 30s". If the estimate exceeds the per-query call limit, an amber warning replaces the estimate.
+
+**Error message** — A red alert strip (with a warning triangle icon) appears inside the query pane if the connection or query fails. It is dismissed automatically when the user starts a new fetch or resets.
 
 ---
 
