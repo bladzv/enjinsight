@@ -7,10 +7,11 @@
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/bladzv/enjinsight?style=flat-square" /></a>
 </p>
 
-A read-only, static-frontend monitoring suite for the Enjin Blockchain. It bundles two independent on-chain tools:
+A read-only, static-frontend monitoring suite for the Enjin Blockchain. It bundles three independent on-chain tools:
 
 1. **Staking Rewards Cadence** — scans validators and nomination pools for missing reward payouts using the Subscan API.
 2. **Historical Balance Viewer** — queries any address balance over a block range directly via archive-node WebSocket RPC, with chart visualisation and encrypted export/import.
+3. **Era Block Explorer** — maps Enjin Relaychain era numbers to block heights, timestamps, and block hashes using a bundled era-reference dataset.
 
 ## Live Site
 
@@ -40,16 +41,26 @@ https://enjinsight.vercel.app/
 - Connects directly to a public archive-node WebSocket endpoint (Matrixchain, Relaychain, Canary networks, or a custom URL)
 - Queries `System.Account` storage at each sampled block in the given range via `state_getStorageAt`
 - SCALE-decodes both the legacy (misc+fee frozen) and the new (frozen+flags) `AccountInfo` formats
+- **Dual query mode** — enter a raw block range *or* a calendar date range; date mode resolves start/end blocks from the bundled era-reference CSV automatically
+- **Quick date presets** — 1 day, 1 week, 1 month, 3 months, 6 months, 1 year ago
 - Real-time SS58 address validation with cross-network prefix conversion
 - Stacked bar / per-field line chart with crosshair, smart tooltip, and height zoom
 - Sortable balance history table with text-size zoom
 - Export to **JSON / CSV / XML** (plain or **AES-256-GCM encrypted**); re-import offline
 - Progress bar and activity log during query; cancellable at any time
 
+### Era Block Explorer
+
+- Instant lookup of any Enjin Relaychain era → start/end block, timestamp, and block hash
+- Powered by a bundled `era-reference.csv` covering era 1 (June 2023) through the most recent known era
+- No API key or network connection required — fully offline-capable
+
 ### UI/UX
 - Landing page with tool selector; in-app navigation with breadcrumb and back button
+- **URL hash routing** — active tool persists across page refreshes (`#staking`, `#balance`, `#era`)
 - Single `CHECK → STOP → RESET` action cycle for the staking scanner
 - Step-numbered progress bar with per-phase status and item counts
+- Sticky terminal log drawer always visible at the bottom of tool pages
 - Expandable cards, paginated tables, terminal-style log with timestamps
 - Mobile and desktop responsive; fully static — no back-end server required
 - WCAG AA-compliant colour contrast throughout
@@ -86,7 +97,10 @@ https://enjinsight.vercel.app/
 │   ├── ui_design_system.md                       # Dark-tech UI/UX design system reference
 │   ├── validator_reward_checker_PRD_v1.md        # PRD v1 — validator reward checker (original)
 │   └── vercel_deployment_guide.md               # Step-by-step Vercel deployment instructions
-├── public/                 # Static assets (logo, favicons, site.webmanifest)
+├── public/
+│   ├── era-explorer.html   # Standalone era block explorer page (iframe target)
+│   ├── era-reference.csv   # Era → block/timestamp/hash reference dataset (era 1–1006)
+│   └── site.webmanifest
 ├── src/
 │   ├── components/
 │   │   ├── AppHeader.jsx           # Sticky header with breadcrumb navigation
@@ -106,7 +120,8 @@ https://enjinsight.vercel.app/
 │   │   ├── BalanceChart.jsx        # Chart.js balance history chart
 │   │   ├── BalanceTable.jsx        # Sortable balance history table
 │   │   ├── BalanceExportPanel.jsx  # JSON / CSV / XML export (with encryption)
-│   │   └── BalanceImportPanel.jsx  # Drag-and-drop file import (with decryption)
+│   │   ├── BalanceImportPanel.jsx  # Drag-and-drop file import (with decryption)
+│   │   └── EraBlockExplorer.jsx    # Era Block Explorer — iframe wrapper for era-explorer.html
 │   ├── hooks/
 │   │   ├── useValidatorChecker.js  # State machine for validator scanning
 │   │   ├── usePoolChecker.js       # State machine for pool scanning

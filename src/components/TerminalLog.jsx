@@ -9,14 +9,18 @@ const LEVEL_CLASS = {
   DONE: 'log-done',
 }
 
-export default function TerminalLog({ logs }) {
+export default function TerminalLog({ logs, sticky = false }) {
   const [expanded, setExpanded] = useState(false)
   const endRef = useRef(null)
 
   const lastLog = logs[logs.length - 1]
 
+  const wrapClass = sticky
+    ? 'fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-ink/95 backdrop-blur overflow-hidden font-mono text-xs'
+    : 'card overflow-hidden font-mono text-xs'
+
   return (
-    <div className="card overflow-hidden font-mono text-xs">
+    <div className={wrapClass}>
       {/* Toggle bar — always visible */}
       <button
         onClick={() => setExpanded(e => !e)}

@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Era Block Explorer — Enjin Relay</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+/* ── Design system tokens ─────────────────────────────────────────────────── */
+:root {
+  --ink:          #08080E;
+  --surface:      #0F0F1A;
+  --card:         #13131F;
+  --term:         #050508;
+  --border:       #1E1E35;
+  --rim:          #2A2A45;
+  --primary:      #7B3FE4;
+  --primary-dim:  #5A2DB0;
+  --primary-glow: #9B5FFF;
+  --cyan:         #00D4FF;
+  --cyan-dim:     #00A3CC;
+  --success:      #22C55E;
+  --warning:      #F59E0B;
+  --danger:       #EF4444;
+  --text:         #F0EEFF;
+  --text-sec:     #A9A8CC;
+  --dim:          #8B8AB0;
+  --muted:        #4A4A6A;
+  --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --sans: 'Sora', system-ui, sans-serif;
+  --radius-xl: 12px; --radius-lg: 8px; --radius-md: 6px;
+  --shadow-card: 0 4px 24px rgba(0,0,0,0.4);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background-color: var(--ink);
+  background-image: radial-gradient(circle, var(--rim) 1px, transparent 1px);
+  background-size: 28px 28px;
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  line-height: 1.5;
+  font-size: 14px;
+}
+/* ── Sticky header ─────────────────────────────────────────────────────────── */
+.app-header {
+  position: sticky; top: 0; z-index: 30;
+  background: rgba(8,8,14,0.9); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.header-inner {
+  max-width: 1152px; margin: 0 auto; padding: 0 1rem;
+  height: 56px; display: flex; align-items: center;
+  justify-content: space-between; gap: 1rem;
+}
+.header-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.logo-mark {
+  width: 32px; height: 32px; border-radius: var(--radius-lg);
+  background: rgba(123,63,228,0.2); border: 1px solid rgba(123,63,228,0.4);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.header-title { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.2; }
+.header-sub   { font-size: 11px; color: var(--dim); font-family: var(--mono); margin-top: 1px; }
+.header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+/* Status */
+.live-status { display: flex; align-items: center; gap: 6px; }
+.live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--danger); flex-shrink: 0; transition: background 0.4s;
+}
+.live-dot.live { background: var(--cyan); animation: pulse-dot 2s infinite; }
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.live-status, .live-text, .badge, .badge-preload { display: none !important; }
+.live-text { font-size: 11px; color: var(--dim); font-family: var(--mono); }
+/* Badges */
+.badge {
+  font-size: 11px; padding: 2px 8px; border-radius: 4px;
+  background: rgba(30,30,53,0.8); color: var(--dim);
+  border: 1px solid var(--border); font-family: var(--mono);
+}
+.badge-preload {
+  font-size: 10px; padding: 2px 8px; border-radius: 100px;
+  background: rgba(34,197,94,0.1); color: var(--success);
+  border: 1px solid rgba(34,197,94,0.25); font-family: var(--mono); font-weight: 600;
+}
+/* Retry button */
+.btn-ghost {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 4px; padding: 4px 12px; border-radius: var(--radius-lg);
+  color: var(--dim); background: transparent; border: 1px solid var(--border);
+  font-size: 11px; font-weight: 500; cursor: pointer; font-family: var(--sans);
+  transition: color 0.15s, background 0.15s;
+}
+.btn-ghost:hover { color: var(--text); background: var(--border); }
+.retry-btn { display: none; }
+/* ── Page ──────────────────────────────────────────────────────────────────── */
+.page { max-width: 1152px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+/* Section header */
+.section-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.section-title { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.section-rule  { height: 1px; flex: 1; background: var(--border); }
+/* ── Stat grid ─────────────────────────────────────────────────────────────── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px; margin-bottom: 1rem;
+}
+.stat-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-xl); padding: 11px 11px;
+  box-shadow: var(--shadow-card);
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center;
+}
+.stat-card.accent { border-color: rgba(123,63,228,0.4); }
+.stat-label {
+  font-size: 10px; color: var(--dim); text-transform: uppercase;
+  letter-spacing: 0.07em; font-weight: 600; margin-bottom: 4px;
+}
+.stat-value { font-size: 22px; font-weight: 600; font-family: var(--mono); color: var(--text); }
+.stat-value.dim    { color: var(--muted); }
+.stat-value.accent { color: var(--primary-glow); }
+.stat-sub { font-size: 9px; color: var(--dim); margin-top: 2px; font-family: var(--mono); }
+.flash { animation: fl 0.35s ease; }
+@keyframes fl { 0%,100%{opacity:1} 50%{opacity:0.2} }
+/* ── Progress ──────────────────────────────────────────────────────────────── */
+.prog-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+.prog-label { font-size: 12px; color: var(--text-sec); }
+.prog-pct   { font-family: var(--mono); font-weight: 600; color: var(--text); font-size: 13px; }
+.prog-track {
+  height: 6px; background: var(--surface); border-radius: 3px;
+  overflow: hidden; margin-bottom: 1.5rem; border: 1px solid var(--border);
+}
+@keyframes prog-flow {
+  0%   { background-position: 100% center; }
+  100% { background-position: -100% center; }
+}
+.prog-fill {
+  height: 100%;
+  background: linear-gradient(90deg,
+    var(--primary-dim),
+    var(--primary),
+    var(--primary-glow),
+    var(--cyan-dim),
+    var(--primary-glow),
+    var(--primary)
+  );
+  background-size: 300% 100%;
+  animation: prog-flow 3s linear infinite;
+  border-radius: 3px; width: 0%; transition: width 0.9s ease;
+}
+.divider { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+/* ── Card ──────────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-xl); box-shadow: var(--shadow-card);
+}
+/* ── Lookup card ───────────────────────────────────────────────────────────── */
+.lookup-card { padding: 18px; margin-bottom: 1rem; }
+.hint-text { font-size: 11px; color: var(--dim); margin-bottom: 14px; line-height: 1.65; font-family: var(--mono); }
+.hint-text--emph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  color: #7B3FE4;
+  font-size: 13px;
+  font-weight: 700;
+  background: radial-gradient(circle at 15% 50%, rgba(123,63,228,0.17), rgba(0,0,0,0));
+  border: 1px solid rgba(123,63,228,0.4);
+  border-radius: 8px;
+  padding: 6px 10px;
+  box-shadow: 0 2px 15px rgba(123,63,228,0.15);
+  animation: hintPulse 2.4s ease-in-out infinite;
+}
+@keyframes hintPulse {
+  0%, 100% { transform: translateY(0); opacity: 1; }
+  50% { transform: translateY(-1px); opacity: 0.9; }
+}
+.input-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.input-label { font-size: 12px; color: var(--text-sec); white-space: nowrap; }
+.era-input {
+  width: 110px; background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  font-family: var(--mono); font-size: 14px; padding: 8px 12px;
+  outline: none; -moz-appearance: textfield; transition: border-color 0.15s;
+}
+.era-input::-webkit-outer-spin-button,
+.era-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.era-input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(123,63,228,0.2); }
+.btn-primary {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px; padding: 8px 18px; border-radius: var(--radius-lg);
+  background: var(--primary); color: #fff; font-weight: 600;
+  font-size: 13px; border: none; cursor: pointer; font-family: var(--sans);
+  transition: background 0.15s;
+}
+.btn-primary:hover    { background: var(--primary-glow); }
+.btn-primary:active   { background: var(--primary-dim); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+/* ── Result grid ───────────────────────────────────────────────────────────── */
+.rg { display: none; grid-template-columns: minmax(120px, 1fr) minmax(120px, 1fr) minmax(260px, 2fr) minmax(260px, 2fr); gap: 8px; }
+#resDateCard, #resEndDateCard { min-width: 260px; }
+.rc { background: var(--surface); border-radius: var(--radius-lg); padding: 12px 14px; border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; text-align: center; }
+.rl { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; margin-bottom: 6px; text-align: center; }
+.rv { font-size: 16px; font-weight: 500; font-family: var(--mono); color: var(--text); word-break: break-all; }
+.rv.dim { color: var(--muted); }
+.pill { display: inline-block; font-size: 9px; padding: 2px 7px; border-radius: 4px; margin-top: 5px; font-family: var(--mono); font-weight: 600; }
+.pill-rpc  { background: rgba(0,212,255,0.1); color: var(--cyan);  border: 1px solid rgba(0,212,255,0.25); }
+.pill-math { background: rgba(34,197,94,0.1); color: var(--success); border: 1px solid rgba(34,197,94,0.25); }
+/* Buttons */
+.btn-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 32px; min-height: 32px; border-radius: var(--radius-md);
+  color: var(--dim); background: transparent; border: 1px solid var(--border);
+  cursor: pointer; font-size: 12px; font-family: var(--mono);
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.btn-icon:hover { color: var(--cyan); border-color: rgba(0,212,255,0.3); background: rgba(0,212,255,0.05); }
+.date-toggle {
+  display: inline-block; box-sizing: border-box;
+  max-width: 170px; width: 100%; height: 36px; text-align: center;
+  font-family: var(--mono); font-size: 11px; padding: 6px 10px;
+  border-radius: var(--radius-md); background: transparent;
+  color: var(--dim); border: 1px solid var(--border); cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.date-toggle:hover { color: var(--cyan); border-color: rgba(0,212,255,0.3); }
+/* ── Alert ─────────────────────────────────────────────────────────────────── */
+.alert { font-size: 11px; line-height: 1.65; padding: 10px 12px; border-radius: var(--radius-md); margin-top: 12px; font-family: var(--mono); display: none; }
+.alert.warn { background: rgba(245,158,11,0.08); color: var(--warning);     border: 1px solid rgba(245,158,11,0.25); }
+.alert.err  { background: rgba(239,68,68,0.08);  color: var(--danger);      border: 1px solid rgba(239,68,68,0.2); }
+.alert.info { background: rgba(123,63,228,0.08); color: var(--primary-glow); border: 1px solid rgba(123,63,228,0.25); }
+.alert.ok   { background: rgba(34,197,94,0.08);  color: var(--success);     border: 1px solid rgba(34,197,94,0.2); }
+/* ── Debug drawer ──────────────────────────────────────────────────────────── */
+.debug-panel {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-xl); overflow: hidden; margin-bottom: 1rem;
+  box-shadow: var(--shadow-card);
+}
+.debug-toggle {
+  width: 100%; background: none; border: none; color: var(--dim);
+  font-size: 11px; font-family: var(--mono); padding: 10px 16px;
+  cursor: pointer; text-align: left; display: flex;
+  justify-content: space-between; transition: background 0.15s;
+}
+.debug-toggle:hover { background: var(--surface); }
+.dbb { display: none; border-top: 1px solid var(--border); padding: 12px 16px; }
+.dbb.open { display: block; }
+.dbr { display: grid; grid-template-columns: 185px 1fr; gap: 8px; font-size: 11px; font-family: var(--mono); margin-bottom: 5px; align-items: start; }
+.dbk { color: var(--muted); }
+.dbv { color: var(--dim); word-break: break-all; }
+.dbv.ok   { color: var(--success); }
+.dbv.bad  { color: var(--danger); }
+.dbv.warn { color: var(--warning); }
+/* ── Era info layout ────────────────────────────────────────────────────────────────── */
+.era-layout { display: flex; gap: 7px; margin-bottom: 1rem; align-items: stretch; }
+.stats-2x3  { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; flex: 0 0 60%; max-width: 60%; min-width: 0; }
+/* ── Right column: monitor + progress stacked ────────────────────────────────── */
+.era-right  { flex: 0 0 40%; max-width: 40%; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+/* ── Heart monitor card ─────────────────────────────────────────────────────────────── */
+.monitor-card {
+  flex: 1;
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 6px 11px 6px;
+  min-height: 0;
+  /* Match the grid height: 2 rows × stat card height + gap */
+  max-height: calc(2 * (10px + 12px + 4px + 9px + 2px + 9px + 5px) + 7px);
+}
+.monitor-label { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; }
+.ekg-canvas    { flex: 1; min-height: 40px; width: 100%; height: 100%; display: block; border-radius: var(--radius-md); background: var(--term); object-fit: cover; }
+.monitor-meta  { font-size: 10px; font-family: var(--mono); color: var(--cyan); opacity: 0.75; text-align: right; line-height: 1; }
+/* ── Progress card (in right column) ──────────────────────────────────────────── */
+.prog-card {
+  padding: 6px 11px;
+  flex-shrink: 0;
+  align-items: stretch;
+  min-height: 80px; /* ensure bottom border aligns with left stats stack */
+}
+.prog-card .prog-row {
+  margin-bottom: 3px;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.prog-card .prog-track {
+  margin-bottom: 0;
+  height: 6px;
+  border-radius: 3px;
+  width: 100%;
+}
+.prog-card .prog-track .prog-fill {
+  width: 0;
+  transition: width 0.9s ease;
+}
+
+/* ── Mobile layout ─────────────────────────────────────────────────────────────── */
+@media (max-width: 700px) {
+  .era-layout   { flex-direction: column; }
+  .stats-2x3  { flex: none; max-width: 100%; width: 100%; grid-template-columns: repeat(2, 1fr); }
+  .era-right  { flex: none; max-width: 100%; width: 100%; flex-direction: row; }
+  .monitor-card { max-height: 120px; flex: 1; }
+  .prog-card    { flex: 0 0 140px; }
+  .header-inner { flex-wrap: wrap; gap: 6px; }
+  .header-left  { min-width: 0; flex: 1; }
+  .header-right { flex-wrap: wrap; gap: 6px; }
+  .header-sub   { font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+  .page { padding: 0.75rem 0.5rem 5rem; }
+  .dbr  { grid-template-columns: 130px 1fr; }
+}
+@media (max-width: 400px) {
+  .stats-2x3 { grid-template-columns: repeat(2, 1fr); }
+  .era-right { flex-direction: column; }
+  .prog-card { flex: none; width: 100%; }
+  .monitor-card { max-height: 90px; }
+}
+/* ── Log / Terminal ────────────────────────────────────────────────────────── */
+.log-panel {
+  background: var(--card); border-top: 1px solid var(--border);
+  border-radius: 0; overflow: hidden;
+  box-shadow: var(--shadow-card); position: fixed; left: 0; right: 0; bottom: 0; width: 100%; z-index: 9999;
+}
+.log-toggle {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px; background: var(--term); border: none;
+  cursor: pointer; text-align: left; transition: background 0.15s;
+}
+.log-toggle:hover { background: rgba(15,15,26,0.8); }
+.log-icon  { color: var(--primary); flex-shrink: 0; }
+.log-label { font-size: 11px; font-family: var(--mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim); }
+.log-last  { flex: 1; font-size: 11px; font-family: var(--mono); color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; margin-left: 8px; }
+.log-arr   { font-family: var(--mono); font-size: 11px; color: var(--dim); flex-shrink: 0; }
+.log-body  { background: var(--term); overflow-y: auto; max-height: min(260px, 40vh); display: none; border-top: 1px solid var(--border); }
+.log-body.open { display: block; }
+.log-box   { padding: 12px 16px; }
+.le { display: grid; grid-template-columns: 62px 1fr; gap: 8px; font-size: 11px; line-height: 1.65; margin-bottom: 1px; }
+.lt { color: var(--muted); font-family: var(--mono); }
+.lb { font-family: var(--mono); color: var(--dim); word-break: break-all; }
+.lm { color: var(--cyan); } .lr { color: var(--muted); } .le-err { color: var(--danger); }
+/* footer removed — log panel is now the sticky footer */
+/* ── Scrollbar ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--ink); }
+::-webkit-scrollbar-thumb { background: var(--rim); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Header removed -->
+
+<div class="page">
+
+  <!-- Current Era -->
+  <div class="section-hd">
+    <span class="section-title">Current Era</span>
+    <span class="section-rule"></span>
+  </div>
+  <div class="era-layout">
+    <div class="stats-2x3">
+      <div class="stat-card accent">
+        <div class="stat-label">Active Era</div>
+        <div class="stat-value accent dim" id="eraIndex">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Era Start Block</div>
+        <div class="stat-value dim" id="eraStart">—</div>
+        <div class="stat-sub" id="eraStartMethod">syncing…</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Era End Block</div>
+        <div class="stat-value dim" id="eraEnd">—</div>
+        <div class="stat-sub">start + 14,399 <span style="opacity:0.65">(est.)</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Session Index</div>
+        <div class="stat-value dim" id="sessionIdx">—</div>
+        <div class="stat-sub" id="sessInEraLabel"></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Current Block</div>
+        <div class="stat-value dim" id="curBlock">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Blocks Remaining</div>
+        <div class="stat-value dim" id="remaining">—</div>
+      </div>
+    </div>
+    <div class="era-right">
+      <div class="stat-card monitor-card" aria-label="Block activity monitor">
+        <div class="monitor-label">Block Activity</div>
+        <canvas id="ekg-canvas" class="ekg-canvas"></canvas>
+      </div>
+      <div class="stat-card prog-card">
+        <div class="prog-row">
+          <span class="prog-label">Era progress</span>
+          <span class="prog-pct" id="progPct">—</span>
+        </div>
+        <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider" />
+
+  <!-- Past Era Lookup -->
+  <div class="section-hd">
+    <span class="section-title">Past Era Lookup</span>
+    <span class="section-rule"></span>
+  </div>
+  <div class="card lookup-card">
+    <div class="hint-text" id="hintText">Discovering pallets and syncing live data…</div>
+    <div class="input-row">
+      <label class="input-label">Era index</label>
+      <input type="number" id="eraInput" class="era-input" placeholder="e.g. 100" min="0" />
+      <button id="lookupBtn" class="btn-primary" disabled>
+        <!-- Lucide: search -->
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        Look up
+      </button>
+    </div>
+    <div class="rg" id="rg">
+      <div class="rc">
+        <div class="rl">Start Block</div>
+        <div class="rv dim" id="resStart">—</div>
+        <div class="pill" id="startPill"></div>
+      </div>
+      <div class="rc">
+        <div class="rl">End Block</div>
+        <div class="rv dim" id="resEnd">—</div>
+        <div class="pill" id="endPill"></div>
+      </div>
+      <div class="rc" id="resDateCard" style="display:none">
+        <div class="rl">Start UTC</div>
+        <div class="rv dim" id="resStartDate">—</div>
+        <div style="margin-top:8px"><button id="resStartDateBtn" class="date-toggle">Show in my local time</button></div>
+      </div>
+      <div class="rc" id="resEndDateCard" style="display:none">
+        <div class="rl">End UTC</div>
+        <div class="rv dim" id="resEndDate">—</div>
+        <div style="margin-top:8px"><button id="resEndDateBtn" class="date-toggle">Show in my local time</button></div>
+      </div>
+      <div class="rc" id="resHashCard" style="display:none; grid-column:1/-1">
+        <div class="rl">Start Block Hash</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="rv dim" id="resHash" style="font-size:10px;word-break:break-all">—</div>
+          <button id="copyResHashBtn" class="btn-icon" title="Copy hash" aria-label="Copy block hash">
+            <!-- Lucide: copy -->
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="alert" id="alertBox"></div>
+  </div>
+
+  <!-- Debug drawer -->
+  <div class="debug-panel">
+    <button class="debug-toggle" onclick="toggleDebug()">
+      <!-- Lucide: bug -->
+      <span style="display:inline-flex;align-items:center;gap:6px">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="8" y="6" width="8" height="14" rx="4"/>
+          <path d="M19 7l-3 2M5 7l3 2M19 12h-5M5 12h5M19 17l-3-2M5 17l3-2"/>
+        </svg>
+        Debug / Pallet Discovery
+      </span>
+      <span id="dbArrow">▶</span>
+    </button>
+    <div class="dbb" id="dbb">
+      <div class="dbr"><span class="dbk">ws.state</span>        <span class="dbv" id="dbWs">—</span></div>
+      <div class="dbr"><span class="dbk">staking pallet</span>  <span class="dbv" id="dbStakingPallet">searching…</span></div>
+      <div class="dbr"><span class="dbk">session pallet</span>  <span class="dbv" id="dbSessionPallet">searching…</span></div>
+      <div class="dbr"><span class="dbk">activeEra key</span>   <span class="dbv" id="dbEraKey">—</span></div>
+      <div class="dbr"><span class="dbk">activeEra hex</span>   <span class="dbv" id="dbEraHex">—</span></div>
+      <div class="dbr"><span class="dbk">activeEra dec</span>   <span class="dbv" id="dbEraDec">—</span></div>
+      <div class="dbr"><span class="dbk">sessionIdx key</span>  <span class="dbv" id="dbSessKey">—</span></div>
+      <div class="dbr"><span class="dbk">sessionIdx hex</span>  <span class="dbv" id="dbSessHex">—</span></div>
+      <div class="dbr"><span class="dbk">sessionIdx dec</span>  <span class="dbv" id="dbSessDec">—</span></div>
+      <div class="dbr"><span class="dbk">currentBlock hex</span><span class="dbv" id="dbBlkHex">—</span></div>
+      <div class="dbr"><span class="dbk">currentBlock dec</span><span class="dbv" id="dbBlkDec">—</span></div>
+      <div class="dbr"><span class="dbk">last error</span>      <span class="dbv bad" id="dbErr">—</span></div>
+    </div>
+  </div>
+
+  <!-- RPC Log terminal (moved outside .page for full-width sticky footer) -->
+</div>
+
+<div class="log-panel">
+    <button class="log-toggle" onclick="toggleLog()" aria-expanded="false" id="logToggle">
+      <span class="log-icon">
+        <!-- Lucide: terminal -->
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+        </svg>
+      </span>
+      <span class="log-label">RPC Call Log</span>
+      <span class="log-last" id="logLast"></span>
+      <span class="log-arr" id="logArrow">▶</span>
+    </button>
+    <div class="log-body" id="logBody">
+      <div class="log-box" id="logBox" role="log" aria-live="polite"></div>
+    </div>
+  </div>
+
+
+<script>
+// ─── Constants ────────────────────────────────────────────────────────────────
+const WSS = 'wss://rpc.relay.blockchain.enjin.io';
+const ARCHIVE_WSS = 'wss://archive.relay.blockchain.enjin.io';
+const ERA_LEN = 14400, SESSION_LEN = 2400, SESSIONS_PER_ERA = 6, HISTORY_DEPTH = 84;
+
+// Candidate pallet names to try during discovery
+// Enjin may register pallet_staking under a non-standard identifier
+const STAKING_CANDIDATES = ['Staking', 'EnjinStaking', 'ParachainStaking', 'RelayStaking', 'PoAStaking'];
+const STAKING_ERA_ITEM   = ['ActiveEra', 'CurrentEra', 'active_era', 'current_era'];
+const SESSION_CANDIDATES = ['Session', 'EnjinSession', 'ParachainSession'];
+const SESSION_IDX_ITEM   = ['CurrentIndex', 'current_index', 'Index'];
+// ErasStartSessionIndex map item (under staking pallet)
+const ERA_START_ITEM     = 'ErasStartSessionIndex';
+
+
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let ws, pending = {}, reqId = 1;
+let S = { era: null, session: null, block: null, eraStartBlock: null };
+let KEYS = { activeEra: null, sessionIdx: null, eraStartPrefix: null };
+let eraSessionKeys = null;
+let connectAttempts = 0, killed = false;
+
+  // ─── CSV cache (auto-loaded on startup) ────────────────────────
+const csvEraCache   = {};  // era → { start_block, end_block, start_block_hash, start_datetime_utc, end_datetime_utc }
+const eraBlockCache = {};  // era → start block number (pre-populated from CSV)
+let lockedEraIndex  = null;  // era index for which eraStart is currently locked
+let lockedEraStart  = null;  // stable era start block — only changes when era changes
+
+// ─── xxHash64 (pure JS, BigInt) ───────────────────────────────────────────────
+// Used to dynamically compute Substrate TwoX128 storage keys
+function xxh64(data, seed) {
+  const P1=11400714785074694791n, P2=14029467366897019727n,
+        P3=1609587929392839161n,  P4=9650029242287828579n,
+        P5=2870177450012600261n,  M=(1n<<64n)-1n;
+  const lo = x => x & M;
+  const mul = (a,b) => lo(a*b);
+  const add = (a,b) => lo(a+b);
+  const rotl = (x,r) => lo((x<<r)|(x>>(64n-r)));
+  const round = (acc,inp) => mul(rotl(add(acc, mul(inp,P2)), 31n), P1);
+  const merge = (acc,val) => add(mul(lo(acc ^ round(0n,val)), P1), P4);
+  const s = BigInt(seed);
+  const dv = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const n = data.length;
+  let p=0, h;
+  if (n >= 32) {
+    let v1=add(add(s,P1),P2), v2=add(s,P2), v3=s, v4=lo(s-P1);
+    while (p<=n-32) {
+      v1=round(v1,dv.getBigUint64(p,true));   p+=8;
+      v2=round(v2,dv.getBigUint64(p,true));   p+=8;
+      v3=round(v3,dv.getBigUint64(p,true));   p+=8;
+      v4=round(v4,dv.getBigUint64(p,true));   p+=8;
+    }
+    h = add(add(add(rotl(v1,1n),rotl(v2,7n)),rotl(v3,12n)),rotl(v4,18n));
+    h = merge(merge(merge(merge(h,v1),v2),v3),v4);
+  } else { h = add(s,P5); }
+  h = add(h, BigInt(n));
+  while (p<=n-8) { h=add(mul(rotl(lo(h^round(0n,dv.getBigUint64(p,true))),27n),P1),P4); p+=8; }
+  if (p<=n-4)    { h=add(mul(rotl(lo(h^mul(BigInt(dv.getUint32(p,true)),P1)),23n),P2),P3); p+=4; }
+  while (p<n)    { h=mul(rotl(lo(h^mul(BigInt(data[p]),P5)),11n),P1); p++; }
+  h=mul(lo(h^(h>>33n)),P2); h=mul(lo(h^(h>>29n)),P3); return lo(h^(h>>32n));
+}
+
+function twox128(text) {
+  const b = new TextEncoder().encode(text);
+  const leHex = h => { let s=''; for(let i=0;i<8;i++) s+=Number((h>>(8n*BigInt(i)))&0xFFn).toString(16).padStart(2,'0'); return s; };
+  return leHex(xxh64(b,0)) + leHex(xxh64(b,1));
+}
+
+// Compute 32-byte storage key: TwoX128(pallet) + TwoX128(item)
+function storageKey(pallet, item) { return '0x' + twox128(pallet) + twox128(item); }
+// 16-byte prefix: just TwoX128(pallet)
+function palletPrefix(pallet) { return '0x' + twox128(pallet); }
+
+// Self-test: verify known value for "Staking"+"ActiveEra"
+const EXPECTED_ERA_KEY = '0x5f3e4907f716ac89b6347d15ececedca422adb579f1dbf4f3886c5cfa3bb8cc2';
+const computed = storageKey('Staking','ActiveEra');
+if (computed !== EXPECTED_ERA_KEY) {
+  console.error('xxHash64 self-test FAILED:', computed, 'expected', EXPECTED_ERA_KEY);
+} else {
+  console.log('xxHash64 self-test PASSED');
+}
+
+// ─── SCALE helpers ────────────────────────────────────────────────────────────
+function h2b(hex) {
+  hex=hex.replace('0x',''); const b=new Uint8Array(hex.length/2);
+  for(let i=0;i<hex.length;i+=2) b[i/2]=parseInt(hex.substr(i,2),16); return b;
+}
+function u32LE(b,o=0) { return (b[o]|b[o+1]<<8|b[o+2]<<16|b[o+3]*16777216)>>>0; }
+function hexToNum(h)  { return parseInt(h,16); }
+
+// activeEra may be bare u32 or Option<{index:u32, start:Option<u64>}>
+function decodeActiveEra(hex) {
+  if (!hex) return null;
+  const b = h2b(hex);
+  // Try Option<T> prefix (0x01 + u32)
+  if (b.length >= 5 && b[0] === 0x01) { const v=u32LE(b,1); if (v<1000000) return v; }
+  // Try bare u32
+  if (b.length >= 4) { const v=u32LE(b,0); if (v<1000000) return v; }
+  return null;
+}
+function decodeU32(hex) {
+  if (!hex) return null;
+  const b=h2b(hex); return b.length>=4 ? u32LE(b,0) : null;
+}
+
+// ─── Logging ──────────────────────────────────────────────────────────────────
+function ts() { return new Date().toTimeString().slice(0,8); }
+function log(m,r,isErr=false) {
+  const box=document.getElementById('logBox');
+  const e=document.createElement('div'); e.className='le';
+  const rv=r!=null?' → '+String(r).slice(0,70):'';
+  e.innerHTML=`<span class="lt">${ts()}</span><span class="lb"><span class="${isErr?'le-err':'lm'}">${m}</span><span class="lr">${rv}</span></span>`;
+  box.appendChild(e); while(box.children.length>32) box.removeChild(box.firstChild);
+  const ll=document.getElementById('logLast'); if(ll) ll.textContent=m+(rv||'');
+}
+
+// ─── Debug helpers ────────────────────────────────────────────────────────────
+function db(id,v,cls=null) { const el=document.getElementById(id); if(!el)return; el.textContent=String(v); if(cls) el.className='dbv '+cls; }
+function toggleDebug() { const b=document.getElementById('dbb'),a=document.getElementById('dbArrow'); b.classList.toggle('open'); a.textContent=b.classList.contains('open')?'▼':'▶'; }
+function toggleLog() { const b=document.getElementById('logBody'),a=document.getElementById('logArrow'),t=document.getElementById('logToggle'); const o=b.classList.toggle('open'); a.textContent=o?'▼':'▶'; t.setAttribute('aria-expanded',o); }
+
+// ─── UI ───────────────────────────────────────────────────────────────────────
+function fmt(n) { return n!=null?Number(n).toLocaleString():'—'; }
+function setV(id,v) {
+  const el=document.getElementById(id), s=String(v);
+  if(el.textContent!==s){el.textContent=s;el.classList.remove('dim');el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),400);}
+}
+function setStatus(ok,msg) {
+  document.getElementById('dot').className='dot'+(ok?' live':'');
+  document.getElementById('statusText').textContent=msg;
+  document.getElementById('retryBtn').style.display=ok?'none':'block';
+  db('dbWs',ok?'OPEN':'CLOSED',ok?'ok':'bad');
+}
+function showAlert(msg,type='info') { const el=document.getElementById('alertBox'); el.textContent=msg; el.className='alert '+type; el.style.display='block'; }
+function hideAlert() { document.getElementById('alertBox').style.display='none'; }
+
+function updateUI() {
+  const {era,session,block}=S;
+  if (era==null||block==null) return;
+
+  // Recompute era start only when era changes (or if not yet resolved for this era)
+  if (era !== lockedEraIndex || lockedEraStart === null) {
+    // Do not compute an interim era start from session math or CSV.
+    // Wait for the authoritative RPC binary-search (discoverKeys -> findEraStartBlockRpc)
+    lockedEraIndex = era;
+    S.eraStartBlock = lockedEraStart; // will remain null until RPC sets it
+  }
+
+  if (lockedEraStart == null) return;
+
+  // Debug display is updated by the path that sets lockedEraStart; no extra update needed here.
+
+  const eraEnd    = lockedEraStart + ERA_LEN - 1;
+  const remaining = Math.max(0, eraEnd - block);
+  const into      = Math.max(0, block - lockedEraStart);
+  const pct       = Math.min(100, Math.round(into / ERA_LEN * 100));
+
+  setV('eraIndex',  fmt(era));
+  setV('eraStart',  fmt(lockedEraStart));
+  setV('eraEnd',    fmt(eraEnd));
+  setV('curBlock',  fmt(block));
+  setV('remaining', fmt(remaining));
+  if (session!=null) {
+    setV('sessionIdx',fmt(session));
+    const sessInEra = Math.max(0, session - era*SESSIONS_PER_ERA);
+    document.getElementById('sessInEraLabel').textContent=`session ${sessInEra+1}/${SESSIONS_PER_ERA} in era`;
+  }
+  setV('progPct',pct+'%');
+  document.getElementById('progFill').style.width=pct+'%';
+  document.getElementById('lookupBtn').disabled=false;
+  updateHint();
+}
+
+function updateHint() {
+  const preloadCount = Object.keys(csvEraCache).length;
+  const hintEl = document.getElementById('hintText');
+  if (!hintEl) return;
+  if (preloadCount > 0) {
+    hintEl.textContent = `Preloaded: ${preloadCount} eras`;
+    hintEl.classList.add('hint-text--emph');
+  } else {
+    hintEl.textContent = 'No preloaded era data available';
+    hintEl.classList.remove('hint-text--emph');
+  }
+}
+
+// ─── Date formatting helpers ───────────────────────────────────────────────
+function pad2(n){return String(n).padStart(2,'0');}
+function formatUTC(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth()+1)}-${pad2(d.getUTCDate())} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())} UTC`;
+}
+function formatLocal(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  // Local formatted as YYYY-MM-DD HH:MM:SS with UTC offset (e.g. "UTC-07:00")
+  const yyyy = d.getFullYear();
+  const mm = pad2(d.getMonth()+1);
+  const dd = pad2(d.getDate());
+  const hh = pad2(d.getHours());
+  const mi = pad2(d.getMinutes());
+  const ss = pad2(d.getSeconds());
+  const offsetMin = -d.getTimezoneOffset(); // minutes ahead of UTC
+  const sign = offsetMin >= 0 ? '+' : '-';
+  const offH = pad2(Math.floor(Math.abs(offsetMin) / 60));
+  const offM = pad2(Math.abs(offsetMin) % 60);
+  const tzLabel = `UTC${sign}${offH}:${offM}`;
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss} ${tzLabel}`;
+}
+
+function attachDateToggle(buttonId, displayId) {
+  const btn = document.getElementById(buttonId);
+  const disp = document.getElementById(displayId);
+  if (!btn || !disp) return;
+  btn.addEventListener('click', () => {
+    const utc = disp.dataset.utc;
+    if (!utc) return;
+    const state = disp.dataset.state || 'utc';
+    if (state === 'utc') {
+      disp.textContent = formatLocal(utc);
+      disp.dataset.state = 'local';
+      btn.textContent = 'Show in UTC';
+    } else {
+      disp.textContent = formatUTC(utc);
+      disp.dataset.state = 'utc';
+      btn.textContent = 'Show in my local time';
+    }
+  });
+}
+// ─── Clipboard helper ─────────────────────────────────────────────────────
+async function copyToClipboard(text) {
+  if (!text) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+  ta.select(); try { document.execCommand('copy'); } finally { document.body.removeChild(ta); }
+}
+
+// ─── RPC wrapper ──────────────────────────────────────────────────────────────
+function rpc(method,params,ms=15000) {
+  return new Promise((res,rej) => {
+    if(!ws||ws.readyState!==WebSocket.OPEN) return rej(new Error('not connected'));
+    const id=reqId++;
+    const t=setTimeout(()=>{ delete pending[id]; rej(new Error(`timeout:${method}`)); },ms);
+    pending[id]={ resolve:v=>{clearTimeout(t);res(v);}, reject:e=>{clearTimeout(t);rej(e);} };
+    ws.send(JSON.stringify({jsonrpc:'2.0',id,method,params:params||[]}));
+    log(method,null);
+  });
+}
+
+// ─── Fetch current block immediately ─────────────────────────────────────────
+async function fetchBlock() {
+  try {
+    const h=await rpc('chain_getHeader',[]);
+    if (h?.number) { const bn=hexToNum(h.number); S.block=bn; EKG.beat(bn); db('dbBlkHex',h.number,'ok'); db('dbBlkDec',bn.toLocaleString(),'ok'); log('chain_getHeader','block='+bn.toLocaleString()); return; }
+  } catch(e) { log('chain_getHeader',e.message,true); db('dbErr',e.message,'bad'); }
+  try {
+    const hash=await rpc('chain_getFinalizedHead',[]);
+    const h=await rpc('chain_getHeader',[hash]);
+    if (h?.number) { const bn=hexToNum(h.number); S.block=bn; db('dbBlkHex',h.number,'ok'); db('dbBlkDec',bn.toLocaleString(),'ok'); log('getFinalizedHead+getHeader','block='+bn.toLocaleString()); }
+  } catch(e) { log('block fallback',e.message,true); db('dbErr','block fetch: '+e.message,'bad'); }
+}
+
+// ─── Dynamic pallet discovery ─────────────────────────────────────────────────
+// For each candidate pallet name, check if state_getStorage returns non-null
+// for each candidate storage item name under that pallet.
+async function discoverKeys() {
+  log('discover', 'trying staking pallet candidates…');
+  db('dbStakingPallet','searching…','warn');
+  db('dbSessionPallet','searching…','warn');
+
+  // ── Find staking pallet + ActiveEra item ──
+  let foundStakingKey = null, foundStakingName = null;
+  outer:
+  for (const pallet of STAKING_CANDIDATES) {
+    for (const item of STAKING_ERA_ITEM) {
+      const key = storageKey(pallet, item);
+      try {
+        const val = await rpc('state_getStorage',[key]);
+        if (val !== null && val !== undefined) {
+          foundStakingKey = key;
+          foundStakingName = `${pallet}.${item}`;
+          log('discover','found staking key: '+foundStakingName);
+          db('dbStakingPallet', foundStakingName, 'ok');
+          db('dbEraKey', key, 'ok');
+          KEYS.activeEra = key;
+          // Decode
+          const dec = decodeActiveEra(val);
+          db('dbEraHex', val, 'ok');
+          db('dbEraDec', dec!=null?String(dec):'decode failed', dec!=null?'ok':'bad');
+          if (dec!=null) { S.era=dec; log('decode era','era='+dec); }
+          // Build ErasStartSessionIndex prefix using same pallet name
+          KEYS.eraStartPrefix = '0x' + twox128(pallet) + twox128(ERA_START_ITEM);
+          break outer;
+        }
+      } catch(e) { /* try next */ }
+    }
+  }
+  if (!foundStakingKey) {
+    db('dbStakingPallet','NOT FOUND — pallet not discovered','bad');
+    log('discover','staking pallet not found in any candidate',true);
+    db('dbErr','staking pallet not found. Chain may use unknown pallet name.','bad');
+    // Last resort: use state_getKeys with the standard staking prefix to see what IS there
+    try {
+      const stdPrefix = palletPrefix('Staking');
+      const keys = await rpc('state_getKeys',[stdPrefix]);
+      if (keys && keys.length > 0) {
+        log('discover','std Staking prefix has '+keys.length+' keys — re-checking storage');
+        // The pallet exists but maybe with different item names — try first key directly
+        db('dbStakingPallet','Found via getKeys (item name mismatch?)','warn');
+      } else {
+        log('discover','std Staking prefix: 0 keys on this chain',true);
+      }
+    } catch(e) { log('state_getKeys staking',e.message,true); }
+  }
+
+  // ── Find session pallet + CurrentIndex item ──
+  let foundSessionKey = null;
+  outer2:
+  for (const pallet of SESSION_CANDIDATES) {
+    for (const item of SESSION_IDX_ITEM) {
+      const key = storageKey(pallet, item);
+      try {
+        const val = await rpc('state_getStorage',[key]);
+        if (val !== null && val !== undefined) {
+          foundSessionKey = key;
+          log('discover','found session key: '+pallet+'.'+item);
+          db('dbSessionPallet', pallet+'.'+item, 'ok');
+          db('dbSessKey', key, 'ok');
+          KEYS.sessionIdx = key;
+          const dec = decodeU32(val);
+          db('dbSessHex', val, 'ok');
+          db('dbSessDec', dec!=null?String(dec):'decode failed', dec!=null?'ok':'bad');
+          if (dec!=null) { S.session=dec; log('decode session','session='+dec); }
+          break outer2;
+        }
+      } catch(e) { /* try next */ }
+    }
+  }
+  if (!foundSessionKey) {
+    db('dbSessionPallet','NOT FOUND','bad');
+    log('discover','session pallet not found',true);
+  }
+
+  // Update badge
+  if (foundStakingKey || foundSessionKey) {
+    const badge = document.getElementById('palletBadge');
+    badge.textContent = foundStakingName || 'pallet discovered';
+    badge.style.display = 'inline';
+  }
+
+  updateUI();
+
+  // ── Proactively resolve current era start via ErasStartSessionIndex ──────────
+  // Prefer authoritative binary-search over ActiveEra (mirrors era-range-fetch.py)
+  if (KEYS.activeEra && S.era != null) {
+    try {
+      const hdr = await rpc('chain_getHeader', []);
+      const chainHead = hdr && hdr.number ? hexToNum(hdr.number) : null;
+      const sm = document.getElementById('eraStartMethod');
+      if (chainHead) {
+        const bs = await findEraStartBlockRpc(S.era, chainHead);
+        if (bs != null) {
+          eraBlockCache[S.era] = bs;
+          lockedEraStart = bs;
+          lockedEraIndex = S.era;
+          S.eraStartBlock = bs;
+          if (sm) sm.textContent = 'via Archive RPC';
+          updateUI();
+        } else {
+          if (sm) sm.textContent = 'archive lookup failed';
+        }
+      }
+    } catch (e) { log('discover findEraStart', e.message, true); if (sm) sm.textContent = 'archive lookup error'; }
+  }
+  if (KEYS.eraStartPrefix && S.era != null) {
+    try {
+      const eraKeys = await rpc('state_getKeys', [KEYS.eraStartPrefix]);
+      if (eraKeys && eraKeys.length > 0) {
+        eraSessionKeys = eraKeys;
+        log('discover', 'preloaded ' + eraKeys.length + ' era session keys');
+        // Find the storage key for the current era
+        let curEraKey = null;
+        for (const k of eraSessionKeys) {
+          const raw = k.replace('0x','');
+          const eraPart = raw.slice(-8);
+          if (u32LE(h2b('0x'+eraPart)) === S.era) { curEraKey = k; break; }
+        }
+        if (curEraKey && S.session != null && S.block != null) {
+          const val = await rpc('state_getStorage', [curEraKey]);
+          if (val) {
+            const esi = decodeU32(val);  // era start session index
+            if (esi != null) {
+              // Compute what rpc.relay reports, but do NOT apply it to the
+              // Current Era start displayed in the UI. The archive node is
+              // authoritative for era boundaries; rpc.relay may differ.
+              const sessionsBack = S.session - esi;
+              const posInSess    = (S.block - 1) % SESSION_LEN;
+              const curStart     = S.block - posInSess - sessionsBack * SESSION_LEN;
+              log('erasStartSessionIndex', `era=${S.era} → esi=${esi} → start=${curStart.toLocaleString()}`);
+              // Do NOT overwrite `lockedEraStart` or `S.eraStartBlock` from rpc.relay.
+              // Keep the computed value available in the debug panel only.
+
+            }
+          }
+        }
+      }
+    } catch(e) { log('discover era start', e.message, true); }
+  }
+}
+
+// ─── Re-query known keys (after discovery) ────────────────────────────────────
+async function queryChain() {
+  await fetchBlock();
+  if (!KEYS.activeEra && !KEYS.sessionIdx) {
+    await discoverKeys();
+    return;
+  }
+  try {
+    const calls = [];
+    if (KEYS.activeEra)  calls.push(rpc('state_getStorage',[KEYS.activeEra]));
+    if (KEYS.sessionIdx) calls.push(rpc('state_getStorage',[KEYS.sessionIdx]));
+    const results = await Promise.all(calls);
+    let i = 0;
+    if (KEYS.activeEra)  { const v=results[i++]; if(v){const d=decodeActiveEra(v);if(d!=null){S.era=d;db('dbEraDec',String(d),'ok');}}}
+    if (KEYS.sessionIdx) { const v=results[i++]; if(v){const d=decodeU32(v);     if(d!=null){S.session=d;db('dbSessDec',String(d),'ok');}}}
+    updateUI();
+  } catch(e) { log('queryChain',e.message,true); }
+}
+
+// ─── Past era: RPC (erasStartSessionIndex) ────────────────────────────────────
+async function rpcLookup(targetEra) {
+  if (!KEYS.eraStartPrefix) return null;
+  try {
+    if (!eraSessionKeys) {
+      const keys = await rpc('state_getKeys',[KEYS.eraStartPrefix]);
+      if (!keys||keys.length===0) { log('state_getKeys','no ErasStartSessionIndex keys',true); return null; }
+      eraSessionKeys = keys;
+      log('state_getKeys','cached '+keys.length+' era keys');
+    }
+    for (const k of eraSessionKeys) {
+      const raw=k.replace('0x','');
+      // Key = 32-byte prefix (64 hex) + 8-byte xxHash64 (16 hex) + 4-byte era u32LE (8 hex)
+      const eraPart=raw.slice(-8);
+      if (u32LE(h2b('0x'+eraPart))===targetEra) {
+        const val=await rpc('state_getStorage',[k]);
+        if (val) { const si=decodeU32(val); log('erasStartSessionIndex',`era=${targetEra} → session=${si}`); return si*SESSION_LEN + 1; }
+      }
+    }
+    log('erasStartSessionIndex',`era=${targetEra} not in key set`);
+    return null;
+  } catch(e) { log('rpcLookup',e.message,true); return null; }
+}
+
+// ─── Past era: binary-search ActiveEra (like era-range-fetch.py) ─────────────
+async function findEraStartBlockRpc(targetEra, chainHead) {
+  // Use an archive node for historical state reads so results match
+  // the era-range-fetch.py/CSV data. The page-level `rpc()` continues
+  // to use the live `WSS` (rpc.relay) for active-era/session reads.
+  if (!KEYS.activeEra || !chainHead) return null;
+  log('findEraStart', `binary search era=${targetEra} head=${chainHead}`);
+
+  // Open a temporary WS to the archive node and provide an RPC helper
+  let archiveWs = null;
+  try {
+    archiveWs = new WebSocket(ARCHIVE_WSS);
+  } catch (e) {
+    log('findEraStart', 'archive ws open failed', true); return null;
+  }
+
+  const archivePending = {};
+  let archiveReqId = 1;
+  const archiveRpc = (method, params, ms = 20000) => new Promise((res, rej) => {
+    if (!archiveWs || archiveWs.readyState !== WebSocket.OPEN) return rej(new Error('archive-not-connected'));
+    const id = archiveReqId++;
+    const t = setTimeout(() => { delete archivePending[id]; rej(new Error(`timeout:${method}`)); }, ms);
+    archivePending[id] = { resolve: v => { clearTimeout(t); res(v); }, reject: e => { clearTimeout(t); rej(e); } };
+    archiveWs.send(JSON.stringify({ jsonrpc: '2.0', id, method, params: params || [] }));
+  });
+
+  archiveWs.onmessage = (ev) => {
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg && msg.id && archivePending[msg.id]) {
+        archivePending[msg.id].resolve(msg.result);
+        delete archivePending[msg.id];
+      }
+    } catch (e) { /* ignore */ }
+  };
+  archiveWs.onerror = (ev) => { /* let individual calls handle errors */ };
+
+  // Wait for open (with timeout)
+  const opened = await new Promise((res) => {
+    const to = setTimeout(() => res(false), 8000);
+    if (archiveWs.readyState === WebSocket.OPEN) { clearTimeout(to); return res(true); }
+    archiveWs.onopen = () => { clearTimeout(to); res(true); };
+    archiveWs.onclose = () => { clearTimeout(to); res(false); };
+  });
+  if (!opened) { try { archiveWs.close(); } catch (e) {} ; log('findEraStart','archive open timeout',true); return null; }
+
+  let lo = 1, hi = chainHead, result = null;
+  try {
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      let bh = null;
+      try {
+        bh = await archiveRpc('chain_getBlockHash', [mid]);
+      } catch (e) { lo = mid + 1; continue; }
+      if (!bh) { lo = mid + 1; continue; }
+      let val = null;
+      try {
+        val = await archiveRpc('state_getStorage', [KEYS.activeEra, bh]);
+      } catch (e) { lo = mid + 1; continue; }
+      const midEra = decodeActiveEra(val);
+      if (midEra == null) { lo = mid + 1; continue; }
+      if (midEra < targetEra) lo = mid + 1;
+      else if (midEra > targetEra) hi = mid - 1;
+      else { result = mid; hi = mid - 1; }
+    }
+
+    if (result == null) return null;
+    while (result > 1) {
+      let prevBh = null;
+      try { prevBh = await archiveRpc('chain_getBlockHash', [result - 1]); } catch (e) { break; }
+      if (!prevBh) break;
+      let prevVal = null;
+      try { prevVal = await archiveRpc('state_getStorage', [KEYS.activeEra, prevBh]); } catch (e) { break; }
+      const prevEra = decodeActiveEra(prevVal);
+      if (prevEra == null || prevEra !== targetEra) break;
+      result -= 1;
+    }
+
+    return result;
+  } catch (e) {
+    log('findEraStart', e.message, true);
+    return null;
+  } finally {
+    try { archiveWs.close(); } catch (e) { /* ignore */ }
+  }
+}
+
+// ─── Past era: math ───────────────────────────────────────────────────────────
+function mathLookup(era) {
+  // Use CSV cache first (exact), then fall back to live session math
+  if (eraBlockCache[era] !== undefined) return eraBlockCache[era];
+  if (S.eraStartBlock==null||S.era==null) return null;
+  return S.eraStartBlock - (S.era - era)*ERA_LEN;
+}
+
+// ─── Lookup button ────────────────────────────────────────────────────────────
+document.getElementById('lookupBtn').addEventListener('click', async () => {
+  const targetEra=parseInt(document.getElementById('eraInput').value,10);
+  hideAlert(); document.getElementById('rg').style.display='none';
+  // Hide optional CSV-sourced cards until we know they have data
+  ['resDateCard','resEndDateCard','resHashCard'].forEach(id=>document.getElementById(id).style.display='none');
+  if (isNaN(targetEra)||targetEra<0) { showAlert('Enter a valid era number.','err'); return; }
+  if (S.era==null)   { showAlert('Still syncing — try again shortly.','warn'); return; }
+  if (targetEra>S.era) { showAlert(`Era ${targetEra} is in the future. Current: ${S.era}.`,'err'); return; }
+  if (targetEra===S.era) { showAlert(`Era ${targetEra} is the current era — see metrics above.`,'info'); return; }
+  const btn=document.getElementById('lookupBtn'); btn.textContent='Loading…'; btn.disabled=true;
+
+  // ── 1. CSV cache (exact data from CSV) ─────────────────────
+  const csvRow = csvEraCache[targetEra] || null;
+  let fStart = null, fEnd = null, source = null;
+
+  if (csvRow && !isNaN(csvRow.start_block)) {
+    fStart = csvRow.start_block;
+    fEnd   = !isNaN(csvRow.end_block) ? csvRow.end_block : fStart + ERA_LEN - 1;
+    source = 'preloaded';
+    log('data', `era=${targetEra} → start=${fStart.toLocaleString()} end=${fEnd.toLocaleString()}`);
+  } else {
+    // ── 2. On-chain via erasStartSessionIndex (within history depth) ──────
+    const withinHistory=targetEra>=(S.era-HISTORY_DEPTH);
+    let rpcStart=null;
+    if (withinHistory) rpcStart=await rpcLookup(targetEra);
+
+    // ── 3. Math fallback ──────────────────────────────────────────────────
+    const mathStart=mathLookup(targetEra);
+    if (rpcStart==null&&mathStart==null) {
+      btn.textContent='Look up'; btn.disabled=false;
+      showAlert('Could not compute. Ensure live data is synced.','err'); return;
+    }
+    fStart = rpcStart ?? mathStart;
+    fEnd   = fStart + ERA_LEN - 1;
+    source = rpcStart!=null ? 'erasStartSessionIndex' : (withinHistory?'math (key not found)':'math · beyond history');
+
+    if (rpcStart!=null&&mathStart!=null&&rpcStart!==mathStart) {
+      showAlert(`Cross-check: RPC (${fmt(rpcStart)}) vs math (${fmt(mathStart)}) differ by ${Math.abs(rpcStart-mathStart)} blocks. RPC value used.`,'warn');
+    }
+  }
+
+  btn.textContent='Look up'; btn.disabled=false;
+
+  document.getElementById('resStart').textContent=fmt(fStart);
+  document.getElementById('resEnd').textContent=fmt(fEnd);
+  ['resStart','resEnd'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('dim'); });
+
+  const isCsv = source === 'preloaded';
+  const sp = document.getElementById('startPill'), ep = document.getElementById('endPill');
+  if (isCsv) {
+    // When CSV is the source, hide the small source pills for start/end
+    if (sp) { sp.style.display = 'none'; }
+    if (ep) { ep.style.display = 'none'; }
+  } else {
+    if (sp) {
+      sp.style.display = '';
+      sp.textContent = source;
+      sp.className = 'pill ' + (source.startsWith('erasStart') ? 'pill-rpc' : 'pill-math');
+    }
+    if (ep) {
+      ep.style.display = '';
+      ep.textContent = 'start + 14,399';
+      ep.className = 'pill pill-math';
+    }
+  }
+
+  // Show CSV extra fields if available
+  if (csvRow) {
+    if (csvRow.start_datetime_utc) {
+      const el = document.getElementById('resStartDate');
+      el.textContent = formatUTC(csvRow.start_datetime_utc);
+      el.dataset.utc = csvRow.start_datetime_utc;
+      el.dataset.state = 'utc';
+      document.getElementById('resDateCard').style.display = '';
+      attachDateToggle('resStartDateBtn','resStartDate');
+    }
+    if (csvRow.end_datetime_utc) {
+      const el = document.getElementById('resEndDate');
+      el.textContent = formatUTC(csvRow.end_datetime_utc);
+      el.dataset.utc = csvRow.end_datetime_utc;
+      el.dataset.state = 'utc';
+      document.getElementById('resEndDateCard').style.display = '';
+      attachDateToggle('resEndDateBtn','resEndDate');
+    }
+    if (csvRow.start_block_hash) {
+      const hEl = document.getElementById('resHash');
+      hEl.textContent = csvRow.start_block_hash;
+      document.getElementById('resHashCard').style.display = '';
+      const copyBtn = document.getElementById('copyResHashBtn');
+      if (copyBtn) {
+        const COPY_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+        copyBtn.onclick = async () => {
+          try {
+            await copyToClipboard(csvRow.start_block_hash);
+            copyBtn.textContent = 'Copied';
+            setTimeout(() => { copyBtn.innerHTML = COPY_SVG; }, 1500);
+          } catch (e) {
+            copyBtn.textContent = 'Err';
+            setTimeout(() => { copyBtn.innerHTML = COPY_SVG; }, 1500);
+          }
+        };
+      }
+    }
+  }
+
+  document.getElementById('rg').style.display='grid';
+});
+// ─── Heart Monitor (EKG canvas) — natural pulse animation ───────────────────
+const EKG = (() => {
+  // Each block fires a beat. Between beats the line stays flat.
+  // The wave scrolls from RIGHT → LEFT, appearing to flow outward.
+  const FPS_TARGET  = 60;
+  const BASELINE_F  = 0.60;  // Y fraction for the flat centre line
+  const MAX_AMP_F   = 0.42;  // max upward amplitude fraction of height
+  const SCROLL_PPS  = 60;    // pixels per second to scroll
+  const GLOW_COLOR  = '#00D4FF';
+  const GLOW_DIM    = 'rgba(0,212,255,0.55)';
+
+  // PQRST shape samples — 0 = baseline, 1 = full upward amp, neg = below
+  const BEAT = [
+    0, 0, 0,
+    0.06, 0.12, 0.10, 0.06, 0,        // P wave
+    0, -0.12,                           // Q dip
+    0.55, 1.0, 0.96, 0.60, 0.12,       // R spike
+    -0.28, -0.30, -0.20, -0.08, 0, 0,  // S undershoot
+    0, 0.12, 0.22, 0.20, 0.14, 0.07, 0, 0, 0,  // T wave
+    0, 0, 0, 0, 0, 0,                  // flat tail
+  ];
+  const BEAT_PX = 90;  // total pixels wide for one beat
+
+  // Internal state
+  let canvas, ctx, W = 0, H = 0;
+  // Pixel buffer: circularly written, drawn right→left each frame
+  let pixBuf = [];      // array of {y, alpha} for each horizontal pixel column
+  let writeHead = 0;    // where new samples get written (left edge of newest data)
+  let lastTime  = 0;
+  let beatQueue = [];   // list of block numbers awaiting beat rendering
+  let sampleIdx = 0;    // how many samples of current beat have been written
+  let inBeat    = false;
+
+  function resize() {
+    if (!canvas) return;
+    const r = canvas.getBoundingClientRect();
+    W = Math.max(1, Math.floor(r.width  * devicePixelRatio));
+    H = Math.max(1, Math.floor(r.height * devicePixelRatio));
+    canvas.width  = W;
+    canvas.height = H;
+    pixBuf = new Array(W).fill(null).map(() => ({ y: Math.round(H * BASELINE_F), bright: false }));
+    writeHead = 0;
+  }
+
+  function writeSample(normAmp, bright) {
+    const baseY = Math.round(H * BASELINE_F);
+    const y = Math.max(2, Math.min(H - 2, baseY - normAmp * H * MAX_AMP_F));
+    pixBuf[writeHead] = { y, bright };
+    writeHead = (writeHead + 1) % W;
+  }
+
+  function frame(ts) {
+    requestAnimationFrame(frame);
+    if (!ctx || W <= 0 || H <= 0) return;
+    const dt = lastTime ? Math.min((ts - lastTime) / 1000, 0.1) : 0;
+    lastTime = ts;
+
+    // Write new samples based on scroll speed
+    const newSamples = Math.round(dt * SCROLL_PPS * devicePixelRatio);
+    for (let s = 0; s < newSamples; s++) {
+      if (!inBeat && beatQueue.length > 0) {
+        beatQueue.shift();
+        inBeat = true;
+        sampleIdx = 0;
+      }
+      if (inBeat) {
+        const t = sampleIdx / BEAT_PX;
+        const beatI = Math.floor(t * (BEAT.length - 1));
+        const amp   = BEAT[Math.min(beatI, BEAT.length - 1)];
+        writeSample(amp, Math.abs(amp) > 0.08);
+        sampleIdx++;
+        if (sampleIdx >= BEAT_PX) { inBeat = false; sampleIdx = 0; }
+      } else {
+        writeSample(0, false);
+      }
+    }
+
+    // ── Render ──
+    ctx.fillStyle = '#050508';
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid lines — subtle
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0,212,255,0.07)';
+    ctx.lineWidth = 0.5 * devicePixelRatio;
+    for (let i = 1; i < 5; i++) {
+      const gx = Math.round(W * i / 5);
+      ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke();
+    }
+    const baseY = Math.round(H * BASELINE_F);
+    ctx.beginPath(); ctx.moveTo(0, baseY); ctx.lineTo(W, baseY); ctx.stroke();
+    ctx.restore();
+
+    // Draw trace: newest data on RIGHT, scrolling LEFT
+    ctx.save();
+    ctx.lineCap  = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 1.5 * devicePixelRatio;
+    let prevX = null, prevY = null;
+    for (let col = 0; col < W; col++) {
+      // col 0 = leftmost (oldest), col W-1 = rightmost (newest)
+      // newest sample is at writeHead-1 (wrapping), last sample at writeHead-W
+      const bufIdx = (writeHead - W + col + W * 4) % W;
+      const p = pixBuf[bufIdx];
+      if (!p) continue;
+      const x = col;
+      const y = p.y;
+      if (prevX !== null) {
+        const bright = p.bright;
+        ctx.beginPath();
+        ctx.moveTo(prevX, prevY);
+        ctx.lineTo(x, y);
+        ctx.strokeStyle = bright ? GLOW_COLOR : 'rgba(0,212,255,0.45)';
+        ctx.shadowColor  = bright ? GLOW_DIM   : 'transparent';
+        ctx.shadowBlur   = bright ? 6 * devicePixelRatio : 0;
+        ctx.stroke();
+      }
+      prevX = x; prevY = y;
+    }
+    ctx.restore();
+  }
+
+  function beat(blockNum) {
+    beatQueue.push(blockNum);
+    if (beatQueue.length > 3) beatQueue.shift(); // discard stale
+    // monitor-meta label removed per request; no DOM update required here.
+  }
+
+  function init() {
+    canvas = document.getElementById('ekg-canvas');
+    if (!canvas) return;
+    ctx = canvas.getContext('2d');
+    const ro = new ResizeObserver(() => resize());
+    ro.observe(canvas);
+    resize();
+    requestAnimationFrame(frame);
+  }
+
+  return { init, beat };
+})();
+
+// ─── CSV auto-load ─────────────────────────────────────────────────
+const CSV_CANDIDATES = [
+  '/era-reference.csv',
+  'era-reference.csv',
+];
+
+function parseCsvText(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return 0;
+  const header = lines[0].split(',').map(s => s.trim());
+  let count = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(',');
+    if (cols.length < 2) continue;
+    const row = {};
+    header.forEach((h, j) => { row[h] = (cols[j] ?? '').trim(); });
+    const era = parseInt(row.era, 10);
+    if (isNaN(era)) continue;
+    const sb = parseInt(row.start_block, 10);
+    if (isNaN(sb)) continue;
+    const ebRaw = row.end_block ? parseInt(row.end_block, 10) : NaN;
+    const eb    = isNaN(ebRaw) ? null : ebRaw;
+    csvEraCache[era] = {
+      start_block:        sb,
+      end_block:          eb,
+      start_block_hash:   row.start_block_hash   || null,
+      start_datetime_utc: row.start_datetime_utc || null,
+      end_datetime_utc:   row.end_datetime_utc   || null,
+    };
+    eraBlockCache[era] = sb;
+    if (eb !== null) eraBlockCache[era + 1] = eb + 1;
+    count++;
+  }
+  return count;
+}
+
+async function tryAutoLoadCsv() {
+  for (const path of CSV_CANDIDATES) {
+    try {
+      const resp = await fetch(path, { credentials: 'same-origin' });
+      if (!resp.ok) continue;
+      const text = await resp.text();
+      if (!text.trimStart().startsWith('era,')) continue;
+      const count = parseCsvText(text);
+      if (count === 0) continue;
+      log('data', 'preloaded ' + count + ' eras');
+      const badge = document.getElementById('preloadBadge');
+      if (badge) { badge.textContent = 'Preloaded: ' + count + ' eras'; badge.style.display = 'inline'; }
+      // Do not override current era start from CSV preload. CSV remains available
+      // for past-era lookups, but the current-era start must come from the
+      // authoritative RPC binary-search (like era-range-fetch.py).
+      updateHint();
+      return;
+    } catch (_) {}
+  }
+  log('data', 'no preload file — RPC / math only');
+}
+// ─── WebSocket lifecycle ──────────────────────────────────────────────────────
+function connect() {
+  if (killed) return;
+  connectAttempts++;
+  setStatus(false,`Connecting… (attempt ${connectAttempts})`);
+  try { ws=new WebSocket(WSS); } catch(e) { db('dbErr','ws init: '+e.message,'bad'); setStatus(false,'WebSocket failed — click Retry'); return; }
+  ws.onopen = async () => {
+    connectAttempts=0; eraSessionKeys=null; KEYS={activeEra:null,sessionIdx:null,eraStartPrefix:null}; lockedEraIndex=null; lockedEraStart=null;
+    setStatus(true,'Connected · discovering pallets…');
+    log('ws.open',WSS);
+    await queryChain();
+    if (S.era!=null) setStatus(true,'Connected · Enjin Relay RPC');
+    try { await rpc('chain_subscribeNewHeads',[]); log('subscribeNewHeads','ok'); } catch(e) { log('subscribeNewHeads',e.message,true); }
+  };
+  ws.onmessage = ev => {
+    let msg; try{msg=JSON.parse(ev.data);}catch{return;}
+    if (msg.id!=null&&pending[msg.id]) {
+      msg.error ? pending[msg.id].reject(new Error(JSON.stringify(msg.error))) : pending[msg.id].resolve(msg.result);
+      delete pending[msg.id]; return;
+    }
+    if (msg.method==='chain_newHead'&&msg.params?.result) {
+      const bn=hexToNum(msg.params.result.number);
+      if (bn!==S.block) { S.block=bn; db('dbBlkHex',msg.params.result.number,'ok'); db('dbBlkDec',bn.toLocaleString(),'ok'); EKG.beat(bn); updateUI(); log('chain_newHead','block='+bn.toLocaleString()); }
+      if (bn%20===0) queryChain();
+    }
+  };
+  ws.onerror = () => { log('ws.error','',true); db('dbErr','WebSocket error','bad'); setStatus(false,'Error'); };
+  ws.onclose = e => { log('ws.close','code='+e.code,true); setStatus(false,'Disconnected — reconnecting in 5s…'); if(!killed) setTimeout(connect,5000); };
+}
+function manualRetry() { killed=false; connectAttempts=0; KEYS={activeEra:null,sessionIdx:null,eraStartPrefix:null}; lockedEraIndex=null; lockedEraStart=null; if(ws)try{ws.close();}catch{} connect(); }
+
+// ─── Clean teardown when page is hidden or unloaded ──────────────────────────
+function teardown(reason) {
+  killed = true;
+  // Reject all in-flight RPC calls immediately
+  Object.values(pending).forEach(p => p.reject(new Error('page hidden')));
+  for (const k in pending) delete pending[k];
+  if (ws) {
+    try { ws.close(1000, reason); } catch(_) {}
+    ws = null;
+  }
+  log('ws.teardown', reason);
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') teardown('visibilitychange:hidden');
+  else if (document.visibilityState === 'visible') {
+    // Reconnect when tab becomes visible again
+    killed = false;
+    connect();
+  }
+});
+
+window.addEventListener('pagehide', () => teardown('pagehide'), { once: true });
+window.addEventListener('beforeunload', () => teardown('beforeunload'), { once: true });
+
+tryAutoLoadCsv();
+EKG.init();
+connect();
+</script>
+</body>
+</html>

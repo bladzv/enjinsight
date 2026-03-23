@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Enjin Staking Rewards — Direct RPC</title>
+<style>
+  :root {
+    --bg:        #0d0f14;
+    --surface:   #161a24;
+    --surface2:  #1c2130;
+    --border:    #2a3050;
+    --accent:    #7c6aff;
+    --accent2:   #00d4aa;
+    --warn:      #f59e0b;
+    --danger:    #ef4444;
+    --text:      #e2e8f0;
+    --text-dim:  #64748b;
+    --text-muted:#374151;
+    --log-bg:    #0a0c10;
+    --log-text:  #4ade80;
+    --radius:    12px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding-bottom: 200px; /* room for log drawer */
+  }
+
+  /* ── Animated background ── */
+  body::before, body::after {
+    content: '';
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.08;
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::before {
+    width: 600px; height: 600px;
+    background: var(--accent);
+    top: -200px; left: -150px;
+  }
+  body::after {
+    width: 500px; height: 500px;
+    background: var(--accent2);
+    bottom: 100px; right: -150px;
+  }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 40px 20px; position: relative; z-index: 1; }
+
+  /* ── Header ── */
+  header { text-align: center; margin-bottom: 40px; }
+  header h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+  header h1 span { background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  header p  { color: var(--text-dim); margin-top: 8px; font-size: 14px; }
+  .badge { display: inline-block; background: linear-gradient(135deg, #1e1b4b, #1e3a2f); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; font-size: 11px; color: var(--accent2); margin-top: 10px; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 20px;
+    backdrop-filter: blur(10px);
+  }
+  .card h2 { font-size: 14px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px; }
+
+  /* ── Form ── */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field.full { grid-column: 1 / -1; }
+  label { font-size: 12px; font-weight: 500; color: var(--text-dim); letter-spacing: 0.04em; }
+  input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+  input:focus { border-color: var(--accent); }
+  input::placeholder { color: var(--text-muted); }
+
+  /* ── Warn note ── */
+  .warn-note {
+    background: rgba(245,158,11,0.08);
+    border: 1px solid rgba(245,158,11,0.3);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: #fbbf24;
+    margin-top: 14px;
+    grid-column: 1 / -1;
+    line-height: 1.6;
+  }
+  .warn-note strong { color: #f59e0b; }
+
+  /* ── Buttons ── */
+  .btn-row { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+  .btn {
+    padding: 10px 22px;
+    border-radius: 8px;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+  .btn:disabled             { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: linear-gradient(135deg, var(--accent), #5a4fd8); color: #fff; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+
+  /* ── Stats row ── */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; }
+  .stat .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .stat .value { font-size: 22px; font-weight: 700; }
+  .stat .value.accent  { color: var(--accent2); }
+  .stat .value.accent2 { color: var(--accent); }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); }
+  th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+  th:last-child, td:last-child { text-align: right; }
+  td { padding: 10px 14px; border-top: 1px solid var(--border); color: var(--text); white-space: nowrap; }
+  tr:hover td { background: rgba(124,106,255,0.04); }
+  .mono { font-family: 'SF Mono', 'Fira Code', monospace; }
+  .apy-badge {
+    display: inline-block;
+    background: rgba(0,212,170,0.15);
+    color: var(--accent2);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .total-row td { font-weight: 700; background: rgba(124,106,255,0.07); }
+
+  /* ── Error / empty states ── */
+  .error-box {
+    background: rgba(239,68,68,0.08);
+    border: 1px solid rgba(239,68,68,0.3);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    color: #fca5a5;
+    font-size: 14px;
+    margin-bottom: 20px;
+    display: none;
+  }
+  .error-box.show { display: block; }
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--text-dim); }
+  .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-state p   { font-size: 14px; line-height: 1.8; }
+
+  /* ── Spinner ── */
+  .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Log drawer ── */
+  #logDrawer {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--log-bg);
+    border-top: 1px solid #1a2a1a;
+    z-index: 100;
+    transition: height 0.25s ease;
+    height: 36px;
+    overflow: hidden;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+  #logDrawer.open { height: 220px; }
+
+  #logHeader {
+    padding: 0 16px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid #1a2a1a;
+    background: #0c0f14;
+  }
+  .traffic { display: flex; gap: 6px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot-r { background: #ff5f56; }
+  .dot-y { background: #ffbd2e; }
+  .dot-g { background: #27c93f; }
+  #logTitle { font-size: 12px; color: #4a5568; letter-spacing: 0.05em; flex: 1; }
+  #logCount  { background: rgba(74,222,128,0.15); color: #4ade80; border-radius: 4px; padding: 1px 7px; font-size: 11px; display: none; }
+  #logCount.show { display: inline-block; }
+  #logToggleIcon { color: #4a5568; font-size: 12px; }
+
+  #logBody { height: 184px; overflow-y: auto; padding: 8px 16px; }
+  #logBody::-webkit-scrollbar       { width: 4px; }
+  #logBody::-webkit-scrollbar-track { background: transparent; }
+  #logBody::-webkit-scrollbar-thumb { background: #1e3a1e; border-radius: 2px; }
+
+  .log-line { font-size: 12px; line-height: 1.8; display: flex; gap: 8px; }
+  .log-dim     { color: #2d4a2d; }
+  .log-normal  { color: #4ade80; }
+  .log-info    { color: #63b3ed; }
+  .log-success { color: #4ade80; }
+  .log-warn    { color: #fbbf24; }
+  .log-error   { color: #fc8181; }
+  .log-accent  { color: #c4b5fd; }
+  .log-ts { color: #2d4a2d; min-width: 56px; }
+
+  /* ── Progress overlay ── */
+  #overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(13,15,20,0.5);
+    z-index: 50;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  #overlay.show { display: flex; }
+  #overlay .progress-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px 40px; text-align: center; }
+  #overlay .progress-card h3 { margin-bottom: 10px; }
+  #overlayMsg { font-size: 13px; color: var(--text-dim); margin-top: 6px; max-width: 360px; }
+  .big-spinner { width: 36px; height: 36px; border-width: 3px; margin: 0 auto 12px; border: 3px solid rgba(124,106,255,0.2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+
+  @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>Enjin Staking Rewards <span>Direct RPC</span></h1>
+    <p>Computes rewards directly from the Enjin Relaychain — no indexer required.</p>
+    <span class="badge">⚡ Direct archive node · No database · No third-party services</span>
+  </header>
+
+  <!-- Form -->
+  <div class="card">
+    <h2>Query Parameters</h2>
+    <div class="form-grid">
+      <div class="field full">
+        <label>Wallet Address (SS58 — Enjin Relaychain, prefix 2135)</label>
+        <input type="text" id="address" placeholder="e.g. enXXX..." spellcheck="false" />
+      </div>
+
+      <!-- Era range mode selector -->
+      <div class="field full" id="eraRangeModeRow" style="display:none">
+        <label>Era range input mode</label>
+        <div style="display:flex;gap:10px;margin-top:4px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);cursor:pointer">
+            <input type="radio" name="eraMode" value="numbers" checked onchange="onEraModeChange()" /> Era numbers
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);cursor:pointer">
+            <input type="radio" name="eraMode" value="dates" onchange="onEraModeChange()" /> Date range (UTC)
+          </label>
+        </div>
+      </div>
+
+      <!-- Era-by-number inputs -->
+      <div id="eraNumberInputs" style="display:contents">
+        <div class="field">
+          <label>Start Era</label>
+          <input type="number" id="startEra" placeholder="e.g. 100" min="0" />
+        </div>
+        <div class="field">
+          <label>End Era (leave blank = current)</label>
+          <input type="number" id="endEra" placeholder="blank = current era" min="0" />
+        </div>
+      </div>
+
+      <!-- Era-by-date inputs (hidden until CSV with timestamps loaded) -->
+      <div id="eraDateInputs" style="display:none">
+        <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:14px">
+          <div class="field">
+            <label>Start Date (UTC, YYYY-MM-DD)</label>
+            <input type="date" id="startDate" />
+          </div>
+          <div class="field">
+            <label>End Date (UTC, YYYY-MM-DD)</label>
+            <input type="date" id="endDate" />
+          </div>
+        </div>
+      </div>
+
+      <div class="field full">
+        <label>Archive Node WebSocket URL</label>
+        <input type="url" id="endpoint" value="wss://archive.relay.blockchain.enjin.io" placeholder="wss://archive.relay.blockchain.enjin.io" />
+      </div>
+
+      <!-- era-reference.csv upload -->
+      <div class="field full">
+        <label>era-reference.csv (optional — skips RPC binary search for known eras)</label>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px">
+          <input type="file" id="csvFile" accept=".csv" onchange="loadEraRefCsv(this)"
+            style="font-size:12px;color:var(--text-dim);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer" />
+          <span id="csvStatus" style="font-size:12px;color:var(--text-dim);font-family:'SF Mono','Fira Code',monospace"></span>
+        </div>
+      </div>
+
+      <!-- Historical pool scope -->
+      <div class="field full">
+        <label>Pool history scope</label>
+        <div style="display:flex;gap:14px;margin-top:4px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);cursor:pointer">
+            <input type="radio" name="poolScope" value="current" checked onchange="onPoolScopeChange()" /> Current pools only
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);cursor:pointer">
+            <input type="radio" name="poolScope" value="history" onchange="onPoolScopeChange()" /> Include historic pools (already exited)
+          </label>
+        </div>
+      </div>
+
+      <!-- Historical pool source (shown only when "history" scope selected) -->
+      <div id="histSourceRow" class="field full" style="display:none">
+        <label>How to load historic pool data</label>
+        <div style="display:flex;gap:14px;margin-top:4px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);cursor:pointer">
+            <input type="radio" name="histSrc" value="csv" checked onchange="onHistSrcChange()" /> Subscan extrinsics CSV
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);cursor:pointer">
+            <input type="radio" name="histSrc" value="subscan" onchange="onHistSrcChange()" /> Subscan API key
+          </label>
+        </div>
+      </div>
+      <div id="histCsvRow" class="field full" style="display:none">
+        <label>Subscan extrinsics CSV export</label>
+        <input type="file" id="histCsvFile" accept=".csv"
+          style="font-size:12px;color:var(--text-dim);background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer;margin-top:4px" />
+        <span id="histCsvStatus" style="font-size:12px;color:var(--text-dim);font-family:'SF Mono','Fira Code',monospace;margin-top:4px"></span>
+      </div>
+      <div id="histSubscanRow" class="field full" style="display:none">
+        <label>Subscan API Key</label>
+        <input type="text" id="subscanApiKey" placeholder="your-api-key" spellcheck="false" style="margin-top:4px" />
+        <span style="font-size:12px;color:var(--text-dim);margin-top:4px">Used only to call api.subscan.io to fetch pool extrinsics. Not stored.</span>
+      </div>
+
+      <div class="warn-note full">
+        <strong>⏳ Performance note.</strong>
+        If <strong>era-reference.csv</strong> is provided, era block boundaries are read from it — no RPC binary search needed (fast). Without it, each era requires ~20 RPC calls (slow for large ranges). Run <code>era-reference.py</code> first to generate the CSV.<br/><br/>
+        Historical pool rewards (for pools you've already exited) require loading Subscan history. Without it, only pools with a current sENJ balance are queried.
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="queryBtn" onclick="runQuery()">
+        <span id="btnText">⚡ Query Rewards</span>
+      </button>
+      <button class="btn btn-secondary" onclick="clearResults()">✕ Clear</button>
+    </div>
+  </div>
+
+  <!-- Error box -->
+  <div class="error-box" id="errorBox"></div>
+
+  <!-- Results -->
+  <div id="results"></div>
+</div>
+
+<!-- Loading overlay -->
+<div id="overlay">
+  <div class="progress-card">
+    <div class="big-spinner"></div>
+    <h3>Querying Blockchain...</h3>
+    <p id="overlayMsg">Connecting to archive node...</p>
+  </div>
+</div>
+
+<!-- Log drawer -->
+<div id="logDrawer">
+  <div id="logHeader" onclick="toggleLog()">
+    <div class="traffic">
+      <div class="dot dot-r"></div>
+      <div class="dot dot-y"></div>
+      <div class="dot dot-g"></div>
+    </div>
+    <span id="logTitle">RPC CONSOLE</span>
+    <span id="logCount"></span>
+    <span id="logToggleIcon">▲</span>
+  </div>
+  <div id="logBody"></div>
+</div>
+
+<script>
+// ── Constants ────────────────────────────────────────────────────────────────
+const SCALE          = 1_000_000_000_000_000_000n; // 10^18
+const ERAS_PER_YEAR  = 365;
+const SS58_PREFIX    = 2135;
+
+// ── era-reference.csv cache ───────────────────────────────────────────────────
+// Populated by loadEraRefCsv(). Keys are era integers.
+// Each value: { start_block, end_block, start_block_hash, start_datetime_utc, end_datetime_utc }
+const eraRefCache = {};
+
+function loadEraRefCsv(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  document.getElementById('csvStatus').textContent = 'Loading…';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const text  = ev.target.result;
+    const lines = text.trim().split(/\r?\n/);
+    if (lines.length < 2) { document.getElementById('csvStatus').textContent = 'Empty CSV'; return; }
+    const header = lines[0].split(',').map(h => h.trim());
+    const idx = {};
+    header.forEach((h, i) => idx[h] = i);
+    let count = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(',');
+      if (cols.length < 2) continue;
+      const era = parseInt(cols[idx['era']]);
+      if (isNaN(era)) continue;
+      const sb = parseInt(cols[idx['start_block']] ?? '');
+      const eb = parseInt(cols[idx['end_block']]   ?? '');
+      eraRefCache[era] = {
+        start_block:        isNaN(sb) ? null : sb,
+        end_block:          isNaN(eb) ? null : eb,
+        start_block_hash:   (cols[idx['start_block_hash']]   ?? '').trim(),
+        start_datetime_utc: (cols[idx['start_datetime_utc']] ?? '').trim(),
+        end_datetime_utc:   (cols[idx['end_datetime_utc']]   ?? '').trim(),
+      };
+      // Pre-populate eraBlockCache so findEraStartBlock skips binary search
+      if (!isNaN(sb)) eraBlockCache[era] = sb;
+      if (!isNaN(eb)) eraBlockCache[era + 1] = eb + 1;
+      count++;
+    }
+    const hasDates = Object.values(eraRefCache).some(r => r.start_datetime_utc);
+    document.getElementById('csvStatus').textContent = `✓ ${count} eras (${hasDates ? 'with timestamps' : 'no timestamps'})`;
+    // Show era-range-mode selector only when we have timestamps
+    if (hasDates) document.getElementById('eraRangeModeRow').style.display = '';
+    log(`era-reference.csv loaded: ${count} eras — RPC binary search bypassed for cached eras`, 'success');
+  };
+  reader.onerror = () => { document.getElementById('csvStatus').textContent = 'Read error'; };
+  reader.readAsText(file);
+}
+
+// ── UI: pool scope / history source toggles ───────────────────────────────────
+function onPoolScopeChange() {
+  const scope = document.querySelector('input[name="poolScope"]:checked').value;
+  document.getElementById('histSourceRow').style.display = scope === 'history' ? '' : 'none';
+  onHistSrcChange();
+}
+function onHistSrcChange() {
+  const scope = document.querySelector('input[name="poolScope"]:checked').value;
+  const src   = document.querySelector('input[name="histSrc"]:checked')?.value;
+  document.getElementById('histCsvRow').style.display    = (scope === 'history' && src === 'csv')     ? '' : 'none';
+  document.getElementById('histSubscanRow').style.display = (scope === 'history' && src === 'subscan') ? '' : 'none';
+}
+function onEraModeChange() {
+  const mode = document.querySelector('input[name="eraMode"]:checked').value;
+  document.getElementById('eraNumberInputs').style.display = mode === 'numbers' ? 'contents' : 'none';
+  document.getElementById('eraDateInputs').style.display   = mode === 'dates'   ? ''         : 'none';
+}
+
+// ── Extract pool IDs from Subscan extrinsics CSV ──────────────────────────────
+function extractPoolIdsFromCsv(text) {
+  const ids = new Set();
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return ids;
+  const header = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  const paramsIdx = header.findIndex(h => h.toLowerCase() === 'params');
+  if (paramsIdx === -1) return ids;
+  for (let i = 1; i < lines.length; i++) {
+    const raw = lines[i];
+    // Regex scan: look for pool_id followed by a number anywhere in the row
+    const matches = raw.matchAll(/'name':\s*'pool_id'[^}]*?'value':\s*(\d+)/g);
+    for (const m of matches) ids.add(parseInt(m[1]));
+    // Also try JSON-style
+    const jsonMatches = raw.matchAll(/"name"\s*:\s*"pool_id"[^}]*?"value"\s*:\s*(\d+)/g);
+    for (const m of jsonMatches) ids.add(parseInt(m[1]));
+  }
+  return ids;
+}
+
+// ── Resolve era range from date inputs using eraRefCache ─────────────────────
+function erasForDateRange(fromStr, toStr) {
+  try {
+    const dtFrom = new Date(fromStr + 'T00:00:00Z');
+    const dtTo   = new Date(toStr   + 'T23:59:59Z');
+    if (isNaN(dtFrom) || isNaN(dtTo) || dtFrom > dtTo) return null;
+    const matching = [];
+    for (const era in eraRefCache) {
+      const r = eraRefCache[era];
+      if (!r.start_datetime_utc) continue;
+      const eraStart = new Date(r.start_datetime_utc);
+      const eraEnd   = r.end_datetime_utc ? new Date(r.end_datetime_utc) : null;
+      if (eraStart <= dtTo && (eraEnd === null || eraEnd >= dtFrom)) {
+        matching.push(parseInt(era));
+      }
+    }
+    if (!matching.length) return null;
+    return [Math.min(...matching), Math.max(...matching)];
+  } catch (_) { return null; }
+}
+
+
+// ── Derived pool account (browser JS port) ───────────────────────────────────
+// NOTE: Pool account derivation requires blake2b hashing which is not natively
+// available in the browser. We skip the pool rate verification step and rely
+// only on multiTokens storage for points and chain events for reinvested.
+// The reward formula doesn't require the stash address.
+
+// ── RPC transport ─────────────────────────────────────────────────────────────
+let ws = null;
+let pendingCalls = {};
+let callId = 1;
+
+// ── api.at() cache — reuse ApiAt instances per block hash ────────────────────
+// Reset at the start of each runQuery() call to avoid stale references.
+const _apiAtCache = {};
+async function getApiAt(api, hashHex) {
+  if (_apiAtCache[hashHex]) return _apiAtCache[hashHex];
+  const apiAt = await api.at(hashHex);
+  _apiAtCache[hashHex] = apiAt;
+  return apiAt;
+}
+
+function rpcConnect(url) {
+  return new Promise((resolve, reject) => {
+    log(`Connecting to ${url}`, 'info');
+    ws = new WebSocket(url);
+    ws.onopen  = () => { log('WebSocket connected', 'success'); resolve(); };
+    ws.onerror = (e) => reject(new Error('WebSocket error: ' + (e.message || 'connection failed')));
+    ws.onmessage = (msg) => {
+      try {
+        const data = JSON.parse(msg.data);
+        if (data.id && pendingCalls[data.id]) {
+          const { resolve, reject } = pendingCalls[data.id];
+          delete pendingCalls[data.id];
+          if (data.error) reject(new Error(data.error.message || JSON.stringify(data.error)));
+          else resolve(data.result);
+        }
+      } catch (_) {}
+    };
+    ws.onclose = () => log('WebSocket closed', 'dim');
+  });
+}
+
+function rpcCall(method, params = []) {
+  return new Promise((resolve, reject) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      reject(new Error('WebSocket not connected'));
+      return;
+    }
+    const id = callId++;
+    pendingCalls[id] = { resolve, reject };
+    ws.send(JSON.stringify({ id, jsonrpc: '2.0', method, params }));
+  });
+}
+
+function rpcDisconnect() {
+  if (ws) { try { ws.close(); } catch (_) {} ws = null; }
+  pendingCalls = {};
+}
+
+// ── RPC helpers ───────────────────────────────────────────────────────────────
+async function getChainHead() {
+  return rpcCall('chain_getHead');
+}
+
+async function getBlockHash(blockNum) {
+  return rpcCall('chain_getBlockHash', [blockNum]);
+}
+
+async function getBlock(blockHash) {
+  return rpcCall('chain_getBlock', [blockHash]);
+}
+
+// Query storage using state_call / state_getStorage
+// substrate-interface does the key encoding; in the browser we must use
+// the raw state_getStorage with hex-encoded storage keys.
+// We use the Polkadot JSON-RPC `state_getStorage` with the precomputed key.
+
+// For simplicity we use `state_call` with well-known methods where possible,
+// and `state_getStorage` with SCALE-encoded keys for storage reads.
+
+// Because full SCALE encoding in the browser is complex without a library,
+// we take a hybrid approach:
+//  - We proxy all storage reads through a lightweight SCALE encoding helper
+//    for known pallet + storage combinations (xxHash + Blake2 key derivation).
+//  - For the Enjin-specific MultiTokens pallet we use the archive node's
+//    chain_getStorage with known key computation patterns.
+//
+// Key insight: substrate-interface handles this in Python. In the browser,
+// we delegate to the `state_call("StakingApi_nominations", ...)` etc. where
+// available, and fall back to raw hex key construction.
+//
+// PRACTICAL APPROACH for the web UI: use the Polkadot.js SubstrateRPC API
+// via a CDN-loaded @polkadot/api bundle, which handles SCALE encoding natively.
+
+
+// ── We load @polkadot/api from CDN (esm.sh) ──────────────────────────────────
+// This handles all SCALE encoding, storage key computation, and type decoding.
+
+let polkadotApi = null;
+
+async function connectPolkadot(endpoint) {
+  const { ApiPromise, WsProvider } = await import('https://esm.sh/@polkadot/api@14');
+  log('Loading @polkadot/api from CDN...', 'dim');
+  const provider = new WsProvider(endpoint);
+  polkadotApi = await ApiPromise.create({ provider, noInitWarn: true });
+  log(`Connected. Runtime: ${polkadotApi.runtimeVersion.specName} v${polkadotApi.runtimeVersion.specVersion}`, 'success');
+  return polkadotApi;
+}
+
+// ── Era boundary binary search ────────────────────────────────────────────────
+const eraBlockCache = {};
+
+async function findEraStartBlock(api, era) {
+  if (eraBlockCache[era] !== undefined) return eraBlockCache[era];
+
+  const latest = (await api.rpc.chain.getHeader()).number.toNumber();
+  log(`Binary searching for era ${era} start block (chain head: ${latest.toLocaleString()})...`, 'info');
+
+  let lo = 1, hi = latest, result = null;
+
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    try {
+      const hash   = (await api.rpc.chain.getBlockHash(mid)).toHex();
+      const apiAt  = await getApiAt(api, hash);
+      const eraInfo = await apiAt.query.staking.activeEra();
+      const midEra  = eraInfo.isSome ? eraInfo.unwrap().index.toNumber() : -1;
+
+      if (midEra < era)       lo = mid + 1;
+      else if (midEra > era)  hi = mid - 1;
+      else { result = mid; hi = mid - 1; }
+    } catch (_) {
+      lo = mid + 1;
+    }
+  }
+
+  if (result === null) {
+    log(`Could not find start block for era ${era}`, 'warn');
+    return null;
+  }
+
+  // Walk back to the exact first block of this era
+  while (result > 1) {
+    try {
+      const prevHashHex = (await api.rpc.chain.getBlockHash(result - 1)).toHex();
+      const apiAtPrev   = await getApiAt(api, prevHashHex);
+      const prevInfo    = await apiAtPrev.query.staking.activeEra();
+      const prevEra     = prevInfo.isSome ? prevInfo.unwrap().index.toNumber() : -1;
+      if (prevEra !== era) break;
+      result--;
+    } catch (_) { break; }
+  }
+
+  log(`Era ${era} starts at block ${result.toLocaleString()}`, 'success');
+  eraBlockCache[era] = result;
+  return result;
+}
+// ── Get reinvested amount from events ─────────────────────────────────────────
+async function findEraReinvested(api, poolId, era, eraEndBlock) {
+  // Events fire AFTER the era boundary block, not before it.
+  // RewardPaid fires once per nominated validator; EraRewardsProcessed once per pool.
+  // The 'era' field in both events equals the actual era number (no offset).
+  const scanStart = eraEndBlock;
+  const scanEnd   = eraEndBlock + 40;
+
+  log(`Scanning blocks ${scanStart.toLocaleString()}–${scanEnd.toLocaleString()} for NominationPools events (pool=${poolId}, era=${era})...`, 'dim');
+
+  let total = 0n;
+
+  for (let blk = scanStart; blk <= scanEnd; blk++) {
+    try {
+      const hashHex = (await api.rpc.chain.getBlockHash(blk)).toHex();
+      const apiAt   = await getApiAt(api, hashHex);
+      const events  = await apiAt.query.system.events();
+
+      for (const record of events) {
+        const { section, method, data } = record.event;
+        if (section !== 'nominationPools') continue;
+
+        const raw = data.toJSON();
+        const evPoolId = parseInt(raw.poolId ?? raw[0] ?? -1);
+        const evEra    = parseInt(raw.era    ?? raw[1] ?? -1);
+        if (evPoolId !== poolId || evEra !== era) continue;
+
+        if (method === 'EraRewardsProcessed') {
+          // Canonical single event — supersedes RewardPaid sum
+          const reinvested = BigInt(raw.reinvested ?? raw[2] ?? 0);
+          log(`EraRewardsProcessed at block ${blk.toLocaleString()}: ${formatENJ(reinvested)} ENJ`, 'success');
+          return reinvested;
+        }
+
+        if (method === 'RewardPaid') {
+          const reward   = BigInt(raw.reward ?? raw[2] ?? 0);
+          const commAmt  = BigInt(raw.commission?.amount ?? raw[3]?.amount ?? 0);
+          total += reward + commAmt;
+        }
+      }
+    } catch (_) {}
+  }
+
+  if (total > 0n) {
+    log(`RewardPaid (summed, blocks ${scanStart.toLocaleString()}–${scanEnd.toLocaleString()}): ${formatENJ(total)} ENJ`, 'success');
+    return total;
+  }
+
+  log(`No reward event found for pool ${poolId}, era ${era}`, 'warn');
+  return null;
+}
+
+// ── Storage reads ─────────────────────────────────────────────────────────────
+async function getMemberPoints(api, address, poolId, blockHashHex) {
+  try {
+    const apiAt = await getApiAt(api, blockHashHex);
+    const result = await apiAt.query.multiTokens.tokenAccounts(1, poolId, address);
+    if (result && !result.isEmpty) {
+      return BigInt(result.toJSON()?.balance ?? 0);
+    }
+  } catch (e) {
+    log(`getMemberPoints pool ${poolId}: ${e.message}`, 'warn');
+  }
+  return 0n;
+}
+
+async function getTotalPoolPoints(api, poolId, blockHashHex) {
+  try {
+    const apiAt = await getApiAt(api, blockHashHex);
+    const result = await apiAt.query.multiTokens.tokens(1, poolId);
+    if (result && !result.isEmpty) {
+      return BigInt(result.toJSON()?.supply ?? 0);
+    }
+  } catch (e) {
+    log(`getTotalPoolPoints pool ${poolId}: ${e.message}`, 'warn');
+  }
+  return 0n;
+}
+
+async function findMemberPools(api, address, extraPoolIds = new Set()) {
+  // Enjin chain has no NominationPools.PoolMembers storage.
+  // Pool shares are tracked as sENJ tokens in MultiTokens collection 1 (token = pool ID).
+  log('Fetching all pool IDs from NominationPools.BondedPools...', 'dim');
+  const entries = await api.query.nominationPools.bondedPools.entries();
+  const allPoolIds = entries.map(([k]) => parseInt(k.args[0].toString())).sort((a, b) => a - b);
+  log(`${allPoolIds.length} pools found. Checking membership...`, 'dim');
+
+  const memberPools = [];
+  for (const poolId of allPoolIds) {
+    try {
+      const ta = await api.query.multiTokens.tokenAccounts(1, poolId, address);
+      if (ta && !ta.isEmpty) {
+        const bal = BigInt(ta.toJSON()?.balance ?? 0);
+        if (bal > 0n) {
+          memberPools.push(poolId);
+          log(`Pool ${poolId}: current sENJ balance = ${formatENJ(bal)} sENJ`, 'success');
+        }
+      }
+    } catch (e) {
+      log(`Pool ${poolId} membership check failed: ${e.message}`, 'warn');
+    }
+  }
+
+  // Merge extra historical pool IDs (from CSV / Subscan)
+  for (const pid of [...extraPoolIds].sort((a, b) => a - b)) {
+    if (!memberPools.includes(pid)) {
+      memberPools.push(pid);
+      log(`Pool ${pid}: included from pool history (no current sENJ balance)`, 'info');
+    }
+  }
+
+  return memberPools.sort((a, b) => a - b);
+}
+
+async function getCurrentEra(api) {
+  try {
+    const result = await api.query.staking.activeEra();
+    if (result && result.isSome) return result.unwrap().index.toNumber();
+  } catch (_) {}
+  return null;
+}
+
+// ── Format helpers ─────────────────────────────────────────────────────────────
+function formatENJ(raw, decimals = 6) {
+  if (typeof raw === 'number') raw = BigInt(Math.floor(raw));
+  const whole = raw / SCALE;
+  const frac  = raw % SCALE;
+  const fracStr = frac.toString().padStart(18, '0').slice(0, decimals);
+  return `${whole.toLocaleString()}.${fracStr}`;
+}
+
+function fmtApy(n) {
+  return isFinite(n) && n > 0 ? n.toFixed(2) + '%' : '—';
+}
+
+// ── Main query orchestrator ────────────────────────────────────────────────────
+async function runQuery() {
+  const address   = document.getElementById('address').value.trim();
+  const endpoint  = document.getElementById('endpoint').value.trim();
+
+  showError('');
+  document.getElementById('results').innerHTML = '';
+
+  if (!address)  { showError('Please enter a wallet address.'); return; }
+  if (!address.startsWith('en')) { showError('Enjin Relaychain addresses start with "en".'); return; }
+  if (!endpoint) { showError('Please enter an archive node WebSocket URL.'); return; }
+
+  // ── Resolve era range ──────────────────────────────────────────────────────
+  let startEra, endEra;
+  const eraMode = document.querySelector('input[name="eraMode"]:checked')?.value ?? 'numbers';
+  if (eraMode === 'dates') {
+    const fromStr = document.getElementById('startDate').value;
+    const toStr   = document.getElementById('endDate').value;
+    if (!fromStr || !toStr) { showError('Please enter both start and end dates.'); return; }
+    const range = erasForDateRange(fromStr, toStr);
+    if (!range) { showError('No eras found for the selected date range. Check era-reference.csv coverage.'); return; }
+    [startEra, endEra] = range;
+    log(`Date range ${fromStr} → ${toStr} maps to eras ${startEra}–${endEra}`, 'info');
+  } else {
+    startEra = parseInt(document.getElementById('startEra').value);
+    const endVal = document.getElementById('endEra').value.trim();
+    endEra   = endVal === '' ? null : parseInt(endVal);
+    if (isNaN(startEra)) { showError('Please enter a valid start era.'); return; }
+    if (endEra !== null && isNaN(endEra)) { showError('Please enter a valid end era.'); return; }
+    if (endEra !== null && startEra > endEra) { showError('Start era must be ≤ end era.'); return; }
+  }
+
+  // ── Resolve extra pool IDs (historical) ───────────────────────────────────
+  const poolScope = document.querySelector('input[name="poolScope"]:checked').value;
+  const extraPoolIds = new Set();
+
+  if (poolScope === 'history') {
+    const histSrc = document.querySelector('input[name="histSrc"]:checked')?.value ?? 'csv';
+    if (histSrc === 'csv') {
+      const histFile = document.getElementById('histCsvFile').files?.[0];
+      if (histFile) {
+        const histText = await histFile.text();
+        const ids = extractPoolIdsFromCsv(histText);
+        ids.forEach(id => extraPoolIds.add(id));
+        document.getElementById('histCsvStatus').textContent = `Pool IDs found: ${[...ids].sort((a,b)=>a-b).join(', ') || 'none'}`;
+        if (ids.size) log(`Historical pool IDs from CSV: ${[...ids].sort((a,b)=>a-b).join(', ')}`, 'info');
+      } else {
+        log('No Subscan extrinsics CSV provided — only current pools will be queried.', 'warn');
+      }
+    } else {
+      // Subscan API key download
+      const apiKey = document.getElementById('subscanApiKey').value.trim();
+      if (!apiKey) {
+        log('No Subscan API key provided — only current pools will be queried.', 'warn');
+      } else {
+        setOverlayMsg('Downloading pool history from Subscan API...');
+        log('Fetching pool history from Subscan API...', 'info');
+        const ids = await fetchPoolIdsFromSubscan(address, apiKey);
+        ids.forEach(id => extraPoolIds.add(id));
+        if (ids.size) log(`Historical pool IDs from Subscan: ${[...ids].sort((a,b)=>a-b).join(', ')}`, 'info');
+        else log('No extra pool IDs found via Subscan.', 'warn');
+      }
+    }
+  }
+
+  const btn = document.getElementById('queryBtn');
+  const txt = document.getElementById('btnText');
+  btn.disabled = true;
+  txt.innerHTML = '<span class="spinner"></span> Querying...';
+
+  clearLog();
+  openLog();
+  showOverlay('Connecting to archive node...');
+
+  log(`Address   : ${address}`, 'info');
+  log(`Era range : ${startEra} → ${endEra ?? 'current'}`, 'info');
+  log(`Endpoint  : ${endpoint}`, 'info');
+  if (Object.keys(eraRefCache).length) log(`era-reference.csv: ${Object.keys(eraRefCache).length} eras pre-loaded`, 'info');
+
+  // Reset api.at() cache for this run
+  for (const k of Object.keys(_apiAtCache)) delete _apiAtCache[k];
+
+  let api = null;
+  try {
+    setOverlayMsg('Loading Polkadot.js API...');
+    api = await connectPolkadot(endpoint);
+
+    // Find current era and clamp end
+    setOverlayMsg('Getting current era...');
+    let currentEra = await getCurrentEra(api);
+    if (currentEra !== null) log(`Current era: ${currentEra}`, 'info');
+    const clampedEnd = endEra !== null
+      ? (currentEra !== null ? Math.min(endEra, currentEra) : endEra)
+      : (currentEra ?? startEra);
+    if (endEra !== null && clampedEnd < endEra) log(`End era clamped to ${clampedEnd} (current era)`, 'warn');
+    if (endEra === null) log(`End era resolved to ${clampedEnd}`, 'info');
+
+    // Find pool membership
+    setOverlayMsg('Looking up pool membership...');
+    const memberPools = await findMemberPools(api, address, extraPoolIds);
+    if (!memberPools.length) {
+      throw new Error(
+        'Address has no sENJ balance in any pool and no historic pools were provided.\n' +
+        'To include pools already exited, select "Include historic pools" and load Subscan history.'
+      );
+    }
+    log(`Address is in pool(s): [${memberPools.join(', ')}]`, 'success');
+
+    // Pre-fetch era boundary blocks (era N and N+1 for each era in range)
+    const eraBlocks = {};
+    for (let era = startEra; era <= clampedEnd + 1; era++) {
+      setOverlayMsg(`Finding era ${era} start block...`);
+      const block = await findEraStartBlock(api, era);
+      if (block !== null) eraBlocks[era] = block;
+    }
+
+    // Per-pool, per-era computation
+    const allRows = [];
+
+    for (const poolId of memberPools) {
+      let accumulated = 0n;
+      log(`\n--- Pool ${poolId} ---`, 'info');
+
+      for (let era = startEra; era <= clampedEnd; era++) {
+        const eraStart = eraBlocks[era];
+        const eraEnd   = eraBlocks[era + 1] ?? null;
+
+        if (eraStart === undefined) {
+          log(`Pool ${poolId} / Era ${era}: no start block found, skipping.`, 'warn');
+          continue;
+        }
+
+        setOverlayMsg(`Pool ${poolId} / Era ${era}: reading storage...`);
+
+        // Resolve block hash as hex string — use CSV cache first to avoid an extra RPC call
+        const cachedHash = eraRefCache[era]?.start_block_hash || null;
+        const blockHashHex = cachedHash
+          ? cachedHash
+          : (await api.rpc.chain.getBlockHash(eraStart)).toHex();
+
+        // Member points
+        const memberPoints = await getMemberPoints(api, address, poolId, blockHashHex);
+        if (memberPoints === 0n) {
+          log(`Pool ${poolId} / Era ${era}: not a member at era start, skipping.`, 'dim');
+          continue;
+        }
+
+        // Total pool points
+        const totalPoints = await getTotalPoolPoints(api, poolId, blockHashHex);
+        if (totalPoints === 0n) {
+          log(`Pool ${poolId} / Era ${era}: pool has 0 total points, skipping.`, 'warn');
+          continue;
+        }
+
+        // Reinvested from events AFTER the era boundary
+        if (eraEnd === null) {
+          log(`Pool ${poolId} / Era ${era}: era end block not found, skipping.`, 'warn');
+          continue;
+        }
+        setOverlayMsg(`Pool ${poolId} / Era ${era}: scanning reward events...`);
+        const reinvested = await findEraReinvested(api, poolId, era, eraEnd);
+        if (reinvested === null || reinvested === 0n) {
+          log(`Pool ${poolId} / Era ${era}: no reinvested amount found, reward = 0.`, 'dim');
+          continue;
+        }
+
+        // Reward formula: reward = (memberPoints × reinvested) / totalPoints
+        const reward = (memberPoints * reinvested) / totalPoints;
+        accumulated += reward;
+
+        // APY: ((totalPoints + reinvested) / totalPoints) ^ erasPerYear − 1
+        // Matches era-reference.py formula exactly.
+        const eraApy = (Math.pow(
+          Number((totalPoints + reinvested) * SCALE / totalPoints) / Number(SCALE),
+          ERAS_PER_YEAR
+        ) - 1) * 100;
+
+        // Era start datetime from CSV cache (if available)
+        const eraStartDatetime = eraRefCache[era]?.start_datetime_utc ?? '';
+
+        allRows.push({ era, poolId, memberPoints, totalPoints, reinvested, reward, accumulated, eraApy, eraStart, eraStartDatetime });
+        log(`Pool ${poolId} / Era ${era}: ${formatENJ(reward)} ENJ  |  APY ≈ ${eraApy.toFixed(2)}%`, 'accent');
+      }
+    }
+
+    hideOverlay();
+    renderResults(allRows, address, startEra, clampedEnd, memberPools);
+    log(`Done! ${allRows.length} era-pool row(s) processed.`, 'success');
+
+  } catch (err) {
+    hideOverlay();
+    showError(err.message);
+    log('Error: ' + err.message, 'error');
+  } finally {
+    if (api) { try { await api.disconnect(); } catch (_) {} }
+    btn.disabled = false;
+    txt.textContent = '⚡ Query Rewards';
+  }
+}
+
+// ── Subscan API: fetch pool IDs for address ───────────────────────────────────
+async function fetchPoolIdsFromSubscan(address, apiKey) {
+  const ids = new Set();
+  // Note: Subscan API calls from the browser require CORS support on their end.
+  // This is a best-effort implementation; use the Python script for reliable results.
+  const headers = { 'Content-Type': 'application/json', 'x-api-key': apiKey };
+  let page = 0;
+  const rowPerPage = 100;
+  while (true) {
+    try {
+      const resp = await fetch('https://enjin.api.subscan.io/api/v2/scan/extrinsics', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          row: rowPerPage,
+          signed: 'signed',
+          module_call: [{ module: 'nominationpools', call: '' }],
+          address,
+          page,
+        }),
+      });
+      if (!resp.ok) { log(`Subscan API error: HTTP ${resp.status}`, 'warn'); break; }
+      const data = await resp.json();
+      if (data.code !== 0) { log(`Subscan API: ${data.message}`, 'warn'); break; }
+      const records = data.data?.extrinsics ?? [];
+      if (!records.length) break;
+      for (const rec of records) {
+        for (const p of (rec.params ?? [])) {
+          if (p.name === 'pool_id') {
+            try { ids.add(parseInt(p.value)); } catch (_) {}
+          }
+        }
+      }
+      if (records.length < rowPerPage) break;
+      page++;
+      await new Promise(r => setTimeout(r, 500)); // rate-limit courtesy delay
+    } catch (e) {
+      log(`Subscan API request failed: ${e.message}`, 'warn');
+      break;
+    }
+  }
+  return ids;
+}
+
+// ── Render results ─────────────────────────────────────────────────────────────
+function renderResults(allRows, address, startEra, endEra, memberPools) {
+  const container = document.getElementById('results');
+
+  if (!allRows.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">📭</div>
+        <p>No rewards found for this address in eras ${startEra}–${endEra}.<br/>
+           The wallet may not have been in pools [${memberPools.join(', ')}] during this era range,<br/>
+           or the pools may not have received rewards.</p>
+      </div>`;
+    return;
+  }
+
+  const hasDates = allRows.some(r => r.eraStartDatetime);
+
+  // Grand totals
+  const grandTotal = allRows.reduce((s, r) => s + r.reward, 0n);
+  const avgApy     = allRows.reduce((s, r) => s + r.eraApy, 0) / allRows.length;
+  const maxApy     = Math.max(...allRows.map(r => r.eraApy));
+
+  // Group by pool
+  const poolGroups = {};
+  for (const r of allRows) {
+    if (!poolGroups[r.poolId]) poolGroups[r.poolId] = [];
+    poolGroups[r.poolId].push(r);
+  }
+
+  const perPoolHtml = Object.entries(poolGroups).sort((a, b) => a[0] - b[0]).map(([pid, rows]) => {
+    const poolTotal  = rows.reduce((s, r) => s + r.reward, 0n);
+    const pAvgApy    = rows.reduce((s, r) => s + r.eraApy, 0) / rows.length;
+    const dateColHdr = hasDates ? '<th>Start UTC</th>' : '';
+    const dateColRow = r => hasDates ? `<td class="mono">${escHtml((r.eraStartDatetime ?? '').slice(0, 19) || '—')}</td>` : '';
+    return `
+    <div class="card">
+      <h2>Pool ${pid} &mdash; ${rows.length} era(s) &mdash; avg APY ${pAvgApy.toFixed(2)}% &mdash; ${escHtml(address)}</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Era</th>
+              ${dateColHdr}
+              <th>Start Block</th>
+              <th>Member sENJ</th>
+              <th>Pool sENJ (total)</th>
+              <th>Pool Reinvested (ENJ)</th>
+              <th>Reward (ENJ)</th>
+              <th>Accumulated (ENJ)</th>
+              <th>APY</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td class="mono">${r.era}</td>
+                ${dateColRow(r)}
+                <td class="mono">${r.eraStart.toLocaleString()}</td>
+                <td class="mono">${formatENJ(r.memberPoints)}</td>
+                <td class="mono">${formatENJ(r.totalPoints)}</td>
+                <td class="mono">${formatENJ(r.reinvested)}</td>
+                <td class="mono" style="color:var(--accent2)">${formatENJ(r.reward)}</td>
+                <td class="mono">${formatENJ(r.accumulated)}</td>
+                <td><span class="apy-badge">${fmtApy(r.eraApy)}</span></td>
+              </tr>`).join('')}
+            <tr class="total-row">
+              <td colspan="${hasDates ? 6 : 5}">Pool ${pid} Subtotal</td>
+              <td class="mono" style="color:var(--accent2)">${formatENJ(poolTotal)}</td>
+              <td></td>
+              <td><span class="apy-badge">${pAvgApy.toFixed(2)}% avg</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="stats">
+      <div class="stat">
+        <div class="label">Total Reward</div>
+        <div class="value accent">${formatENJ(grandTotal, 4)} ENJ</div>
+      </div>
+      <div class="stat">
+        <div class="label">Pools</div>
+        <div class="value accent2">${memberPools.length} (${memberPools.join(', ')})</div>
+      </div>
+      <div class="stat">
+        <div class="label">Era-Pool Rows</div>
+        <div class="value">${allRows.length}</div>
+      </div>
+      <div class="stat">
+        <div class="label">Avg APY</div>
+        <div class="value">${avgApy.toFixed(2)}%</div>
+      </div>
+      <div class="stat">
+        <div class="label">Peak APY</div>
+        <div class="value">${maxApy.toFixed(2)}%</div>
+      </div>
+    </div>
+    ${perPoolHtml}`;
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────────────
+function clearResults() {
+  document.getElementById('results').innerHTML = '';
+  showError('');
+  clearLog();
+}
+
+function showError(msg) {
+  const box = document.getElementById('errorBox');
+  if (msg) { box.textContent = msg; box.classList.add('show'); }
+  else      { box.textContent = '';  box.classList.remove('show'); }
+}
+
+function showOverlay(msg) {
+  document.getElementById('overlay').classList.add('show');
+  document.getElementById('overlayMsg').textContent = msg;
+}
+
+function setOverlayMsg(msg) {
+  const el = document.getElementById('overlayMsg');
+  if (el) el.textContent = msg;
+}
+
+function hideOverlay() {
+  document.getElementById('overlay').classList.remove('show');
+}
+
+// ── Log drawer ─────────────────────────────────────────────────────────────────
+let logCount = 0;
+
+function log(msg, type = 'normal') {
+  const body = document.getElementById('logBody');
+  const ts   = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const icons = { normal: '›', info: '○', success: '✓', warn: '⚠', error: '✗', dim: '·', accent: '◆' };
+  const icon  = icons[type] ?? '›';
+
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-ts">${ts}</span><span class="log-${type}">${icon} ${escHtml(msg)}</span>`;
+  body.appendChild(line);
+  body.scrollTop = body.scrollHeight;
+
+  logCount++;
+  const count = document.getElementById('logCount');
+  count.textContent = logCount;
+  count.classList.add('show');
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function clearLog() {
+  document.getElementById('logBody').innerHTML = '';
+  logCount = 0;
+  const count = document.getElementById('logCount');
+  count.textContent = '';
+  count.classList.remove('show');
+}
+
+function openLog() {
+  const drawer = document.getElementById('logDrawer');
+  drawer.classList.add('open');
+  document.getElementById('logToggleIcon').textContent = '▼';
+}
+
+function toggleLog() {
+  const drawer = document.getElementById('logDrawer');
+  const isOpen = drawer.classList.toggle('open');
+  document.getElementById('logToggleIcon').textContent = isOpen ? '▼' : '▲';
+}
+</script>
+</body>
+</html>

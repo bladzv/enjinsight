@@ -6,7 +6,7 @@
  */
 import { useState, useRef, useEffect } from 'react'
 import { decodeAddress, encodeAddress } from '@polkadot/util-crypto'
-import { Activity, AlertTriangle, ChevronDown, RotateCcw, Server, Square, Upload } from 'lucide-react'
+import { Activity, AlertTriangle, Calendar, ChevronDown, Info, RotateCcw, Server, Square, Upload } from 'lucide-react'
 import useBalanceExplorer, { STATUS } from '../hooks/useBalanceExplorer.js'
 import { ENJIN_NETWORKS, WS_DEFAULT_ENDPOINT, MAX_RPC_CALLS } from '../constants.js'
 import BalanceChart       from './BalanceChart.jsx'
@@ -14,6 +14,63 @@ import BalanceTable       from './BalanceTable.jsx'
 import BalanceExportPanel from './BalanceExportPanel.jsx'
 import BalanceImportPanel from './BalanceImportPanel.jsx'
 import TerminalLog        from './TerminalLog.jsx'
+
+// ── Era CSV helpers ─────────────────────────────────────────────────────────
+
+let _eraCache = null
+
+async function loadEraData() {
+  if (_eraCache) return _eraCache
+  const resp = await fetch('/era-reference.csv')
+  const text = await resp.text()
+  const lines = text.trim().split('\n').slice(1)
+  _eraCache = lines.map(line => {
+    const p = line.split(',')
+    return {
+      era:        parseInt(p[0], 10),
+      startBlock: parseInt(p[1], 10),
+      endBlock:   parseInt(p[2], 10) || null,
+      startTs:    parseInt(p[4], 10) || null, // ms
+      endTs:      parseInt(p[6], 10) || null, // ms
+    }
+  }).filter(r => !isNaN(r.era) && !isNaN(r.startBlock))
+  return _eraCache
+}
+
+function findBlocksForDateRange(eraData, startDateStr, endDateStr) {
+  const startMs = new Date(startDateStr).getTime()
+  const endMs   = new Date(endDateStr).getTime() + 86_400_000 - 1 // end of day
+
+  let startEra = eraData[0]
+  for (let i = eraData.length - 1; i >= 0; i--) {
+    if ((eraData[i].startTs ?? 0) <= startMs) { startEra = eraData[i]; break }
+  }
+
+  let endEra = eraData[eraData.length - 1]
+  for (let i = eraData.length - 1; i >= 0; i--) {
+    if ((eraData[i].startTs ?? 0) <= endMs) { endEra = eraData[i]; break }
+  }
+
+  return {
+    startBlock: startEra.startBlock,
+    endBlock:   endEra.endBlock ?? endEra.startBlock + 14399,
+    startEra:   startEra.era,
+    endEra:     endEra.era,
+  }
+}
+
+function toDateInput(date) {
+  return date.toISOString().slice(0, 10)
+}
+
+const DATE_PRESETS = [
+  { label: '1 day',    days: 1   },
+  { label: '1 week',   days: 7   },
+  { label: '1 month',  days: 30  },
+  { label: '3 months', days: 90  },
+  { label: '6 months', days: 180 },
+  { label: '1 year',   days: 365 },
+]
 
 const TABS = [
   { key: 'query',  label: 'Query Node',  icon: Server },
@@ -32,6 +89,12 @@ export default function BalanceExplorer() {
   const [startBlock, setStartBlock] = useState('')
   const [endBlock,   setEndBlock]   = useState('')
   const [step,       setStep]       = useState('100')
+
+  // Range mode: 'block' | 'date'
+  const [rangeMode, setRangeMode]   = useState('block')
+  const [startDate, setStartDate]   = useState('')
+  const [endDate,   setEndDate]     = useState('')
+  const [eraLoadErr, setEraLoadErr] = useState(null)
 
   // Address note: { type: 'converted', convertedAddress, networkLabel } | { type: 'error', msg } | null
   const [addressNote, setAddressNote] = useState(null)
@@ -83,16 +146,46 @@ export default function BalanceExplorer() {
     reset, cancel, runQuery, importData, importEncrypted,
   } = useBalanceExplorer()
 
+  // Close the WebSocket connection cleanly when the component unmounts (user navigates away)
+  useEffect(() => () => { cancel() }, [cancel])
+
   const isLoading = status === STATUS.CONNECTING || status === STATUS.QUERYING
   const hasResults = records.length > 0
 
   async function handleFetch() {
-    // Use the network-canonical address when a prefix conversion was detected
+    let effStart = startBlock
+    let effEnd   = endBlock
+
+    if (rangeMode === 'date') {
+      if (!startDate || !endDate) return
+      setEraLoadErr(null)
+      let eraData
+      try {
+        eraData = await loadEraData()
+      } catch {
+        setEraLoadErr('Failed to load era reference data. Check network.')
+        return
+      }
+      const { startBlock: sb, endBlock: eb } = findBlocksForDateRange(eraData, startDate, endDate)
+      effStart = String(sb)
+      effEnd   = String(eb)
+      setStartBlock(effStart)
+      setEndBlock(effEnd)
+    }
+
     const effectiveAddress = addressNote?.type === 'converted'
       ? addressNote.convertedAddress
       : address
     rpcMetaRef.current = { endpoint, address: effectiveAddress }
-    await runQuery({ endpoint, address: effectiveAddress, startBlock, endBlock, step })
+    await runQuery({ endpoint, address: effectiveAddress, startBlock: effStart, endBlock: effEnd, step })
+  }
+
+  // Apply a preset shortcut: sets startDate = N days ago, endDate = today
+  function applyDatePreset(days) {
+    const now  = new Date()
+    const from = new Date(now.getTime() - days * 86_400_000)
+    setStartDate(toDateInput(from))
+    setEndDate(toDateInput(now))
   }
 
   function handleImport(text, ext, fname) {
@@ -271,52 +364,177 @@ export default function BalanceExplorer() {
               </div>
             </div>
 
-            {/* Block range + step */}
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div>
-                <label htmlFor="bal-start" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
-                  Start Block
-                </label>
-                <input
-                  id="bal-start"
-                  type="number"
-                  placeholder="e.g. 1000000"
-                  min={0} max={999999999} step={1}
-                  value={startBlock}
-                  onChange={e => setStartBlock(e.target.value)}
+            {/* ── Range mode toggle ─────────────────────────── */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">Query Range</span>
+              <div className="flex rounded-lg border border-border overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setRangeMode('block')}
                   disabled={isLoading}
-                  className={inputField}
-                />
-              </div>
-              <div>
-                <label htmlFor="bal-end" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
-                  End Block
-                </label>
-                <input
-                  id="bal-end"
-                  type="number"
-                  placeholder="e.g. 1001000"
-                  min={0} max={999999999} step={1}
-                  value={endBlock}
-                  onChange={e => setEndBlock(e.target.value)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-r border-border transition-colors
+                    ${rangeMode === 'block' ? 'bg-primary/20 text-primary' : 'text-dim hover:text-text'}`}
+                >
+                  Block Range
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRangeMode('date')}
                   disabled={isLoading}
-                  className={inputField}
-                />
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors
+                    ${rangeMode === 'date' ? 'bg-primary/20 text-primary' : 'text-dim hover:text-text'}`}
+                >
+                  <Calendar size={12} />
+                  Date Range
+                </button>
               </div>
-              <div>
-                <label htmlFor="bal-step" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
-                  Step (every N blocks)
-                </label>
-                <input
-                  id="bal-step"
-                  type="number"
-                  min={1} max={999999} step={1}
-                  value={step}
-                  onChange={e => setStep(e.target.value)}
-                  disabled={isLoading}
-                  className={inputField}
-                />
+            </div>
+
+            {/* ── Block range inputs ─────────────────────────── */}
+            {rangeMode === 'block' && (
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <label htmlFor="bal-start" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                    Start Block
+                  </label>
+                  <input
+                    id="bal-start"
+                    type="number"
+                    placeholder="e.g. 1000000"
+                    min={0} max={999999999} step={1}
+                    value={startBlock}
+                    onChange={e => setStartBlock(e.target.value)}
+                    disabled={isLoading}
+                    className={inputField}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="bal-end" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                    End Block
+                  </label>
+                  <input
+                    id="bal-end"
+                    type="number"
+                    placeholder="e.g. 1001000"
+                    min={0} max={999999999} step={1}
+                    value={endBlock}
+                    onChange={e => setEndBlock(e.target.value)}
+                    disabled={isLoading}
+                    className={inputField}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="bal-step" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                    Step (every N blocks)
+                  </label>
+                  <input
+                    id="bal-step"
+                    type="number"
+                    min={1} max={999999} step={1}
+                    value={step}
+                    onChange={e => setStep(e.target.value)}
+                    disabled={isLoading}
+                    className={inputField}
+                  />
+                </div>
               </div>
+            )}
+
+            {/* ── Date range inputs ─────────────────────────── */}
+            {rangeMode === 'date' && (
+              <div className="space-y-3">
+                {/* Quick presets */}
+                <div>
+                  <span className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">Quick Range</span>
+                  <div className="flex flex-wrap gap-2">
+                    {DATE_PRESETS.map(({ label, days }) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => applyDatePreset(days)}
+                        disabled={isLoading}
+                        className="px-2.5 py-1 rounded-md border border-border text-[11px] text-dim
+                                   hover:border-primary/50 hover:text-primary transition-colors disabled:opacity-50"
+                      >
+                        {label} ago
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Start / End date + step */}
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <label htmlFor="bal-start-date" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                      Start Date
+                    </label>
+                    <input
+                      id="bal-start-date"
+                      type="date"
+                      max={toDateInput(new Date())}
+                      value={startDate}
+                      onChange={e => setStartDate(e.target.value)}
+                      disabled={isLoading}
+                      className={inputField}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="bal-end-date" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                      End Date
+                    </label>
+                    <input
+                      id="bal-end-date"
+                      type="date"
+                      max={toDateInput(new Date())}
+                      value={endDate}
+                      onChange={e => setEndDate(e.target.value)}
+                      disabled={isLoading}
+                      className={inputField}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="bal-step-date" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                      Step (every N blocks)
+                    </label>
+                    <input
+                      id="bal-step-date"
+                      type="number"
+                      min={1} max={999999} step={1}
+                      value={step}
+                      onChange={e => setStep(e.target.value)}
+                      disabled={isLoading}
+                      className={inputField}
+                    />
+                  </div>
+                </div>
+
+                {eraLoadErr && (
+                  <p className="flex items-start gap-1.5 text-[11px] font-mono text-danger">
+                    <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" />
+                    {eraLoadErr}
+                  </p>
+                )}
+
+                {/* Resolved block range preview */}
+                {startBlock && endBlock && rangeMode === 'date' && (
+                  <p className="text-[11px] font-mono text-dim">
+                    Resolved block range: <span className="text-cyan">{Number(startBlock).toLocaleString('en')}</span>
+                    {' – '}
+                    <span className="text-cyan">{Number(endBlock).toLocaleString('en')}</span>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* ── Disclaimer — Archive RPC ─────────────────── */}
+            <div className="flex gap-2.5 px-3 py-2.5 rounded-lg bg-primary/5 border border-primary/20">
+              <Info size={14} className="text-primary/70 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-dim leading-relaxed">
+                <span className="text-text-sec font-medium">Note:</span> Balance data is fetched
+                directly from the Archive RPC endpoint, so queries may take some time to complete —
+                especially over a wide block range. Narrowing the range or increasing the step size
+                will significantly reduce query time.
+              </p>
             </div>
 
             {/* Error banner */}
@@ -332,7 +550,6 @@ export default function BalanceExplorer() {
 
             {/* Action row */}
             <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
-              {/* Single unified action button */}
               {isLoading ? (
                 <button onClick={cancel} className="btn-stop w-full sm:w-auto sm:min-w-[200px]">
                   <Square size={14} />
@@ -342,10 +559,13 @@ export default function BalanceExplorer() {
                 <button
                   onClick={handleFetch}
                   className="btn-primary w-full sm:w-auto sm:min-w-[200px]"
-                  disabled={!address.trim() || !startBlock || !endBlock}
+                  disabled={
+                    !address.trim() ||
+                    (rangeMode === 'block' ? (!startBlock || !endBlock) : (!startDate || !endDate))
+                  }
                 >
                   <Activity size={14} />
-                  Fetch Balance History
+                  Fetch Balance
                 </button>
               ) : (
                 <button onClick={reset} className="btn-primary w-full sm:w-auto sm:min-w-[200px]">
@@ -388,16 +608,6 @@ export default function BalanceExplorer() {
                   />
                 </div>
               </div>
-            )}
-
-            {/* Activity log */}
-            {logs.length > 0 && (
-              <TerminalLog logs={logs.map((l, i) => ({
-                id: i,
-                ts: l.ts,
-                level: l.level.toUpperCase(),
-                message: l.msg,
-              }))} />
             )}
           </div>
         )}
@@ -450,6 +660,17 @@ export default function BalanceExplorer() {
           )}
         </>
       )}
+
+      {/* ── Sticky terminal log — always visible at viewport bottom ── */}
+      <TerminalLog
+        sticky
+        logs={logs.map((l, i) => ({
+          id: i,
+          ts: l.ts,
+          level: l.level.toUpperCase(),
+          message: l.msg,
+        }))}
+      />
     </div>
   )
 }

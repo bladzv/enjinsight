@@ -1,6 +1,7 @@
 import { Activity, ChevronLeft, Github } from 'lucide-react'
 
 const VIEW_LABELS = {
+  era:     'Era Block Explorer',
   staking: 'Staking Rewards Cadence',
   balance: 'Historical Balance Viewer',
 }
