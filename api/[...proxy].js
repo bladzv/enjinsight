@@ -29,11 +29,19 @@ function readRawBody(req) {
 export default async function handler(req, res) {
   try {
     if (req.method === 'OPTIONS') {
-      res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+      // Only allow same-origin requests; this proxy is not a public API
+      res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '');
+      res.setHeader('Vary', 'Origin');
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', req.headers['access-control-request-headers'] || '*');
       res.statusCode = 204;
       return res.end();
+    }
+
+    // Reject requests with no Content-Type on non-GET methods (body expected)
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !req.headers['content-type']) {
+      res.statusCode = 400;
+      return res.end('Missing Content-Type header.');
     }
 
     const prefix = '/api/';
@@ -121,7 +129,9 @@ export default async function handler(req, res) {
       }
     });
 
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    // Only allow same-origin requests; this proxy is not a public API
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '');
+    res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
     // Prevent downstream content from being framed or sniffed
     res.setHeader('X-Content-Type-Options', 'nosniff');

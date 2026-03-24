@@ -141,6 +141,8 @@ class EraExplorerController {
     this.lockedStart = null
     this.killed     = false
     this.reconnTimer = null
+    this.pollTimer   = null
+    this.lastBlockTs = 0
     this.beatCallback = null
   }
 
@@ -520,6 +522,7 @@ class EraExplorerController {
           this.dispatch({ type: 'CHAIN_UPDATE', patch: { block: bn } })
           this.dispatch({ type: 'DEBUG', patch: { blockHex: msg.params.result.number, blockDec: bn.toLocaleString() } })
           if (this.beatCallback) this.beatCallback(bn)
+          this.lastBlockTs = Date.now()
           if (bn % 20 === 0) this.queryChain()
         }
       }
@@ -537,8 +540,26 @@ class EraExplorerController {
       Object.values(this.pending).forEach(p => p.reject(new Error('WS closed')))
       this.pending = {}
       this.ws = null
+      clearInterval(this.pollTimer)
+      this.pollTimer = null
       if (!this.killed) this.reconnTimer = setTimeout(() => this.connect(), 5000)
     }
+
+    // Periodic polling: refresh chain state every 12 s even if subscription stalls
+    clearInterval(this.pollTimer)
+    this.pollTimer = setInterval(() => {
+      if (this.killed) return
+      // Stale-connection detection: no block in 30 s while WS appears open → force reconnect
+      if (this.lastBlockTs > 0 && Date.now() - this.lastBlockTs > 30000
+          && this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.log('warn', 'No block received in 30 s — forcing reconnect…')
+        clearInterval(this.pollTimer)
+        this.pollTimer = null
+        try { this.ws.close(1000, 'stale') } catch {}
+        return
+      }
+      this.queryChain().catch(() => {})
+    }, 12000)
   }
 
   // Past-era lookup — CSV first, then ErasStartSessionIndex, then math
@@ -633,6 +654,8 @@ class EraExplorerController {
   destroy() {
     this.killed = true
     clearTimeout(this.reconnTimer)
+    clearInterval(this.pollTimer)
+    this.pollTimer = null
     // Close archive WS if still open during init
     try { this._archiveWs?.close() } catch {}
     this._archiveWs = null

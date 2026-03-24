@@ -139,4 +139,107 @@ export function clampInt(v, min, max) {
 /** Validate that a string matches the block hash pattern (0x + 64 hex chars). */
 export const isValidBlockHash = h => BLOCK_HASH_RE.test(h)
 
+// ── MultiTokens storage key utilities ─────────────────────────────────────
+// xxHash64 for twox128 pallet/item prefixes (Substrate SCALE storage keys)
+function _xxh64(data, seed) {
+  const P1=11400714785074694791n,P2=14029467366897019727n,
+        P3=1609587929392839161n, P4=9650029242287828579n,
+        P5=2870177450012600261n, M=(1n<<64n)-1n
+  const lo=x=>x&M, mul=(a,b)=>lo(a*b), add=(a,b)=>lo(a+b)
+  const rotl=(x,r)=>lo((x<<r)|(x>>(64n-r)))
+  const round=(acc,inp)=>mul(rotl(add(acc,mul(inp,P2)),31n),P1)
+  const merge=(acc,val)=>add(mul(lo(acc^round(0n,val)),P1),P4)
+  const s=BigInt(seed), dv=new DataView(data.buffer,data.byteOffset,data.byteLength), n=data.length
+  let p=0, h
+  if(n>=32){
+    let v1=add(add(s,P1),P2),v2=add(s,P2),v3=s,v4=lo(s-P1)
+    while(p<=n-32){v1=round(v1,dv.getBigUint64(p,true));p+=8;v2=round(v2,dv.getBigUint64(p,true));p+=8;v3=round(v3,dv.getBigUint64(p,true));p+=8;v4=round(v4,dv.getBigUint64(p,true));p+=8}
+    h=add(add(add(rotl(v1,1n),rotl(v2,7n)),rotl(v3,12n)),rotl(v4,18n))
+    h=merge(merge(merge(merge(h,v1),v2),v3),v4)
+  } else { h=add(s,P5) }
+  h=add(h,BigInt(n))
+  while(p<=n-8){h=add(mul(rotl(lo(h^round(0n,dv.getBigUint64(p,true))),27n),P1),P4);p+=8}
+  if(p<=n-4){h=add(mul(rotl(lo(h^mul(BigInt(dv.getUint32(p,true)),P1)),23n),P2),P3);p+=4}
+  while(p<n){h=mul(rotl(lo(h^mul(BigInt(data[p]),P5)),11n),P1);p++}
+  h=mul(lo(h^(h>>33n)),P2);h=mul(lo(h^(h>>29n)),P3);return lo(h^(h>>32n))
+}
+function _twox128(text) {
+  const b=new TextEncoder().encode(text)
+  const leHex=h=>{let s='';for(let i=0;i<8;i++)s+=Number((h>>(8n*BigInt(i)))&0xFFn).toString(16).padStart(2,'0');return s}
+  return leHex(_xxh64(b,0))+leHex(_xxh64(b,1))
+}
+
+/** Encode n as u128 little-endian (16 bytes). */
+function _u128le(n) {
+  const b = new Uint8Array(16)
+  let v = BigInt(n)
+  for (let i = 0; i < 16; i++) { b[i] = Number(v & 0xffn); v >>= 8n }
+  return b
+}
+
+/** Blake2_128Concat: blake2b-128(key) ++ key */
+function _b128concat(keyBytes) {
+  const h = blake2b(keyBytes, { dkLen: 16 })
+  const out = new Uint8Array(h.length + keyBytes.length)
+  out.set(h); out.set(keyBytes, h.length)
+  return out
+}
+
+/** Decode a hex twox128 result into bytes. */
+function _hexToBytes(h) {
+  return new Uint8Array((h.match(/.{2}/g) || []).map(x => parseInt(x, 16)))
+}
+
+/**
+ * Build the MultiTokens.TokenAccounts storage key for
+ *   MultiTokens.TokenAccounts(collectionId: u128, tokenId: u128, account: AccountId)
+ * using Blake2_128Concat hashers (as used by Enjin's multi-token pallet).
+ *
+ * In Enjin's nomination pools, sENJ pool shares are tracked in:
+ *   collection 1, token_id = pool_id
+ */
+export function buildTokenAccountKey(collectionId, tokenId, addr) {
+  const pub = ss58Decode(addr)
+  const k1  = _b128concat(_u128le(collectionId))
+  const k2  = _b128concat(_u128le(tokenId))
+  const k3  = _b128concat(pub)
+  const out = new Uint8Array(32 + k1.length + k2.length + k3.length)
+  let off = 0
+  out.set(_hexToBytes(_twox128('MultiTokens')),    off); off += 16
+  out.set(_hexToBytes(_twox128('TokenAccounts')),  off); off += 16
+  out.set(k1, off); off += k1.length
+  out.set(k2, off); off += k2.length
+  out.set(k3, off)
+  return '0x' + toHex(out)
+}
+
+/**
+ * Build the MultiTokens.Tokens storage key for
+ *   MultiTokens.Tokens(collectionId: u128, tokenId: u128)
+ * using Blake2_128Concat hashers.
+ */
+export function buildTokenKey(collectionId, tokenId) {
+  const k1  = _b128concat(_u128le(collectionId))
+  const k2  = _b128concat(_u128le(tokenId))
+  const out = new Uint8Array(32 + k1.length + k2.length)
+  let off = 0
+  out.set(_hexToBytes(_twox128('MultiTokens')), off); off += 16
+  out.set(_hexToBytes(_twox128('Tokens')),      off); off += 16
+  out.set(k1, off); off += k1.length
+  out.set(k2, off)
+  return '0x' + toHex(out)
+}
+
+/**
+ * Decode the first u128 field from a SCALE-encoded storage value (little-endian).
+ * Works for both TokenAccount.balance and Token.supply (both are the first field).
+ */
+export function decodeU128First(hex) {
+  if (!hex || hex === '0x' || hex === null) return 0n
+  const b = fromHex(hex)
+  if (b.length < 16) return 0n
+  let v = 0n
+  for (let i = 15; i >= 0; i--) v = (v << 8n) | BigInt(b[i])
+  return v
+}
 

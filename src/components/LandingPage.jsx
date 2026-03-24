@@ -43,9 +43,8 @@ const FEATURES = [
     description:
       'Track staking reward payouts over time for any Relaychain wallet address. ' +
       'Visualise reward trends, identify patterns, and export historical reward data for analysis and record-keeping.',
-    label: 'Coming Soon',
+    label: 'Open Reward Viewer',
     resource: 'Subscan API / Archive RPC Endpoint',
-    disabled: true,
   },
 ]
 

@@ -49,12 +49,10 @@ function reducer(state, action) {
     case 'LOG':
       return {
         ...state,
-        logs: [...state.logs, {
-          id:      Date.now() + Math.random(),
-          ts:      nowHHMMSS(),
-          level:   action.level,
-          message: action.message,
-        }],
+        logs: (() => {
+          const next = [...state.logs, { id: Date.now() + Math.random(), ts: nowHHMMSS(), level: action.level, message: action.message }]
+          return next.length > 500 ? next.slice(-500) : next
+        })(),
       }
 
     case 'SET_POOLS':
