@@ -1,0 +1,43 @@
+name: Update Era Reference CSV
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'   # Monday 00:00 UTC
+  workflow_dispatch:        # manual trigger
+
+jobs:
+  update-era-reference:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # allow push
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install substrate-interface
+
+      - name: Run era reference fetcher
+        run: python scripts/era-range-fetch.py
+        env:
+          RPC_ENDPOINT: wss://archive.relay.blockchain.enjin.io
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add public/relay-era-reference.csv
+          if git diff --staged --quiet; then
+            echo "No changes to relay-era-reference.csv"
+          else
+            git commit -m "chore(data): update relay-era-reference.csv [automated]"
+            git push
+          fi

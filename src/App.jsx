@@ -7,6 +7,7 @@ import { resolveLatestEra }    from './utils/eraAnalysis.js'
 import AppHeader           from './components/AppHeader.jsx'
 import LandingPage         from './components/LandingPage.jsx'
 import BalanceExplorer     from './components/BalanceExplorer.jsx'
+import RewardHistoryViewer from './components/RewardHistoryViewer.jsx'
 import EraBlockExplorer    from './components/EraBlockExplorer.jsx'
 import ModeSelector        from './components/ModeSelector.jsx'
 import ControlPanel        from './components/ControlPanel.jsx'
@@ -20,7 +21,7 @@ export default function App() {
   // Persist active view in URL hash so page refresh stays on current tool
   const [view, setView] = useState(() => {
     const hash = window.location.hash.slice(1)
-    return ['home', 'staking', 'balance', 'era'].includes(hash) ? hash : 'home'
+    return ['home', 'staking', 'balance', 'era', 'reward-history'].includes(hash) ? hash : 'home'
   })
   const [mode,       setMode]       = useState('validators') // 'validators' | 'pools'
   const [lastEraCount, setLastEraCount] = useState(DEFAULT_ERA_COUNT)
@@ -142,6 +143,13 @@ export default function App() {
       {view === 'balance' && (
         <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-20 sm:pb-24">
           <BalanceExplorer />
+        </main>
+      )}
+
+      {/* ── Reward History Viewer ─────────────────────────────────────────── */}
+      {view === 'reward-history' && (
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-20 sm:pb-24">
+          <RewardHistoryViewer />
         </main>
       )}
 
