@@ -7,17 +7,27 @@
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/bladzv/enjinsight?style=flat-square" /></a>
 </p>
 
-A read-only, static-frontend monitoring suite for the Enjin Blockchain. It bundles three independent on-chain tools:
+A read-only, static-frontend monitoring suite for the Enjin Blockchain. It bundles four independent on-chain tools:
 
-1. **Staking Rewards Cadence** — scans validators and nomination pools for missing reward payouts using the Subscan API.
-2. **Historical Balance Viewer** — queries any address balance over a block range directly via archive-node WebSocket RPC, with chart visualisation and encrypted export/import.
-3. **Era Block Explorer** — maps Enjin Relaychain era numbers to block heights, timestamps, and block hashes using a bundled era-reference dataset.
+1. **Era Block Explorer** — real-time era/session/block metrics + historical era lookup with UTC/local time toggle.
+2. **Staking Rewards Cadence** — scans validators and nomination pools for missing reward payouts using the Subscan API.
+3. **Historical Balance Viewer** — queries any address balance over a block or date range via archive-node WebSocket RPC, with chart visualisation and encrypted export/import.
+4. **Reward History Viewer** — computes per-era staking rewards across all nomination pools for a given relaychain address, with interactive table, chart, and encrypted export/import.
 
 ## Live Site
 
 https://enjinsight.vercel.app/
 
 ## What It Does
+
+### Era Block Explorer
+
+- Real-time display of active era, session, current block, era start/end block, blocks remaining, and era progress
+- EKG canvas animation that pulses on each new block
+- **Relaychain** badge in the status bar
+- Past Era Lookup: enter any era number → instant start/end block, timestamps, block hash from the bundled CSV; toggle UTC ↔ local time
+- Powered by `relay-era-reference.csv` covering 1,007+ eras (era 1, June 2023, onwards)
+- Sticky terminal log at page bottom
 
 ### Staking Rewards Cadence
 
@@ -38,28 +48,37 @@ https://enjinsight.vercel.app/
 
 ### Historical Balance Viewer
 
-- Connects directly to a public archive-node WebSocket endpoint (Matrixchain, Relaychain, Canary networks, or a custom URL)
-- Queries `System.Account` storage at each sampled block in the given range via `state_getStorageAt`
+- Connects to preset archive-node WebSocket endpoints (Matrixchain, Relaychain, Canary Matrixchain, Canary Relaychain)
+- Address prefix validation: `ef`=Matrixchain, `en`=Relaychain, `cx`=Canary Matrixchain, `cn`=Canary Relaychain
+- Queries `System.Account` storage at each sampled block via `state_getStorageAt`
 - SCALE-decodes both the legacy (misc+fee frozen) and the new (frozen+flags) `AccountInfo` formats
-- **Dual query mode** — enter a raw block range *or* a calendar date range; date mode resolves start/end blocks from the bundled era-reference CSV automatically
-- **Quick date presets** — 1 day, 1 week, 1 month, 3 months, 6 months, 1 year ago
-- Real-time SS58 address validation with cross-network prefix conversion
+- **Block range mode** — enter start/end block numbers + step
+- **Date range mode** (Relaychain, auto-selected) — pick UTC dates; resolved to blocks via era CSV; step in "every N days"
+- **Quick date presets** — 1 week, 1 month, 3 months, 6 months, 1 year (highlighted when active; cleared on manual edit)
+- Real-time table population during query; table visible immediately as records stream in
 - Stacked bar / per-field line chart with crosshair, smart tooltip, and height zoom
-- Sortable balance history table with text-size zoom
-- Export to **JSON / CSV / XML** (plain or **AES-256-GCM encrypted**); re-import offline
+- Paginated, sortable balance history table (10/25/50/100/250 rows per page; text-size zoom)
+- Export to **JSON / CSV / XML** (plain or **AES-256-GCM encrypted**); re-import offline; import stays on import tab
 - Progress bar and activity log during query; cancellable at any time
 
-### Era Block Explorer
+### Reward History Viewer
 
-- Instant lookup of any Enjin Relaychain era → start/end block, timestamp, and block hash
-- Powered by a bundled `era-reference.csv` covering era 1 (June 2023) through the most recent known era
-- No API key or network connection required — fully offline-capable
+- Computes per-era staking rewards for an Enjin Relaychain address (`en…`) across all nomination pools
+- Input: era range (manual) or date range (quick presets: 1 week / 1 month / 3 months / 6 months / 1 year)
+- Queries member sENJ balance and pool supply at each era's start block via archive-node WebSocket RPC
+- Fetches reinvested ENJ amounts from Subscan `reward_slash` events for the pool stash in post-era blocks
+- **Unified interactive table**: all eras × all pools, filterable by pool and era range, sortable columns, paginated
+- **Line chart** reactive to table filter state (one line per pool)
+- **Summary section**: total reward, avg APY, era range, eras with rewards, pool count, best APY era, best pool
+- Export to **JSON / CSV / XML** (plain or **AES-256-GCM encrypted**); re-import offline
+- Sticky terminal log always visible
+- See `docs/reward-history-computation.md` for APY formula analysis and known limitations
 
 ### UI/UX
-- Landing page with tool selector; in-app navigation with breadcrumb and back button
-- **URL hash routing** — active tool persists across page refreshes (`#staking`, `#balance`, `#era`)
-- Single `CHECK → STOP → RESET` action cycle for the staking scanner
-- Step-numbered progress bar with per-phase status and item counts
+- Landing page: 4-column card grid on desktop (xl+), 2-column on tablet, 1-column on mobile
+- In-app navigation with breadcrumb and back button
+- **URL hash routing** — active tool persists across page refreshes (`#staking`, `#balance`, `#era`, `#reward-history`)
+- Gradient progress bar + phase step list on all scanning tools
 - Sticky terminal log drawer always visible at the bottom of tool pages
 - Expandable cards, paginated tables, terminal-style log with timestamps
 - Mobile and desktop responsive; fully static — no back-end server required
@@ -121,11 +140,14 @@ https://enjinsight.vercel.app/
 │   │   ├── BalanceTable.jsx        # Sortable balance history table
 │   │   ├── BalanceExportPanel.jsx  # JSON / CSV / XML export (with encryption)
 │   │   ├── BalanceImportPanel.jsx  # Drag-and-drop file import (with decryption)
-│   │   └── EraBlockExplorer.jsx    # Era Block Explorer — iframe wrapper for era-explorer.html
+│   │   ├── EraBlockExplorer.jsx    # Era Block Explorer — real-time metrics + past era lookup
+│   │   └── RewardHistoryViewer.jsx # Reward History Viewer — compute/import/export rewards
 │   ├── hooks/
 │   │   ├── useValidatorChecker.js  # State machine for validator scanning
 │   │   ├── usePoolChecker.js       # State machine for pool scanning
-│   │   └── useBalanceExplorer.js   # State machine for balance queries
+│   │   ├── useBalanceExplorer.js   # State machine for balance queries
+│   │   ├── useEraExplorer.js       # State machine for era block explorer
+│   │   └── useRewardHistory.js     # State machine for reward history computation
 │   ├── utils/
 │   │   ├── api.js          # Fetch wrapper, request queue, typed helpers, allowlist
 │   │   ├── eraAnalysis.js  # Missed-era detection, consecutive-gap grouping, severity

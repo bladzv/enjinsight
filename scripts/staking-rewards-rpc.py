@@ -15,7 +15,7 @@ Examples:
     python staking-rewards-rpc.py --json > rewards.json
 
 Requirements:
-    pip install substrate-interface
+    pip install substrate-interface certifi
 
 Environment variables:
     RPC_ENDPOINT    Archive node WebSocket URL (overrides default)
@@ -42,6 +42,7 @@ import http.client
 import json
 import os
 import re
+import ssl
 import sys
 import time
 from datetime import datetime as _dt, timezone as _tz
@@ -70,6 +71,34 @@ DEFAULT_ENDPOINT    = os.getenv("RPC_ENDPOINT", "wss://archive.relay.blockchain.
 SUBSCAN_HOST        = "enjin.api.subscan.io"
 SUBSCAN_RETRY_DELAY = 5
 SUBSCAN_API_KEY     = os.getenv("SUBSCAN_API_KEY", "")
+
+# ── SSL context ────────────────────────────────────────────────────────────────
+# On macOS (and some Linux setups) Python does not use the system CA store by
+# default, causing "CERTIFICATE_VERIFY_FAILED" when connecting to HTTPS/WSS.
+# Prefer certifi's CA bundle if available; fall back to the system default.
+try:
+    import certifi as _certifi
+    _SSL_CA_BUNDLE = _certifi.where()
+    _SSL_CTX = ssl.create_default_context(cafile=_SSL_CA_BUNDLE)
+except ImportError:
+    _SSL_CA_BUNDLE = None
+    _SSL_CTX = ssl.create_default_context()
+
+
+def _ws_options(endpoint):
+    # type: (str) -> dict
+    """
+    Return websocket-client options for SubstrateInterface.
+    For wss:// endpoints, force certificate verification and, when available,
+    provide certifi's CA bundle explicitly.
+    """
+    opts = {}
+    if str(endpoint).lower().startswith("wss://"):
+        sslopt = {'cert_reqs': ssl.CERT_REQUIRED}
+        if _SSL_CA_BUNDLE:
+            sslopt['ca_certs'] = _SSL_CA_BUNDLE
+        opts['sslopt'] = sslopt
+    return opts
 
 # ── Formatting ────────────────────────────────────────────────────────────────
 
@@ -214,7 +243,7 @@ def _subscan_post(endpoint, payload, headers, max_retries=3):
     for attempt in range(max_retries):
         conn = None
         try:
-            conn = http.client.HTTPSConnection(SUBSCAN_HOST)
+            conn = http.client.HTTPSConnection(SUBSCAN_HOST, context=_SSL_CTX)
             conn.request("POST", endpoint, json.dumps(payload), headers)
             resp = conn.getresponse()
             if resp.status == 429:
@@ -945,9 +974,17 @@ def _run():
             url=args.endpoint,
             ss58_format=ENJ_SS58_PREFIX,
             type_registry_preset="polkadot",
+            ws_options=_ws_options(args.endpoint),
         )
     except Exception as e:
         print("  ERROR: Cannot connect to {}\n  {}".format(args.endpoint, e))
+        if "CERTIFICATE_VERIFY_FAILED" in str(e):
+            print("  Hint: TLS certificate verification failed.")
+            if _SSL_CA_BUNDLE:
+                print("  CA bundle: {}".format(_SSL_CA_BUNDLE))
+            else:
+                print("  Install certifi and retry: pip install certifi")
+                print("  (macOS Python.org users may also need to run Install Certificates.command)")
         sys.exit(1)
 
     # ── Step 7: Compute and output ─────────────────────────────────────────────

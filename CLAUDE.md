@@ -74,17 +74,17 @@ Set `SUBSCAN_API_KEY=<key>` in `.env` for Subscan API access during development.
 To query Substrate storage from the browser:
 
 ```js
-import { buildTokenAccountKey, buildTokenKey, decodeU128First } from './utils/substrate.js'
+import { buildTokenAccountKey, buildTokenKey, decodeCompactFirst } from './utils/substrate.js'
 
 // MultiTokens.TokenAccounts(collectionId=1n, tokenId=poolId, address)
 const key = buildTokenAccountKey(1n, BigInt(poolId), address)
 const raw = await rpc.call('state_getStorage', [key, blockHash])
-const balance = decodeU128First(raw)  // BigInt
+const balance = decodeCompactFirst(raw)  // BigInt (SCALE compact-encoded)
 
 // MultiTokens.Tokens(collectionId=1n, tokenId=poolId)
 const tkey = buildTokenKey(1n, BigInt(poolId))
 const traw = await rpc.call('state_getStorage', [tkey, blockHash])
-const supply = decodeU128First(traw)  // BigInt
+const supply = decodeCompactFirst(traw)  // BigInt (SCALE compact-encoded)
 ```
 
 For System.Account (balance viewer):

@@ -3,9 +3,10 @@
  *
  * Shows live Enjin Relay era / session / block data via a persistent WebSocket,
  * with an EKG canvas, an era progress bar, and a past-era lookup tool.
+ * Network: Enjin Relaychain only.
  */
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { ChevronDown, ChevronUp, Search } from 'lucide-react'
+import { ChevronDown, ChevronUp, Search, Globe, Clock } from 'lucide-react'
 import { useEraExplorer, ERA_STATUS } from '../hooks/useEraExplorer.js'
 import TerminalLog from './TerminalLog.jsx'
 
@@ -101,11 +102,42 @@ const STATUS_CONFIG = {
   [ERA_STATUS.DISCONNECTED]:{ dot: 'bg-danger',   label: 'Disconnected — reconnecting…' },
 }
 function fmt(n) { return n != null ? n.toLocaleString() : '—' }
-function StatCard({ label, value, accent = false }) {
+
+/** Format a UTC date string into human-readable local time */
+function fmtDateLocal(utcStr) {
+  if (!utcStr) return null
+  try {
+    const d = new Date(utcStr)
+    if (isNaN(d.getTime())) return null
+    return d.toLocaleString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      timeZoneName: 'short',
+    })
+  } catch { return null }
+}
+
+function fmtDateUtc(utcStr) {
+  if (!utcStr) return null
+  try {
+    const d = new Date(utcStr)
+    if (isNaN(d.getTime())) return null
+    return d.toUTCString().replace(' GMT', ' UTC')
+  } catch { return null }
+}
+
+/** Format unix timestamp (seconds) to UTC ISO string */
+function unixToUtcStr(unix) {
+  if (!unix) return null
+  return new Date(unix * 1000).toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC')
+}
+
+function StatCard({ label, value, accent = false, sub = null }) {
   return (
     <div className="card p-3 text-center">
       <p className="text-[10px] font-bold tracking-widest uppercase text-dim mb-1">{label}</p>
-      <p className={`text-xl font-bold font-mono ${accent ? 'text-cyan' : 'text-text'}`}>{value}</p>
+      <p className={`text-xl font-bold font-mono leading-tight ${accent ? 'text-cyan' : 'text-text'}`}>{value}</p>
+      {sub && <p className="text-[10px] text-muted mt-0.5 font-mono leading-tight truncate" title={sub}>{sub}</p>}
     </div>
   )
 }
@@ -120,6 +152,7 @@ export default function EraBlockExplorer() {
 
   const [eraInput, setEraInput]     = useState('')
   const [showDebug, setShowDebug]   = useState(false)
+  const [localTime, setLocalTime]   = useState(false)   // toggle for lookup dates
 
   const eraEnd   = eraStart != null ? eraStart + ERA_LEN - 1 : null
   const remaining = eraEnd != null && block != null ? Math.max(0, eraEnd - block) : null
@@ -135,27 +168,34 @@ export default function EraBlockExplorer() {
     if (!isNaN(n)) lookupEra(n)
   }, [eraInput, lookupEra])
 
+  // Derive human-readable start/end labels for active era
+  const eraStartLabel = eraStart != null ? eraStart.toLocaleString() : '—'
+  const eraEndLabel   = eraEnd   != null ? eraEnd.toLocaleString()   : '—'
+
   return (
-    <main className="px-4 py-5 max-w-4xl mx-auto space-y-4">
+    <main className="px-4 py-5 max-w-4xl mx-auto space-y-4 pb-24">
 
       {/* ── Status bar ── */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusCfg.dot}`} />
         <span className="text-sm text-dim">{statusCfg.label}</span>
-        {csvCount > 0 && (
-          <span className="ml-auto text-xs text-muted font-mono">{csvCount} eras preloaded</span>
-        )}
+        {/* Relaychain badge */}
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+                         bg-cyan/10 border border-cyan/25 text-[10px] font-semibold
+                         tracking-widest uppercase text-cyan ml-1">
+          Relaychain
+        </span>
       </div>
 
       {/* ── Stats + EKG ── */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-2">
-          <StatCard label="Active Era"    value={fmt(era)}     accent />
-          <StatCard label="Era Starts"    value={fmt(eraStart)} />
-          <StatCard label="Era Ends"      value={fmt(eraEnd)}  />
-          <StatCard label="Session"       value={fmt(session)} />
-          <StatCard label="Block"         value={fmt(block)}   accent />
-          <StatCard label="Blocks Left"   value={fmt(remaining)} />
+        <div className="flex-1 grid grid-cols-3 gap-2">
+          <StatCard label="Active Era"     value={fmt(era)}           accent />
+          <StatCard label="Era Starts"     value={eraStartLabel} />
+          <StatCard label="Era Ends"       value={eraEndLabel}  />
+          <StatCard label="Session"        value={fmt(session)} />
+          <StatCard label="Current Block"  value={fmt(block)}         accent />
+          <StatCard label="Blocks Left"    value={fmt(remaining)} />
         </div>
         <div className="sm:w-64 flex flex-col gap-2">
           <div className="card flex-1 p-2 flex flex-col" style={{ minHeight: '80px' }}>
@@ -164,16 +204,28 @@ export default function EraBlockExplorer() {
               <EraEKG block={block} />
             </div>
           </div>
+          {/* Era progress — same style used across the app */}
           <div className="card p-3">
             <div className="flex justify-between text-xs mb-1.5">
               <span className="text-dim">Era progress</span>
               <span className="font-mono text-text">{pct}%</span>
             </div>
-            <div className="h-1.5 rounded-full bg-surface overflow-hidden">
+            <div className="h-2 rounded-full bg-surface overflow-hidden">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-primary-dim via-primary to-cyan transition-[width] duration-700"
                 style={{ width: `${pct}%` }}
               />
+            </div>
+            {/* Phase-steps row (single step for live era) */}
+            <div className="mt-2">
+              <div className="flex items-center justify-between text-[10px] bg-surface/40 rounded border border-border px-2 py-1">
+                <span className={`font-medium ${status === ERA_STATUS.LIVE ? 'text-success' : 'text-cyan animate-pulse'}`}>
+                  {status === ERA_STATUS.LIVE ? 'Live — tracking current era' : statusCfg.label}
+                </span>
+                <span className={`font-semibold ${status === ERA_STATUS.LIVE ? 'text-success' : 'text-cyan'}`}>
+                  {status === ERA_STATUS.LIVE ? 'Live' : '…'}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -181,7 +233,31 @@ export default function EraBlockExplorer() {
 
       {/* ── Past Era Lookup ── */}
       <div className="card p-4 space-y-3">
-        <h2 className="text-sm font-semibold text-text">Past Era Lookup</h2>
+        {/* Header: label + CSV count + timezone toggle */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <h2 className="text-sm font-semibold text-text">Past Era Lookup</h2>
+          {csvCount > 0 && (
+            <span className="text-xs text-muted font-mono bg-surface px-2 py-0.5 rounded-full border border-border">
+              {csvCount} eras preloaded
+            </span>
+          )}
+          <div className="ml-auto flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setLocalTime(v => !v)}
+              title={localTime ? 'Showing local timezone — click for UTC' : 'Showing UTC — click for local timezone'}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium border transition-colors
+                ${localTime
+                  ? 'bg-cyan/10 border-cyan/30 text-cyan'
+                  : 'bg-surface border-border text-dim hover:text-text'}`}
+              aria-pressed={localTime}
+            >
+              {localTime ? <Globe size={11} /> : <Clock size={11} />}
+              {localTime ? 'Local' : 'UTC'}
+            </button>
+          </div>
+        </div>
+
         <form onSubmit={onLookup} className="flex gap-2">
           <input
             type="number"
@@ -213,34 +289,61 @@ export default function EraBlockExplorer() {
 
         {lookup && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 animate-fade-in">
+            {/* Era number */}
             <div className="card p-3 text-center col-span-2 sm:col-span-1">
               <p className="text-[10px] font-bold tracking-widest uppercase text-dim mb-1">Era</p>
               <p className="text-lg font-bold font-mono text-cyan">{lookup.era}</p>
             </div>
+            {/* Start Block */}
             <div className="card p-3 text-center">
               <p className="text-[10px] font-bold tracking-widest uppercase text-dim mb-1">Start Block</p>
               <p className="text-base font-mono text-text">{lookup.startBlock.toLocaleString()}</p>
             </div>
+            {/* End Block */}
             <div className="card p-3 text-center">
               <p className="text-[10px] font-bold tracking-widest uppercase text-dim mb-1">End Block</p>
               <p className="text-base font-mono text-text">{lookup.endBlock.toLocaleString()}</p>
             </div>
+            {/* Source */}
             <div className="card p-3 text-center">
               <p className="text-[10px] font-bold tracking-widest uppercase text-dim mb-1">Source</p>
               <p className="text-xs text-muted">{lookup.source}</p>
             </div>
-            {lookup.startDateUtc && (
-              <div className="card p-3 col-span-2">
-                <p className="text-[10px] font-bold tracking-widest uppercase text-dim mb-1">Start (UTC)</p>
-                <p className="text-xs font-mono text-text">{lookup.startDateUtc}</p>
-              </div>
-            )}
-            {lookup.endDateUtc && (
-              <div className="card p-3 col-span-2">
-                <p className="text-[10px] font-bold tracking-widest uppercase text-dim mb-1">End (UTC)</p>
-                <p className="text-xs font-mono text-text">{lookup.endDateUtc}</p>
-              </div>
-            )}
+
+            {/* Start date — human-readable */}
+            {lookup.startDateUtc && (() => {
+              const raw = lookup.startDateUtc
+              const display = localTime
+                ? (fmtDateLocal(raw) ?? raw)
+                : (fmtDateUtc(raw) ?? raw)
+              return (
+                <div className="card p-3 col-span-2">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <p className="text-[10px] font-bold tracking-widest uppercase text-dim">Start</p>
+                    <span className="text-[9px] text-muted uppercase">({localTime ? 'Local' : 'UTC'})</span>
+                  </div>
+                  <p className="text-xs font-mono text-text leading-snug">{display}</p>
+                </div>
+              )
+            })()}
+
+            {/* End date — human-readable */}
+            {lookup.endDateUtc && (() => {
+              const raw = lookup.endDateUtc
+              const display = localTime
+                ? (fmtDateLocal(raw) ?? raw)
+                : (fmtDateUtc(raw) ?? raw)
+              return (
+                <div className="card p-3 col-span-2">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <p className="text-[10px] font-bold tracking-widest uppercase text-dim">End</p>
+                    <span className="text-[9px] text-muted uppercase">({localTime ? 'Local' : 'UTC'})</span>
+                  </div>
+                  <p className="text-xs font-mono text-text leading-snug">{display}</p>
+                </div>
+              )
+            })()}
+
             {lookup.startBlockHash && (
               <div className="card p-3 col-span-2 sm:col-span-4">
                 <p className="text-[10px] font-bold tracking-widest uppercase text-dim mb-1">Start Block Hash</p>
@@ -290,8 +393,8 @@ export default function EraBlockExplorer() {
         )}
       </div>
 
-      {/* ── Activity log ── */}
-      <TerminalLog logs={logs} sticky={false} />
+      {/* ── Sticky activity log ── */}
+      <TerminalLog logs={logs} sticky />
 
     </main>
   )

@@ -18,6 +18,8 @@ const SESSION_LEN    = 2400
 const HISTORY_DEPTH  = 84
 const ERA_START_ITEM = 'ErasStartSessionIndex'
 const CSV_PATH       = '/relay-era-reference.csv'
+// twox128("Timestamp") + twox128("Now") — queried to get UTC dates during era lookup
+const TIMESTAMP_NOW_KEY = '0xf0c365c3cf59d671eb72da0e7a4113c49f1f0515f462cdcf84e0f1d6045dfcbb'
 
 const STAKING_CANDIDATES = ['Staking','EnjinStaking','ParachainStaking','RelayStaking','PoAStaking']
 const STAKING_ERA_ITEM   = ['ActiveEra','CurrentEra','active_era','current_era']
@@ -66,6 +68,21 @@ function decodeActiveEra(hex){
   return null
 }
 function decodeU32(hex){ if(!hex)return null;const b=h2b(hex);return b.length>=4?u32LE(b,0):null }
+
+/** Decode Timestamp.Now (u64 little-endian) → ms since epoch as Number. */
+function decodeTimestampMs(hex) {
+  if (!hex || hex === '0x') return null
+  const s = hex.startsWith('0x') ? hex.slice(2) : hex
+  if (s.length < 16) return null
+  let v = 0n
+  for (let i = 0; i < 8; i++)
+    v |= BigInt(parseInt(s.slice(i * 2, i * 2 + 2), 16)) << BigInt(i * 8)
+  return Number(v)
+}
+
+function tsToUtcString(ms) {
+  return new Date(ms).toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC')
+}
 
 // ── Status enum ───────────────────────────────────────────────────────────────
 export const ERA_STATUS = {
@@ -625,19 +642,53 @@ class EraExplorerController {
     const mathStart =
       this.eraBlockCache[targetEra] ??
       (this.lockedStart != null ? this.lockedStart - (currentEra - targetEra) * ERA_LEN : null)
-    if (rpcStart == null && mathStart == null) {
+
+    let fStart = rpcStart ?? mathStart
+    let source = rpcStart != null
+      ? 'ErasStartSessionIndex'
+      : (withinHistory ? 'math (key not found)' : 'math · beyond history')
+    let startBlockHash = null
+    let startDateUtc   = null
+
+    // Open one archive connection to either binary-search (when fStart is still
+    // unknown) or to enrich the result with block hash + UTC timestamp.
+    if (this.keys.activeEra && this.chain.block) {
+      const head = this.chain.block
+      try {
+        await this.archiveRpc(async callFn => {
+          if (fStart == null) {
+            const found = await this._binarySearch(callFn, this.keys.activeEra, targetEra, head)
+            if (found != null) { fStart = found; source = 'archive binary search' }
+          }
+          if (fStart != null) {
+            const h = await callFn('chain_getBlockHash', [fStart]).catch(() => null)
+            startBlockHash = h
+            if (h) {
+              const tsRaw = await callFn('state_getStorage', [TIMESTAMP_NOW_KEY, h]).catch(() => null)
+              if (tsRaw) {
+                const ms = decodeTimestampMs(tsRaw)
+                if (ms != null) startDateUtc = tsToUtcString(ms)
+              }
+            }
+          }
+        })
+      } catch (e) { this.log('warn', `Archive era lookup: ${e.message}`) }
+    }
+
+    if (fStart == null) {
       this.dispatch({ type: 'LOOKUP_ERROR', error: 'Cannot compute. Ensure live data is synced.' })
       return
     }
-    const fStart = rpcStart ?? mathStart
     this.dispatch({
       type: 'LOOKUP_DONE',
       result: {
         era: targetEra,
         startBlock: fStart,
         endBlock:   fStart + ERA_LEN - 1,
-        source: rpcStart != null ? 'ErasStartSessionIndex' : (withinHistory ? 'math (key not found)' : 'math · beyond history'),
-        startDateUtc: null, endDateUtc: null, startBlockHash: null,
+        source,
+        startDateUtc,
+        endDateUtc:     null,
+        startBlockHash,
       },
     })
   }

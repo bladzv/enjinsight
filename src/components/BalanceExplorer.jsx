@@ -3,17 +3,38 @@
  *
  * Renders a unified input card (tab bar + query form / import panel) plus
  * a shared results section (records bar + chart + table + export).
+ *
+ * Changes from original:
+ * - Query Range toggle hidden on Relaychain (auto-uses date range)
+ * - Step label = "Step (every N days)" on Relaychain date-range mode
+ * - Address validation: warns on wrong SS58 prefix for selected network
+ * - Quick preset buttons highlight the active selection
+ * - Import stays on result view (no auto-switch to query tab)
+ * - BalanceTable receives isLoading for real-time population indication
+ * - Custom endpoint option removed (only preset networks)
  */
 import { useState, useRef, useEffect } from 'react'
 import { decodeAddress, encodeAddress } from '@polkadot/util-crypto'
 import { Activity, AlertTriangle, Calendar, ChevronDown, Info, RotateCcw, Server, Square, Upload } from 'lucide-react'
 import useBalanceExplorer, { STATUS } from '../hooks/useBalanceExplorer.js'
-import { ENJIN_NETWORKS, WS_DEFAULT_ENDPOINT, MAX_RPC_CALLS } from '../constants.js'
+import { ENJIN_NETWORKS, MAX_RPC_CALLS } from '../constants.js'
+import { fetchEraBoundariesFromRpc } from '../utils/eraRpc.js'
 import BalanceChart       from './BalanceChart.jsx'
 import BalanceTable       from './BalanceTable.jsx'
 import BalanceExportPanel from './BalanceExportPanel.jsx'
 import BalanceImportPanel from './BalanceImportPanel.jsx'
 import TerminalLog        from './TerminalLog.jsx'
+
+// ── Address prefix map ───────────────────────────────────────────────────────
+const ADDR_PREFIX_MAP = {
+  matrixchain:   { prefix: 'ef', label: 'Matrixchain' },
+  relaychain:    { prefix: 'en', label: 'Relaychain' },
+  'canary-matrix': { prefix: 'cx', label: 'Canary Matrixchain' },
+  'canary-relay':  { prefix: 'cn', label: 'Canary Relaychain' },
+}
+
+// Filter out the custom endpoint option
+const PRESET_NETWORKS = ENJIN_NETWORKS.filter(n => n.key !== 'custom')
 
 // ── Era CSV helpers ─────────────────────────────────────────────────────────
 
@@ -30,8 +51,8 @@ async function loadEraData() {
       era:        parseInt(p[0], 10),
       startBlock: parseInt(p[1], 10),
       endBlock:   parseInt(p[2], 10) || null,
-      startTs:    parseInt(p[4], 10) || null, // ms
-      endTs:      parseInt(p[6], 10) || null, // ms
+      startTs:    parseInt(p[4], 10) || null, // unix seconds
+      endTs:      parseInt(p[6], 10) || null, // unix seconds
     }
   }).filter(r => !isNaN(r.era) && !isNaN(r.startBlock))
   return _eraCache
@@ -43,20 +64,95 @@ function findBlocksForDateRange(eraData, startDateStr, endDateStr) {
 
   let startEra = eraData[0]
   for (let i = eraData.length - 1; i >= 0; i--) {
-    if ((eraData[i].startTs ?? 0) <= startMs) { startEra = eraData[i]; break }
+    if (((eraData[i].startTs ?? 0) * 1000) <= startMs) { startEra = eraData[i]; break }
   }
 
   let endEra = eraData[eraData.length - 1]
   for (let i = eraData.length - 1; i >= 0; i--) {
-    if ((eraData[i].startTs ?? 0) <= endMs) { endEra = eraData[i]; break }
+    if (((eraData[i].startTs ?? 0) * 1000) <= endMs) { endEra = eraData[i]; break }
+  }
+
+  // If endDate is beyond the last CSV era's coverage, estimate additional eras.
+  // Block numbers are approximate (~14400 blocks/era); the hook queries whatever
+  // blocks actually exist and skips any that don't.
+  const lastRow = eraData[eraData.length - 1]
+  if (lastRow?.startTs) {
+    const lastCoverageMs = (lastRow.endTs ?? (lastRow.startTs + 86400)) * 1000
+    if (endMs > lastCoverageMs) {
+      const extraEras   = Math.ceil((endMs - lastCoverageMs) / 86_400_000)
+      const lastEndBlock = lastRow.endBlock ?? (lastRow.startBlock + 14399)
+      endEra = {
+        era:        lastRow.era + extraEras,
+        startBlock: lastEndBlock + 1,
+        endBlock:   lastEndBlock + extraEras * 14400,
+        startTs:    lastRow.endTs ?? (lastRow.startTs + 86400),
+        endTs:      null,
+      }
+    }
   }
 
   return {
     startBlock: startEra.startBlock,
-    endBlock:   endEra.endBlock ?? endEra.startBlock + 14399,
+    endBlock:   endEra.endBlock ?? (endEra.startBlock + 14399),
     startEra:   startEra.era,
     endEra:     endEra.era,
   }
+}
+
+async function findBlocksForEraRange(eraData, startEraNum, endEraNum, archiveWss) {
+  const s = parseInt(startEraNum, 10)
+  const e = parseInt(endEraNum, 10)
+  const startRow = eraData.find(r => r.era === s)
+  const endRow   = eraData.find(r => r.era === e)
+
+  if (startRow && endRow) {
+    return {
+      startBlock: startRow.startBlock,
+      endBlock:   endRow.endBlock ?? (endRow.startBlock + 14399),
+    }
+  }
+
+  // One or both eras are missing from the CSV — fetch via archive RPC.
+  const missingEras = []
+  if (!startRow) missingEras.push(s)
+  if (!endRow && e !== s) missingEras.push(e)
+
+  let rpcRows = {}
+  if (missingEras.length > 0 && archiveWss) {
+    rpcRows = await fetchEraBoundariesFromRpc(archiveWss, missingEras)
+  }
+
+  const finalStart = startRow || rpcRows[s]
+  const finalEnd   = endRow   || rpcRows[e] || (e === s ? finalStart : null)
+
+  if (!finalStart) throw new Error(`Era ${s} not found in reference data.`)
+  if (!finalEnd)   throw new Error(`Era ${e} not found in reference data.`)
+
+  return {
+    startBlock: finalStart.startBlock,
+    endBlock:   finalEnd.endBlock ?? (finalEnd.startBlock + 14399),
+  }
+}
+
+/**
+ * Compute an approximate step (in blocks) for N days on the Relaychain.
+ * Each era ≈ 14400 blocks ≈ 1 day.
+ * If era data is available we use actual era boundaries to be more accurate.
+ */
+function computeDayStep(eraData, dayStep) {
+  if (!eraData || eraData.length < 2) return dayStep * 14400
+  // Average blocks per era from the last 50 eras
+  const sample = eraData.slice(-50)
+  let totalBlocks = 0, count = 0
+  for (let i = 1; i < sample.length; i++) {
+    const prev = sample[i - 1], cur = sample[i]
+    if (cur.startBlock > prev.startBlock) {
+      totalBlocks += cur.startBlock - prev.startBlock
+      count++
+    }
+  }
+  const avgBlocksPerEra = count > 0 ? totalBlocks / count : 14400
+  return Math.round(avgBlocksPerEra * dayStep)
 }
 
 function toDateInput(date) {
@@ -79,10 +175,10 @@ const TABS = [
 
 export default function BalanceExplorer() {
   const [tab, setTab] = useState('query')
+  const [showImportResults, setShowImportResults] = useState(false)
 
-  // Network selection state
-  const [networkKey,    setNetworkKey]    = useState(ENJIN_NETWORKS[0].key)
-  const [customEndpoint, setCustomEndpoint] = useState('')
+  // Network selection state — no custom endpoint
+  const [networkKey, setNetworkKey] = useState(PRESET_NETWORKS[0].key)
 
   // Form state (controlled inputs — validated before any API call)
   const [address,    setAddress]    = useState('')
@@ -90,33 +186,68 @@ export default function BalanceExplorer() {
   const [endBlock,   setEndBlock]   = useState('')
   const [step,       setStep]       = useState('100')
 
-  // Range mode: 'block' | 'date'
+  // Range mode: 'block' | 'date' | 'era'
   const [rangeMode, setRangeMode]   = useState('block')
   const [startDate, setStartDate]   = useState('')
   const [endDate,   setEndDate]     = useState('')
   const [eraLoadErr, setEraLoadErr] = useState(null)
+  const [eraDataRef, setEraDataRef] = useState(null)  // loaded era data for step computation
+  const [startEraNum, setStartEraNum] = useState('')
+  const [endEraNum,   setEndEraNum]   = useState('')
 
-  // Address note: { type: 'converted', convertedAddress, networkLabel } | { type: 'error', msg } | null
+  // Track active quick-range preset (null = custom / manual)
+  const [activePreset, setActivePreset] = useState(null)
+
+  // Address validation note
   const [addressNote, setAddressNote] = useState(null)
   const addrDebounceRef = useRef(null)
 
-  // Derived: active network preset + resolved endpoint
-  const activeNetwork       = ENJIN_NETWORKS.find(n => n.key === networkKey) ?? ENJIN_NETWORKS[0]
-  const isCustom            = networkKey === 'custom'
-  const endpoint            = isCustom ? customEndpoint : activeNetwork.endpoint
-  const isDateRangeSupported = activeNetwork.supportsDateRange === true && !isCustom
+  // Derived: active network preset
+  const activeNetwork        = PRESET_NETWORKS.find(n => n.key === networkKey) ?? PRESET_NETWORKS[0]
+  const endpoint             = activeNetwork.endpoint
+  const isDateRangeSupported = activeNetwork.supportsDateRange === true
+  const isRelaychain         = networkKey === 'relaychain'
 
-  // Auto-switch back to block range when the selected network doesn't support date range
+  // On Relaychain: switch to era range by default; on non-Relaychain: revert if needed
   useEffect(() => {
-    if (!isDateRangeSupported && rangeMode === 'date') setRangeMode('block')
-  }, [networkKey, isDateRangeSupported]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (isRelaychain) {
+      if (rangeMode === 'block') {
+        setRangeMode('era')
+        setStep('14400')
+      }
+    } else {
+      if ((rangeMode === 'era') || (rangeMode === 'date' && !isDateRangeSupported)) {
+        setRangeMode('block')
+      }
+    }
+  }, [networkKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load era data when date range or era range is active
+  useEffect(() => {
+    if ((rangeMode === 'date' || rangeMode === 'era') && isDateRangeSupported) {
+      loadEraData().then(setEraDataRef).catch(() => {})
+    }
+  }, [rangeMode, isDateRangeSupported])
 
   /**
-   * Validate `rawAddr` against `network`'s SS58 prefix using @polkadot/util-crypto.
-   * Updates `addressNote` — does NOT modify the address input.
+   * Validate address against expected prefix for the selected network.
    */
   function checkAddressForNetwork(rawAddr, network) {
-    if (!rawAddr.trim() || network.ss58Prefix === null || network.ss58Prefix === undefined) {
+    if (!rawAddr.trim()) { setAddressNote(null); return }
+    // First check the expected human-readable prefix
+    const prefixInfo = ADDR_PREFIX_MAP[network.key]
+    if (prefixInfo) {
+      const trimmed = rawAddr.trim()
+      if (!trimmed.startsWith(prefixInfo.prefix)) {
+        setAddressNote({
+          type: 'prefix-warn',
+          msg: `${prefixInfo.label} addresses start with "${prefixInfo.prefix}". This address may be for a different network.`,
+        })
+        return
+      }
+    }
+    // Then do full SS58 validation
+    if (network.ss58Prefix === null || network.ss58Prefix === undefined) {
       setAddressNote(null)
       return
     }
@@ -133,7 +264,7 @@ export default function BalanceExplorer() {
     }
   }
 
-  // Real-time address validation — debounced 350 ms on address change, instant on network switch
+  // Real-time address validation — debounced 350 ms
   useEffect(() => {
     clearTimeout(addrDebounceRef.current)
     if (!address.trim()) { setAddressNote(null); return }
@@ -144,7 +275,7 @@ export default function BalanceExplorer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, networkKey])
 
-  // RPC meta for export (populated after a successful query)
+  // RPC meta for export
   const rpcMetaRef = useRef({ endpoint: '', address: '' })
 
   const {
@@ -152,15 +283,40 @@ export default function BalanceExplorer() {
     reset, cancel, runQuery, importData, importEncrypted,
   } = useBalanceExplorer()
 
-  // Close the WebSocket connection cleanly when the component unmounts (user navigates away)
   useEffect(() => () => { cancel() }, [cancel])
 
-  const isLoading = status === STATUS.CONNECTING || status === STATUS.QUERYING
+  const isLoading  = status === STATUS.CONNECTING || status === STATUS.QUERYING
   const hasResults = records.length > 0
 
   async function handleFetch() {
     let effStart = startBlock
     let effEnd   = endBlock
+    let effStep  = step
+
+    if (rangeMode === 'era') {
+      if (!startEraNum || !endEraNum) return
+      setEraLoadErr(null)
+      let eraData
+      try {
+        eraData = await loadEraData()
+        setEraDataRef(eraData)
+      } catch {
+        setEraLoadErr('Failed to load era reference data. Check network.')
+        return
+      }
+      let eraBlocks
+      try {
+        eraBlocks = await findBlocksForEraRange(eraData, startEraNum, endEraNum, endpoint)
+      } catch (e) {
+        setEraLoadErr(e.message ?? 'Failed to resolve era blocks.')
+        return
+      }
+      const { startBlock: sb, endBlock: eb } = eraBlocks
+      effStart = String(sb)
+      effEnd   = String(eb)
+      setStartBlock(effStart)
+      setEndBlock(effEnd)
+    }
 
     if (rangeMode === 'date') {
       if (!startDate || !endDate) return
@@ -168,6 +324,7 @@ export default function BalanceExplorer() {
       let eraData
       try {
         eraData = await loadEraData()
+        setEraDataRef(eraData)
       } catch {
         setEraLoadErr('Failed to load era reference data. Check network.')
         return
@@ -177,63 +334,48 @@ export default function BalanceExplorer() {
       effEnd   = String(eb)
       setStartBlock(effStart)
       setEndBlock(effEnd)
+      // Convert day step to block step
+      const dayStepVal = parseInt(step, 10) || 1
+      effStep = String(computeDayStep(eraData, dayStepVal))
     }
 
     const effectiveAddress = addressNote?.type === 'converted'
       ? addressNote.convertedAddress
       : address
     rpcMetaRef.current = { endpoint, address: effectiveAddress }
-    await runQuery({ endpoint, address: effectiveAddress, startBlock: effStart, endBlock: effEnd, step })
+    await runQuery({ endpoint, address: effectiveAddress, startBlock: effStart, endBlock: effEnd, step: effStep })
   }
 
-  // Apply a preset shortcut: sets startDate = N days ago, endDate = today
-  function applyDatePreset(days) {
+  // Apply a preset shortcut
+  function applyDatePreset(days, label) {
     const now  = new Date()
     const from = new Date(now.getTime() - days * 86_400_000)
     setStartDate(toDateInput(from))
     setEndDate(toDateInput(now))
+    setActivePreset(label)
   }
 
   function handleImport(text, ext, fname) {
     const { rpcConfig } = importData(text, ext, fname)
-    if (rpcConfig?.endpoint) {
-      const ep = rpcConfig.endpoint.slice(0, 256)
-      const preset = ENJIN_NETWORKS.find(n => n.endpoint === ep && n.key !== 'custom')
-      if (preset) {
-        setNetworkKey(preset.key)
-      } else {
-        setNetworkKey('custom')
-        setCustomEndpoint(ep)
-      }
-    }
-    if (rpcConfig?.address)  setAddress(rpcConfig.address.slice(0, 64))
-    setTab('query')
+    if (rpcConfig?.address) setAddress(rpcConfig.address.slice(0, 64))
+    // Stay on import tab to show results, don't auto-switch
+    setShowImportResults(true)
   }
 
   async function handleImportEncrypted(encText, pwd, ext, fname) {
     const { rpcConfig } = await importEncrypted(encText, pwd, ext, fname)
-    if (rpcConfig?.endpoint) {
-      const ep = rpcConfig.endpoint.slice(0, 256)
-      const preset = ENJIN_NETWORKS.find(n => n.endpoint === ep && n.key !== 'custom')
-      if (preset) {
-        setNetworkKey(preset.key)
-      } else {
-        setNetworkKey('custom')
-        setCustomEndpoint(ep)
-      }
-    }
-    if (rpcConfig?.address)  setAddress(rpcConfig.address.slice(0, 64))
-    setTab('query')
+    if (rpcConfig?.address) setAddress(rpcConfig.address.slice(0, 64))
+    // Stay on import tab to show results, don't auto-switch
+    setShowImportResults(true)
   }
 
-  // Estimate RPC calls and time for the current form values
+  // Estimate RPC calls
   const { estCalls, estTimeLabel } = (() => {
     const s  = parseInt(startBlock, 10)
     const e  = parseInt(endBlock,   10)
     const st = parseInt(step, 10) || 100
     if (!Number.isFinite(s) || !Number.isFinite(e) || s > e) return { estCalls: null, estTimeLabel: null }
     const calls = Math.min(Math.ceil((e - s) / st) + 1, MAX_RPC_CALLS + 1)
-    // Empirical: ~600 ms per block + ~2.5s fixed overhead (two sequential RPCs + WS latency)
     const secs = Math.round(calls * 0.60 + 2.5)
     let label
     if (secs < 5)         label = '< 5s'
@@ -252,13 +394,21 @@ export default function BalanceExplorer() {
     'text-text font-mono placeholder-muted disabled:opacity-50 focus:outline-none ' +
     'focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-colors'
 
+  // Step label/hint
+  const stepLabel       = rangeMode === 'date'  ? 'Step (every N days)' :
+                          rangeMode === 'era'   ? 'Step (every N blocks)' :
+                                                 'Step (every N blocks)'
+  const stepMin         = 1
+  const stepPlaceholder = rangeMode === 'date' ? 'e.g. 1' :
+                          rangeMode === 'era'  ? 'e.g. 14400' : 'e.g. 100'
+
   return (
     <div className="space-y-4 sm:space-y-5">
 
       {/* ── Unified input card (tab bar + pane) ────────────────────── */}
       <div className="card overflow-hidden">
 
-        {/* Tab bar — flush at top of card */}
+        {/* Tab bar */}
         <div
           role="tablist"
           aria-label="Balance explorer mode"
@@ -270,7 +420,7 @@ export default function BalanceExplorer() {
               role="tab"
               aria-selected={tab === key}
               disabled={isLoading}
-              onClick={() => setTab(key)}
+              onClick={() => { setTab(key); if (key === 'query') setShowImportResults(false) }}
               className={`flex items-center justify-center gap-1.5 flex-1 px-4 py-3
                           text-xs sm:text-sm font-medium border-b-2 transition-colors
                           disabled:opacity-50 disabled:cursor-not-allowed
@@ -294,13 +444,12 @@ export default function BalanceExplorer() {
               <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">RPC Configuration</h3>
             </div>
 
-            {/* Endpoint dropdown + address */}
+            {/* Network dropdown + address */}
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label htmlFor="bal-rpc-net" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
                   Archive Node WS Endpoint
                 </label>
-                {/* Network preset selector */}
                 <div className="relative">
                   <select
                     id="bal-rpc-net"
@@ -309,33 +458,15 @@ export default function BalanceExplorer() {
                     disabled={isLoading}
                     className={`${inputField} appearance-none pr-8 cursor-pointer`}
                   >
-                    {ENJIN_NETWORKS.map(n => (
+                    {PRESET_NETWORKS.map(n => (
                       <option key={n.key} value={n.key}>{n.label}</option>
                     ))}
                   </select>
                   <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-dim" />
                 </div>
-                {/* Custom endpoint text input */}
-                {isCustom && (
-                  <input
-                    id="bal-rpc-ep"
-                    type="text"
-                    maxLength={256}
-                    autoComplete="off"
-                    spellCheck="false"
-                    placeholder="wss://your-archive-node"
-                    value={customEndpoint}
-                    onChange={e => setCustomEndpoint(e.target.value)}
-                    disabled={isLoading}
-                    className={`${inputField} mt-2`}
-                  />
-                )}
-                {/* Show resolved endpoint for presets */}
-                {!isCustom && (
-                  <p className="mt-1.5 text-[11px] font-mono text-muted truncate" title={activeNetwork.endpoint}>
-                    {activeNetwork.endpoint}
-                  </p>
-                )}
+                <p className="mt-1.5 text-[11px] font-mono text-muted truncate" title={activeNetwork.endpoint}>
+                  {activeNetwork.endpoint}
+                </p>
               </div>
               <div>
                 <label htmlFor="bal-addr" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
@@ -351,16 +482,23 @@ export default function BalanceExplorer() {
                   value={address}
                   onChange={e => setAddress(e.target.value)}
                   disabled={isLoading}
-                  className={inputField}
+                  className={`${inputField} ${
+                    addressNote?.type === 'error' ? 'border-danger/50 focus:border-danger/70' :
+                    addressNote?.type === 'prefix-warn' ? 'border-warning/50 focus:border-warning/70' : ''
+                  }`}
                 />
-                {/* Converted address label — shown only when prefix differs */}
                 {addressNote?.type === 'converted' && (
                   <p className="mt-1.5 text-[11px] font-mono text-warning/90 leading-snug break-all">
-                    ⚠️ Converted address for {addressNote.networkLabel}:{' '}
+                    ⚠️ Converted for {addressNote.networkLabel}:{' '}
                     <span className="select-all">{addressNote.convertedAddress}</span>
                   </p>
                 )}
-                {/* Structural error label */}
+                {addressNote?.type === 'prefix-warn' && (
+                  <p className="mt-1.5 flex items-start gap-1 text-[11px] font-mono text-warning/90 leading-snug">
+                    <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" />
+                    <span>{addressNote.msg}</span>
+                  </p>
+                )}
                 {addressNote?.type === 'error' && (
                   <p className="mt-1.5 flex items-start gap-1 text-[11px] font-mono text-danger leading-snug">
                     <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" />
@@ -370,33 +508,125 @@ export default function BalanceExplorer() {
               </div>
             </div>
 
-            {/* ── Range mode toggle ─────────────────────────── */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">Query Range</span>
-              <div className="flex rounded-lg border border-border overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setRangeMode('block')}
-                  disabled={isLoading}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-r border-border transition-colors
-                    ${rangeMode === 'block' ? 'bg-primary/20 text-primary' : 'text-dim hover:text-text'}`}
-                >
-                  Block Range
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRangeMode('date')}
-                  disabled={isLoading || !isDateRangeSupported}
-                  title={!isDateRangeSupported ? 'Date Range is only available for Enjin Relaychain archive endpoint' : undefined}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors
-                    disabled:opacity-40 disabled:cursor-not-allowed
-                    ${rangeMode === 'date' ? 'bg-primary/20 text-primary' : 'text-dim hover:text-text'}`}
-                >
-                  <Calendar size={12} />
-                  Date Range
-                </button>
+            {/* ── Range mode toggle ─────────────────────────────────────── */}
+            {isRelaychain && (
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">Query Range</span>
+                <div className="flex rounded-lg border border-border overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => { setRangeMode('era'); setStep('14400') }}
+                    disabled={isLoading}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-r border-border transition-colors
+                      ${rangeMode === 'era' ? 'bg-primary/20 text-primary' : 'text-dim hover:text-text'}`}
+                  >
+                    Era Range
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setRangeMode('date'); setStep('1') }}
+                    disabled={isLoading}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors
+                      ${rangeMode === 'date' ? 'bg-primary/20 text-primary' : 'text-dim hover:text-text'}`}
+                  >
+                    <Calendar size={12} />
+                    Date Range
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
+            {!isRelaychain && isDateRangeSupported && (
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">Query Range</span>
+                <div className="flex rounded-lg border border-border overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setRangeMode('block')}
+                    disabled={isLoading}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-r border-border transition-colors
+                      ${rangeMode === 'block' ? 'bg-primary/20 text-primary' : 'text-dim hover:text-text'}`}
+                  >
+                    Block Range
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRangeMode('date')}
+                    disabled={isLoading}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors
+                      ${rangeMode === 'date' ? 'bg-primary/20 text-primary' : 'text-dim hover:text-text'}`}
+                  >
+                    <Calendar size={12} />
+                    Date Range
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── Era range inputs (Relaychain era mode) ──────────── */}
+            {rangeMode === 'era' && (
+              <div className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <label htmlFor="bal-start-era" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                      Start Era
+                    </label>
+                    <input
+                      id="bal-start-era"
+                      type="number"
+                      placeholder="e.g. 900"
+                      min={1} step={1}
+                      value={startEraNum}
+                      onChange={e => setStartEraNum(e.target.value)}
+                      disabled={isLoading}
+                      className={inputField}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="bal-end-era" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                      End Era
+                    </label>
+                    <input
+                      id="bal-end-era"
+                      type="number"
+                      placeholder="e.g. 950"
+                      min={1} step={1}
+                      value={endEraNum}
+                      onChange={e => setEndEraNum(e.target.value)}
+                      disabled={isLoading}
+                      className={inputField}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="bal-step-era" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                      {stepLabel}
+                    </label>
+                    <input
+                      id="bal-step-era"
+                      type="number"
+                      min={1} max={999999} step={1}
+                      placeholder={stepPlaceholder}
+                      value={step}
+                      onChange={e => setStep(e.target.value)}
+                      disabled={isLoading}
+                      className={inputField}
+                    />
+                  </div>
+                </div>
+                {eraLoadErr && (
+                  <p className="flex items-start gap-1.5 text-[11px] font-mono text-danger">
+                    <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" />
+                    {eraLoadErr}
+                  </p>
+                )}
+                {startBlock && endBlock && rangeMode === 'era' && (
+                  <p className="text-[11px] font-mono text-dim">
+                    Resolved block range: <span className="text-cyan">{Number(startBlock).toLocaleString('en')}</span>
+                    {' – '}
+                    <span className="text-cyan">{Number(endBlock).toLocaleString('en')}</span>
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* ── Block range inputs ─────────────────────────── */}
             {rangeMode === 'block' && (
@@ -433,12 +663,13 @@ export default function BalanceExplorer() {
                 </div>
                 <div>
                   <label htmlFor="bal-step" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
-                    Step (every N blocks)
+                    {stepLabel}
                   </label>
                   <input
                     id="bal-step"
                     type="number"
-                    min={1} max={999999} step={1}
+                    min={stepMin} max={999999} step={1}
+                    placeholder={stepPlaceholder}
                     value={step}
                     onChange={e => setStep(e.target.value)}
                     disabled={isLoading}
@@ -459,10 +690,12 @@ export default function BalanceExplorer() {
                       <button
                         key={label}
                         type="button"
-                        onClick={() => applyDatePreset(days)}
+                        onClick={() => applyDatePreset(days, label)}
                         disabled={isLoading}
-                        className="px-2.5 py-1 rounded-md border border-border text-[11px] text-dim
-                                   hover:border-primary/50 hover:text-primary transition-colors disabled:opacity-50"
+                        className={`px-2.5 py-1 rounded-md border text-[11px] transition-colors disabled:opacity-50
+                          ${activePreset === label
+                            ? 'bg-primary/20 border-primary/60 text-primary font-semibold'
+                            : 'border-border text-dim hover:border-primary/50 hover:text-primary'}`}
                       >
                         {label} ago
                       </button>
@@ -481,7 +714,7 @@ export default function BalanceExplorer() {
                       type="date"
                       max={toDateInput(new Date())}
                       value={startDate}
-                      onChange={e => setStartDate(e.target.value)}
+                      onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
                       className={inputField}
                     />
@@ -495,19 +728,20 @@ export default function BalanceExplorer() {
                       type="date"
                       max={toDateInput(new Date())}
                       value={endDate}
-                      onChange={e => setEndDate(e.target.value)}
+                      onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
                       className={inputField}
                     />
                   </div>
                   <div>
                     <label htmlFor="bal-step-date" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
-                      Step (every N blocks)
+                      {stepLabel}
                     </label>
                     <input
                       id="bal-step-date"
                       type="number"
-                      min={1} max={999999} step={1}
+                      min={stepMin} max={999} step={1}
+                      placeholder={stepPlaceholder}
                       value={step}
                       onChange={e => setStep(e.target.value)}
                       disabled={isLoading}
@@ -538,10 +772,9 @@ export default function BalanceExplorer() {
             <div className="flex gap-2.5 px-3 py-2.5 rounded-lg bg-primary/5 border border-primary/20">
               <Info size={14} className="text-primary/70 flex-shrink-0 mt-0.5" />
               <p className="text-[11px] text-dim leading-relaxed">
-                <span className="text-text-sec font-medium">Note:</span> Balance data is fetched
-                directly from the Archive RPC endpoint, so queries may take some time to complete —
-                especially over a wide block range. Narrowing the range or increasing the step size
-                will significantly reduce query time.
+                <span className="text-text font-medium">Note:</span> Balance data is fetched
+                directly from the Archive RPC endpoint — queries may take time, especially over
+                a wide range. Narrowing the range or increasing the step will reduce query time.
               </p>
             </div>
 
@@ -574,7 +807,10 @@ export default function BalanceExplorer() {
                   className="btn-primary w-full sm:w-auto sm:min-w-[200px]"
                   disabled={
                     !address.trim() ||
-                    (rangeMode === 'block' ? (!startBlock || !endBlock) : (!startDate || !endDate))
+                    addressNote?.type === 'error' ||
+                    (rangeMode === 'block' ? (!startBlock || !endBlock) :
+                     rangeMode === 'era'   ? (!startEraNum || !endEraNum) :
+                                            (!startDate || !endDate))
                   }
                 >
                   <Activity size={14} />
@@ -609,9 +845,9 @@ export default function BalanceExplorer() {
                   <span>{progress.text}</span>
                   <span>{progress.pct}%</span>
                 </div>
-                <div className="h-1.5 bg-border rounded-full overflow-hidden">
+                <div className="h-2 bg-surface rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-cyan rounded-full transition-all duration-300"
+                    className="h-full rounded-full bg-gradient-to-r from-primary-dim via-primary to-cyan transition-all duration-300"
                     style={{ width: `${progress.pct}%` }}
                   />
                 </div>
@@ -623,53 +859,80 @@ export default function BalanceExplorer() {
         {/* ── Import pane ───────────────────────────────────────── */}
         {tab === 'import' && (
           <div role="tabpanel" className="p-4 sm:p-6">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-              <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">Import Balance Data</h3>
-            </div>
-            <p className="text-xs text-dim mb-4 leading-relaxed">
-              Only files previously exported by this tool (JSON, CSV, or XML) can be imported.
-              Files from other sources or tools are not supported.
-            </p>
-            <BalanceImportPanel
-              bare
-              onImport={handleImport}
-              onImportEncrypted={handleImportEncrypted}
-            />
+            {!showImportResults ? (
+              <>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
+                  <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">Import Balance Data</h3>
+                </div>
+                <p className="text-xs text-dim mb-4 leading-relaxed">
+                  Only files previously exported by this tool (JSON, CSV, or XML) can be imported.
+                  Files from other sources or tools are not supported.
+                </p>
+                <BalanceImportPanel
+                  bare
+                  onImport={handleImport}
+                  onImportEncrypted={handleImportEncrypted}
+                />
+              </>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
+                    <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">Imported Data</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowImportResults(false)}
+                    className="text-xs text-dim hover:text-text transition-colors"
+                  >
+                    ← Import another file
+                  </button>
+                </div>
+                {hasResults && (
+                  <p className="text-xs text-dim">
+                    {records.length.toLocaleString('en')} records loaded. Switch to the <strong className="text-text">Query Node</strong> tab to run a new query.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* ── Results (shown for any data source) ──────────────────────── */}
-      {hasResults && (
+      {/* ── Results (shown for any data source; also visible DURING query) ── */}
+      {(hasResults || isLoading) && (
         <>
           {/* Records summary bar */}
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 bg-card border border-border rounded-xl shadow-card px-5 py-3.5">
-            {[
-              { label: 'Records',        value: records.length.toLocaleString('en') },
-              { label: 'Block Range',    value: minBlk != null ? `${minBlk.toLocaleString('en')} – ${maxBlk.toLocaleString('en')}` : '—' },
-              { label: 'Balance Format', value: hasNewFmt ? 'New (frozen+flags)' : 'Legacy (misc+fee)' },
-            ].map(({ label, value }, i, arr) => (
-              <div key={label} className="flex items-center gap-6">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[11px] font-bold tracking-widest uppercase text-dim">{label}</span>
-                  <span className="text-sm font-bold text-text font-mono">{value}</span>
+          {hasResults && (
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 bg-card border border-border rounded-xl shadow-card px-5 py-3.5">
+              {[
+                { label: 'Records',        value: records.length.toLocaleString('en') },
+                { label: 'Block Range',    value: minBlk != null ? `${minBlk.toLocaleString('en')} – ${maxBlk.toLocaleString('en')}` : '—' },
+                { label: 'Balance Format', value: hasNewFmt ? 'New (frozen+flags)' : 'Legacy (misc+fee)' },
+              ].map(({ label, value }, i, arr) => (
+                <div key={label} className="flex items-center gap-6">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] font-bold tracking-widest uppercase text-dim">{label}</span>
+                    <span className="text-sm font-bold text-text font-mono">{value}</span>
+                  </div>
+                  {i < arr.length - 1 && <div className="w-px h-7 bg-border flex-shrink-0" />}
                 </div>
-                {i < arr.length - 1 && <div className="w-px h-7 bg-border flex-shrink-0" />}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
-          <BalanceChart records={records} />
-          <BalanceTable records={records} />
+          {hasResults && <BalanceChart records={records} />}
+          <BalanceTable records={records} isLoading={isLoading} />
 
-          {dataSource === 'query' && (
+          {dataSource === 'query' && hasResults && (
             <BalanceExportPanel records={records} rpcMeta={rpcMetaRef.current} />
           )}
         </>
       )}
 
-      {/* ── Sticky terminal log — always visible at viewport bottom ── */}
+      {/* ── Sticky terminal log ── */}
       <TerminalLog
         sticky
         logs={logs.map((l, i) => ({

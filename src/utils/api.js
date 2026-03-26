@@ -365,3 +365,336 @@ export async function fetchRewardSlash(address, blockRange, proxyUrl, signal) {
   )
   return data?.data?.list ?? []
 }
+
+/**
+ * Fetch nomination-pool IDs a wallet address has interacted with via
+ * bond/unbond/withdraw-style nominationpools extrinsics on Subscan.
+ * Flow mirrors relay-pool-bulk-extrinsics.py:
+ *  - fetch extrinsics pages
+ *  - enrich with /api/scan/extrinsic/params
+ *  - extract pool_id from params
+ *
+ * @param {string} address - Relaychain wallet address
+ * @param {AbortSignal} signal
+ * @param {function} [onPage] - optional callback(page, count) for progress logging
+ * @returns {Promise<Set<number>>} set of pool IDs
+ */
+export async function fetchHistoricalPoolIds(address, signal, onPage) {
+  const poolIds = new Set()
+  let page = 0
+  const rowPerPage = 100
+  const allowedCalls = new Set([
+    'bond',
+    'unbond',
+    'withdraw_unbonded',
+    'withdraw_unbonded_kill',
+  ])
+
+  while (true) {
+    if (signal?.aborted) throw new Error('Aborted')
+
+    const data = await subscanPost(
+      ENDPOINTS.extrinsics,
+      {
+        row:         rowPerPage,
+        signed:      'signed',
+        module_call: [{ module: 'nominationpools', call: '' }],
+        address,
+        page,
+      },
+      '',
+      { signal },
+    )
+
+    const records = (data?.data?.extrinsics) ?? []
+    if (!records.length) break
+
+    // Attempt to enrich records with decoded call params via the params endpoint
+    const indices = records
+      .filter(r => r.extrinsic_index)
+      .map(r => r.extrinsic_index)
+
+    if (indices.length) {
+      try {
+        const paramsResp = await subscanPost(
+          ENDPOINTS.extrinsicParams,
+          { extrinsic_index: indices },
+          '',
+          { signal },
+        )
+        // Response shape can vary: data.data (array) or data (array)
+        const paramsArr = Array.isArray(paramsResp?.data) ? paramsResp.data
+                        : Array.isArray(paramsResp)       ? paramsResp
+                        : []
+        const paramsByIdx = {}
+        for (const item of paramsArr) {
+          if (item?.extrinsic_index) paramsByIdx[item.extrinsic_index] = item.params ?? []
+        }
+        for (const rec of records) {
+          const idx = rec.extrinsic_index
+          if (idx && paramsByIdx[idx]) rec._params = paramsByIdx[idx]
+        }
+      } catch { /* params enrichment is best-effort */ }
+    }
+
+    for (const rec of records) {
+      const callName = String(
+        rec?.call_module_function
+        ?? rec?.call_module?.function
+        ?? rec?.call_name
+        ?? '',
+      ).toLowerCase()
+      // Keep only explicit pool interaction calls; if the API doesn't provide
+      // call metadata, fall back to processing the record.
+      if (callName && !allowedCalls.has(callName)) continue
+
+      // Use enriched params first, then fall back to inline params field
+      let params = rec._params ?? rec.params
+      if (typeof params === 'string') {
+        try { params = JSON.parse(params) } catch { params = [] }
+      }
+      if (Array.isArray(params)) {
+        for (const p of params) {
+          if (p?.name === 'pool_id') {
+            try { poolIds.add(Number(p.value)) } catch {}
+          }
+        }
+      }
+    }
+
+    if (onPage) onPage(page, records.length)
+
+    if (records.length < rowPerPage) break
+    page++
+    await delay(API_DELAY_MS)
+  }
+
+  return poolIds
+}
+
+/**
+ * Fetch NominationPools reward events from Subscan for a specific pool and era,
+ * within the block range that follows the era boundary.
+ *
+ * Mirrors Python's find_reinvested():
+ *  1. Try EraRewardsProcessed first — single canonical event → return reinvested directly.
+ *  2. Fall back to RewardPaid — sum (reward + commission.amount) for all validators.
+ *
+ * @param {number} poolId   - nomination pool ID
+ * @param {number} era      - era number (used to filter events by era attribute)
+ * @param {number} blockStart - first block to scan (= first block of era+1)
+ * @param {number} blockEnd   - last block to scan (blockStart + 40)
+ * @param {string} proxyUrl
+ * @param {AbortSignal} signal
+ * @returns {Promise<BigInt>} total reinvested amount in planck
+ */
+export async function fetchNominationPoolEvents(poolId, era, blockStart, blockEnd, proxyUrl, signal) {
+  const blockRange = `${blockStart}-${blockEnd}`
+  const PAGE_SIZE = 100
+
+  const normKey = k => String(k ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+
+  function toIntLike(v) {
+    if (v == null) return null
+    if (typeof v === 'number') return Number.isFinite(v) ? Math.trunc(v) : null
+    if (typeof v === 'bigint') return Number(v)
+    if (typeof v === 'string') {
+      const cleaned = v.replace(/[^0-9-]/g, '')
+      if (!cleaned || cleaned === '-' || cleaned === '--') return null
+      const n = Number.parseInt(cleaned, 10)
+      return Number.isFinite(n) ? n : null
+    }
+    if (typeof v === 'object') {
+      // common wrappers from decoded event params
+      if ('value' in v) return toIntLike(v.value)
+      if ('amount' in v) return toIntLike(v.amount)
+      return null
+    }
+    return null
+  }
+
+  function toBigIntLike(v) {
+    if (v == null) return 0n
+    if (typeof v === 'bigint') return v
+    if (typeof v === 'number') return BigInt(Math.trunc(v))
+    if (typeof v === 'string') {
+      const cleaned = v.replace(/[^0-9-]/g, '')
+      return BigInt(cleaned || '0')
+    }
+    if (typeof v === 'object') {
+      if ('value' in v) return toBigIntLike(v.value)
+      if ('amount' in v) return toBigIntLike(v.amount)
+    }
+    return 0n
+  }
+
+  function parseParams(raw) {
+    if (!raw) return []
+    if (Array.isArray(raw)) return raw
+    if (typeof raw === 'object') return raw
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw) } catch {
+        // Some Subscan payloads use single-quoted Python-ish repr strings.
+        try {
+          const normalized = raw
+            .replace(/\bNone\b/g, 'null')
+            .replace(/\bTrue\b/g, 'true')
+            .replace(/\bFalse\b/g, 'false')
+            .replace(/'/g, '"')
+          return JSON.parse(normalized)
+        } catch {
+          return []
+        }
+      }
+    }
+    return []
+  }
+
+  function extractParam(params, aliases, fallbackIndex = null) {
+    const wanted = new Set(aliases.map(normKey))
+
+    if (Array.isArray(params)) {
+      for (const item of params) {
+        if (item && typeof item === 'object') {
+          const k = normKey(item?.name ?? item?.key ?? item?.param)
+          if (k && wanted.has(k)) return item?.value ?? item
+        }
+      }
+      if (fallbackIndex != null && params.length > fallbackIndex) {
+        const item = params[fallbackIndex]
+        return (item && typeof item === 'object' && 'value' in item) ? item.value : item
+      }
+      return undefined
+    }
+
+    if (params && typeof params === 'object') {
+      for (const [k, v] of Object.entries(params)) {
+        if (wanted.has(normKey(k))) return v
+      }
+    }
+
+    return undefined
+  }
+
+  function eventName(ev) {
+    return String(
+      ev?.event_id
+      ?? ev?.event?.event_id
+      ?? ev?.event?.event_name
+      ?? ev?.event_name
+      ?? '',
+    ).trim()
+  }
+
+  async function fetchAllEventsInRange() {
+    const out = []
+    let page = 0
+    while (true) {
+      const resp = await subscanPost(
+        ENDPOINTS.events,
+        {
+          block_range: blockRange,
+          page,
+          row: PAGE_SIZE,
+        },
+        proxyUrl,
+        { signal },
+      )
+      const events = resp?.data?.events ?? []
+      out.push(...events)
+      if (events.length < PAGE_SIZE) break
+      page++
+      await delay(API_DELAY_MS)
+    }
+    return out
+  }
+
+  async function enrichEventParams(events) {
+    const pending = events
+      .filter(ev => {
+        const parsed = parseParams(ev?.params)
+        if (Array.isArray(parsed) && parsed.length > 0) return false
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.keys(parsed).length > 0) return false
+        return Boolean(ev?.event_index)
+      })
+      .map(ev => ev.event_index)
+
+    if (!pending.length) return events
+
+    try {
+      const resp = await subscanPost(
+        ENDPOINTS.extrinsicParams,
+        { event_index: pending },
+        proxyUrl,
+        { signal },
+      )
+      const arr = Array.isArray(resp?.data) ? resp.data
+                : Array.isArray(resp) ? resp
+                : []
+      const byIdx = {}
+      for (const item of arr) {
+        if (item?.event_index) byIdx[item.event_index] = item.params ?? []
+      }
+      return events.map(ev => (
+        ev?.event_index && byIdx[ev.event_index]
+          ? { ...ev, params: byIdx[ev.event_index] }
+          : ev
+      ))
+    } catch {
+      return events
+    }
+  }
+
+  // Mirrors Python's find_reinvested() order:
+  // scan all events in-range, return EraRewardsProcessed immediately when found,
+  // otherwise sum RewardPaid (reward + commission.amount).
+  try {
+    let events = await fetchAllEventsInRange()
+    events = await enrichEventParams(events)
+
+    const sorted = [...events].sort((a, b) => {
+      const ab = Number(a?.block_num ?? a?.block_height ?? 0)
+      const bb = Number(b?.block_num ?? b?.block_height ?? 0)
+      return ab - bb
+    })
+
+    let total = 0n
+    let totalOffsetPlusOne = 0n
+    for (const ev of sorted) {
+      const name = eventName(ev)
+      const isEraProcessed = name.toLowerCase() === 'erarewardsprocessed'
+      const isRewardPaid   = name.toLowerCase() === 'rewardpaid'
+      if (!isEraProcessed && !isRewardPaid) continue
+
+      const params  = parseParams(ev.params)
+      const evPool  = toIntLike(extractParam(params, ['pool_id', 'poolId'], 0))
+      const evEra   = toIntLike(extractParam(params, ['era', 'era_index', 'eraIndex'], 1))
+      if (evPool == null || evEra == null || evPool !== poolId) continue
+
+      if (isEraProcessed) {
+        if (evEra !== era) continue
+        const rawAmt = extractParam(params, ['reinvested'], 2)
+        return toBigIntLike(rawAmt)
+      }
+
+      if (isRewardPaid) {
+        const reward  = toBigIntLike(extractParam(params, ['reward'], 3))
+        const commRaw = extractParam(params, ['commission'], 4)
+        let commAmt   = 0n
+        if (commRaw != null) {
+          // commission can be a dict {amount:...} or a raw value
+          const amt = typeof commRaw === 'object' ? commRaw?.amount : commRaw
+          commAmt = toBigIntLike(amt)
+        }
+        const sum = reward + commAmt
+        if (evEra === era) total += sum
+        // Legacy Subscan-indexed RewardPaid can be +1 shifted on era.
+        if (evEra === era + 1) totalOffsetPlusOne += sum
+      }
+    }
+    return total > 0n ? total : totalOffsetPlusOne
+  } catch (e) {
+    if (signal?.aborted) throw e
+    return 0n
+  }
+}
