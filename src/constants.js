@@ -8,7 +8,10 @@ export const ENDPOINTS = {
   eraStat:     '/api/scan/staking/era_stat',
   pools:       '/api/scan/nomination_pool/pools',
   voted:       '/api/scan/staking/voted',
-  rewardSlash: '/api/v2/scan/account/reward_slash',
+  rewardSlash:     '/api/v2/scan/account/reward_slash',
+  extrinsics:      '/api/v2/scan/extrinsics',
+  extrinsicParams: '/api/scan/extrinsic/params',
+  events:          '/api/v2/scan/events',
 }
 
 // Subscan explorer base for external links

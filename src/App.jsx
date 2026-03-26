@@ -135,9 +135,7 @@ export default function App() {
       <AppHeader status={status} view={view} onBack={handleBack} />
 
       {/* ── Era Block Explorer ────────────────────────────────────── */}
-      {view === 'era' && (
-        <EraBlockExplorer />
-      )}
+      {view === 'era' && <EraBlockExplorer />}
 
       {/* ── Balance Viewer ──────────────────────────────────────────── */}
       {view === 'balance' && (
@@ -186,18 +184,20 @@ export default function App() {
         {/* Scan progress */}
         {status !== 'idle' && phases.length > 0 && (
           <section className="card w-full max-w-xl mx-auto p-3 sm:p-4" aria-live="polite" aria-label="Scan progress">
-            <div className="flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center justify-between gap-3 text-xs mb-1.5">
               <p className="text-dim">{topLabel}</p>
-              <p className="font-mono text-text-secondary">
+              <p className="font-mono text-text">
                 {activePhase?.completed ?? 0} / {activePhase?.total ?? 0} ({activePhasePct}%)
               </p>
             </div>
-            <div className="mt-2 h-2 rounded-full bg-border overflow-hidden">
+            {/* Gradient progress bar — matches Era Block Explorer */}
+            <div className="h-2 rounded-full bg-surface overflow-hidden">
               <div
-                className="h-full bg-cyan transition-all duration-300"
+                className="h-full rounded-full bg-gradient-to-r from-primary-dim via-primary to-cyan transition-all duration-300"
                 style={{ width: `${activePhasePct}%` }}
               />
             </div>
+            {/* Phase step list */}
             <div className="mt-3 w-full space-y-1.5">
               {phases.map((phase, index) => {
                 const statusClass = phase.status === 'completed'
@@ -211,11 +211,9 @@ export default function App() {
                     ? 'Running'
                     : 'Pending'
                 return (
-                  <div key={phase.key} className="w-full rounded-md border border-border bg-surface/40 px-2.5 py-2">
+                  <div key={phase.key} className="w-full rounded-md border border-border bg-surface/40 px-2.5 py-1.5">
                     <div className="flex items-center justify-between text-[11px] gap-3">
-                        <p className={`font-medium ${statusClass}`}>
-                        Step {index}: {phase.label}
-                      </p>
+                      <p className={`font-medium ${statusClass}`}>Step {index}: {phase.label}</p>
                       <p className={`font-semibold ${statusClass}`}>{statusLabel}</p>
                     </div>
                   </div>

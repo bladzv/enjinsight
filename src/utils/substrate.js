@@ -231,8 +231,68 @@ export function buildTokenKey(collectionId, tokenId) {
 }
 
 /**
+ * Build the NominationPools.BondedPools storage key prefix (32 bytes).
+ * Used with state_getKeysPaged to enumerate all bonded nomination pool IDs.
+ * Each full key is prefix (32 bytes) + Twox64Concat(pool_id: u32) (12 bytes).
+ */
+export function buildBondedPoolsPrefix() {
+  return '0x' + _twox128('NominationPools') + _twox128('BondedPools')
+}
+
+/**
+ * Extract the pool ID (u32) from a full NominationPools.BondedPools storage key.
+ * Key layout: 16 bytes (twox128 pallet) + 16 bytes (twox128 item) +
+ *             8 bytes (twox64 hash of pool_id) + 4 bytes (pool_id u32 LE)
+ * Total = 44 bytes = 88 hex chars + 2 for "0x" prefix.
+ */
+export function poolIdFromBondedPoolsKey(keyHex) {
+  const s = keyHex.startsWith('0x') ? keyHex.slice(2) : keyHex
+  if (s.length < 88) return null
+  // Last 4 bytes = pool_id as u32 little-endian
+  const b0 = parseInt(s.slice(80, 82), 16)
+  const b1 = parseInt(s.slice(82, 84), 16)
+  const b2 = parseInt(s.slice(84, 86), 16)
+  const b3 = parseInt(s.slice(86, 88), 16)
+  return (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0
+}
+
+/**
+ * Derive the bonded pool account address (AccountId32) for a given pool ID.
+ *
+ * Mirrors Substrate's PalletId::into_sub_account_truncating((kind, pool_id)):
+ *   entropy = blake2_256(SCALE_encode(("modl", PalletId, (kind: u8, pool_id: u32))))
+ * where PalletId = b"py/nopo\0" (8 bytes) and kind = 0 for Bonded.
+ *
+ * SCALE encoding of the tuple:
+ *   b"modl"       = 4 bytes (fixed [u8;4])
+ *   b"py/nopo\0"  = 8 bytes (fixed [u8;8], PalletId)
+ *   kind (u8)     = 1 byte  (0 = Bonded)
+ *   pool_id (u32) = 4 bytes little-endian
+ * Total = 17 bytes
+ *
+ * Returns the raw 32-byte account ID as a hex string (no 0x prefix).
+ */
+export function computePoolBondedAccountId(poolId) {
+  const input = new Uint8Array(17)
+  // "modl"
+  input[0] = 0x6d; input[1] = 0x6f; input[2] = 0x64; input[3] = 0x6c
+  // "py/nopo\0"
+  input[4] = 0x70; input[5] = 0x79; input[6] = 0x2f; input[7] = 0x6e
+  input[8] = 0x6f; input[9] = 0x70; input[10] = 0x6f; input[11] = 0x00
+  // kind = 0 (Bonded)
+  input[12] = 0x00
+  // pool_id as u32 LE
+  const id = Number(poolId) >>> 0
+  input[13] = id & 0xff
+  input[14] = (id >>> 8) & 0xff
+  input[15] = (id >>> 16) & 0xff
+  input[16] = (id >>> 24) & 0xff
+  return toHex(blake2b(input, { dkLen: 32 }))
+}
+
+/**
  * Decode the first u128 field from a SCALE-encoded storage value (little-endian).
- * Works for both TokenAccount.balance and Token.supply (both are the first field).
+ * Works for ValueQuery storage where the raw bytes start with the value directly.
  */
 export function decodeU128First(hex) {
   if (!hex || hex === '0x' || hex === null) return 0n
@@ -241,5 +301,56 @@ export function decodeU128First(hex) {
   let v = 0n
   for (let i = 15; i >= 0; i--) v = (v << 8n) | BigInt(b[i])
   return v
+}
+
+/**
+ * Decode the first u128 field from an OptionQuery SCALE-encoded storage value.
+ *
+ * NOTE: This was written under the incorrect assumption that pallet-multi-tokens
+ * prefixes stored values with 0x01 (Option::Some).  In reality the raw trie value
+ * IS the struct directly — byte 0 is the SCALE compact-encoding header, not an
+ * Option prefix.  Use decodeCompactFirst instead for MultiTokens storage.
+ *
+ * Kept for reference; not used by current code.
+ */
+export function decodeU128OptionFirst(hex) {
+  if (!hex || hex === '0x' || hex === null) return 0n
+  const b = fromHex(hex)
+  if (b.length < 17) return 0n   // need 1 option byte + 16 value bytes
+  let v = 0n
+  for (let i = 16; i >= 1; i--) v = (v << 8n) | BigInt(b[i])
+  return v
+}
+
+/**
+ * Decode the first SCALE compact-encoded integer from a raw storage value.
+ *
+ * pallet-multi-tokens stores both TokenAccounts.balance and Tokens.supply as
+ * SCALE compact integers (not fixed-width u128).  The raw bytes returned by
+ * state_getStorage therefore start with the compact-encoding header at byte 0:
+ *
+ *   mode 0b00 (single byte):  value = byte0 >> 2           (0 – 63)
+ *   mode 0b01 (two bytes LE): value = u16_le(b[0..1]) >> 2 (64 – 16383)
+ *   mode 0b10 (four bytes LE):value = u32_le(b[0..3]) >> 2 (up to ~1 billion)
+ *   mode 0b11 (big integer):  byte0 = (n-4)<<2|3, n bytes LE follow (n ≥ 4)
+ *
+ * Returns the decoded value as BigInt (Planck units).
+ */
+export function decodeCompactFirst(hex) {
+  if (!hex || hex === '0x' || hex === null) return 0n
+  const b = fromHex(hex)
+  if (!b.length) return 0n
+  const mode = b[0] & 0b11
+  switch (mode) {
+    case 0: return BigInt(b[0] >> 2)
+    case 1: return BigInt(((b[0] | (b[1] << 8)) >>> 0) >> 2)
+    case 2: return BigInt(((b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24)) >>> 0) >>> 2)
+    default: {  // big integer: header = (n-4)<<2|3, n bytes LE follow
+      const n = (b[0] >> 2) + 4
+      let v = 0n
+      for (let i = n; i >= 1; i--) v = (v << 8n) | BigInt(b[i])
+      return v
+    }
+  }
 }
 

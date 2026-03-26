@@ -55,18 +55,32 @@ The API key is never exposed in the browser bundle. The proxy enforces:
 
 ## Tools
 
+### 0. Landing Page
+
+The home screen presents all four tools as a responsive card grid:
+- Desktop (xl+): 4 columns (one per tool in a single row)
+- Tablet (sm–xl): 2 columns
+- Mobile: 1 column
+
+Each card includes an icon, name, and description. No navigation occurs during an active scan.
+
+---
+
 ### 1. Era Block Explorer
 
 **Purpose:** Real-time monitoring of Enjin Relaychain era/session boundaries plus instant lookup of any historical era.
 
 **Capabilities:**
 - Connects to both the live RPC node (for real-time block subscription) and the archive node (for binary-search era start block discovery)
-- Displays: active era, current session, current block, era start block, era end block, blocks remaining, era progress %
+- Displays a **Relaychain** badge (cyan pill) in the header bar
+- Stat cards: ERA, SESSION, CURRENT BLOCK — each in a distinct card; CURRENT BLOCK renamed from BLOCK
+- ERA STARTS and ERA ENDS values wrapped in individual stat cards
 - EKG canvas animation that beats on each new block
-- Past Era Lookup: enter any era number → returns start block, end block, UTC timestamps, block hash (from `relay-era-reference.csv` for instant results; falls back to `ErasStartSessionIndex` RPC or math estimation)
+- Gradient progress bar: `bg-gradient-to-r from-primary-dim via-primary to-cyan`
+- Past Era Lookup: enter any era number → returns start block, end block, human-readable dates in UTC or local time; timezone toggle (UTC ↔ Local) in the section header; CSV row count shown beside the heading
 - Pre-loads 1,007+ eras from `relay-era-reference.csv` for instant offline lookups
 - Debug panel showing raw WS state, pallet keys, decoded hex values
-- Activity log with timestamped entries
+- Sticky terminal log drawer (always visible at page bottom)
 - Automatic reconnection with 5 s backoff; periodic 12 s polling as keepalive
 
 **Key Hook:** `useEraExplorer.js`
@@ -84,7 +98,7 @@ The API key is never exposed in the browser bundle. The proxy enforces:
 
 **Capabilities:**
 - Configurable era window (1–100 eras, default 14)
-- Phased progress with per-step completion counts
+- Phased progress: gradient progress bar + phase step list (matching Era Block Explorer style)
 - Per-validator / per-pool expandable cards with era reward tables
 - Retry individual validators/pools on failure
 - Summary section: sorted by severity, totals, nominator exposure
@@ -101,16 +115,20 @@ The API key is never exposed in the browser bundle. The proxy enforces:
 **Purpose:** Query and visualize any wallet's free/reserved/frozen balances over a block range or date range, directly from the archive node.
 
 **Capabilities:**
-- Multi-network support: Enjin Matrixchain, Enjin Relaychain, Canary Matrixchain, Canary Relaychain, or custom endpoint
-- Block-range mode: enter start/end block numbers
-- Date-range mode (Relaychain only): enter UTC dates → mapped to era boundaries via `relay-era-reference.csv`
+- Multi-network support: Enjin Matrixchain, Enjin Relaychain, Canary Matrixchain, Canary Relaychain (no custom endpoint — preset networks only)
+- Address prefix validation: `ef`=Matrixchain, `en`=Relaychain, `cx`=Canary Matrixchain, `cn`=Canary Relaychain
+- Block-range mode: enter start/end block numbers + step size
+- Date-range mode (Relaychain only — auto-selected, no manual toggle): enter UTC dates → mapped to era boundaries via `relay-era-reference.csv`; step expressed in "every N days" converted to blocks via average blocks-per-era
+- Quick date presets (1 day, 1 week, 1 month, 3 months, 6 months, 1 year): highlighted when active, cleared on manual date edit
 - Queries `System.Account` storage at each block using `state_getStorageAt`
 - SCALE-decodes `AccountInfo` supporting both legacy (misc+fee frozen) and new frozen-flags format
+- Real-time table population during query (table shown immediately as records stream in, with "Populating…" indicator)
 - Decimation: charts limited to 250 points regardless of query range
 - Chart modes: Total (stacked bar), Free, Reserved, Misc Frozen, Fee Frozen (line)
 - Chart height zoom (60%–200%)
+- Sortable, paginated balance history table (10/25/50/100/250 rows per page; text-size zoom S/M/L)
 - Export: JSON, CSV, XML with optional AES-256-GCM encryption (PBKDF2-SHA-256, 100k iterations)
-- Import: re-load previously exported data (with optional decryption)
+- Import: re-load previously exported data (with optional decryption); stays on import tab showing imported results without switching tab
 - WCAG AA colour contrast in all chart colours
 
 **Key Hook:** `useBalanceExplorer.js`
@@ -122,11 +140,19 @@ The API key is never exposed in the browser bundle. The proxy enforces:
 
 **Purpose:** Compute per-era staking rewards for a wallet address across all nomination pools it is a member of. Mirrors the `staking-rewards-rpc.py` script in the browser.
 
+**Address validation:** Requires an Enjin Relaychain address (prefix `en`).
+
+**Input modes:**
+- **Era range** — enter start/end era numbers directly
+- **Date range** — pick UTC dates from quick presets (1 week, 1 month, 3 months, 6 months, 1 year) or custom dates; resolved to era range via `relay-era-reference.csv`
+
 **Algorithm (replicates staking-rewards-rpc.py):**
 ```
 reward_per_era = (member_sENJ_balance / pool_total_sENJ) × pool_reinvested_ENJ
 
 APY = ((pool_total_sENJ + reinvested) / pool_total_sENJ)^365 − 1
+     ⚠ Note: unit mismatch — pool_total_sENJ (sENJ) ≠ reinvested (ENJ).
+       See docs/reward-history-computation.md for analysis and corrected formula.
 ```
 
 **Computation phases:**
@@ -142,16 +168,19 @@ APY = ((pool_total_sENJ + reinvested) / pool_total_sENJ)^365 − 1
 - `MultiTokens.Tokens(u128, u128)` → pool total sENJ supply (first u128 field)
 
 **Capabilities:**
-- Era range input (start/end era numbers)
-- Advanced: custom archive RPC endpoint
-- Per-pool expandable result tables: era, date, start block, member sENJ, pool supply, reinvested, reward ENJ, cumulative, APY
-- Grand total across all pools
-- CSV export of full results
-- Terminal log of all operations
-- Abortable at any phase
+- Era range or date range input with quick presets
+- Unified interactive table (all eras × all pools): filter by pool and era range, sortable columns (era, date, pool, member sENJ, reinvested, reward, cumulative, APY), paginated (10/25/50/100 rows)
+- Line chart reactive to table filter state: one dataset per pool
+- Summary section: total reward, avg APY, era range, eras with reward, pool count, best APY era, best pool
+- Export: JSON / CSV / XML with optional AES-256-GCM encryption (same crypto as Balance Viewer)
+- Import: drag-and-drop JSON/CSV, encrypted file decryption; imported results shown on the compute tab
+- Sticky terminal log always visible at bottom of page
+- Abortable at any phase (Stop button)
+- No custom endpoint — always uses `wss://archive.relay.blockchain.enjin.io`
 
 **Key Hook:** `useRewardHistory.js`
 **Key Component:** `RewardHistoryViewer.jsx`
+**Reference:** `docs/reward-history-computation.md` — formula analysis, known APY limitation, corrected approach
 
 ---
 

@@ -69,7 +69,7 @@ export default function LandingPage({ onNavigate }) {
       </div>
 
       {/* Feature cards */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 max-w-5xl mx-auto">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 sm:gap-6 max-w-7xl mx-auto">
         {FEATURES.map(({ key, icon: Icon, title, description, label, resource, disabled }) => (
           <div key={key} className={`card flex flex-col gap-5 p-6 sm:p-7 transition-colors ${
             disabled ? 'opacity-60 hover:border-border' : 'hover:border-primary/40'
