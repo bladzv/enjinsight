@@ -54,13 +54,13 @@ export default function PoolRewardTable({
   return (
     <div>
       {/* Pagination controls */}
-      <div className="flex items-center justify-between mb-2 text-xs text-dim">
+      <div className="flex items-center justify-between mb-2 text-xs text-text-secondary">
         <div className="flex items-center gap-1">
           <span>Per page:</span>
           <select
             value={pageSize}
             onChange={e => { setPageSize(Number(e.target.value)); setPage(0) }}
-            className="text-xs bg-surface border border-border rounded px-2 py-1"
+            className="text-xs bg-card rounded px-2 py-1 text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
           >
             {[5, 10, 20, 50].map(n => <option key={n} value={n}>{n}</option>)}
           </select>
@@ -88,17 +88,17 @@ export default function PoolRewardTable({
         )}
       </div>
 
-      <div className="scroll-x rounded-lg border border-border">
+      <div className="scroll-x rounded-xl">
         <table className="w-full text-xs min-w-[400px]">
           <thead>
-            <tr className="bg-surface border-b border-border">
-              <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim w-16">Era</th>
-              <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim w-10">Reward</th>
-              <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim hidden md:table-cell w-20">Rewarded</th>
-              <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim hidden md:table-cell w-20">No Reward</th>
-              <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim w-20">Status</th>
+            <tr className="bg-surface-high">
+              <th className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-16">Era</th>
+              <th className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-10">Reward</th>
+              <th className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold hidden md:table-cell w-20">Rewarded</th>
+              <th className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold hidden md:table-cell w-20">No Reward</th>
+              <th className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-20">Status</th>
               {hasBreakdown && (
-                <th className="sticky top-0 bg-surface text-center px-2 py-2.5 font-semibold text-dim w-8" aria-label="Expand" />
+                <th className="sticky top-0 bg-surface-high text-center px-2 py-2.5 text-[10px] uppercase text-muted font-bold w-8" aria-label="Expand" />
               )}
             </tr>
           </thead>
@@ -143,7 +143,7 @@ function RewardedRow({ era, rewardTotal, bd, hasBreakdown, isExpanded, onToggle 
 
   return (
     <>
-      <tr className="border-b border-border/50 hover:bg-surface/50 transition-colors">
+      <tr className="hover:bg-surface-bright transition-colors">
         <td className="px-3 py-2.5 font-mono text-text-secondary text-center w-16">{era}</td>
         <td className="px-3 py-2.5 text-right font-mono text-text w-10">
           {rewardTotal && rewardTotal > 0n ? formatENJ(rewardTotal, 4) : '—'}
@@ -198,7 +198,7 @@ function MissedRow({ era, bd, hasBreakdown, isExpanded, onToggle }) {
 
   return (
     <>
-      <tr className="bg-danger/5 border-b border-danger/20">
+      <tr className="bg-danger/5">
         <td className="px-3 py-2.5 font-mono text-danger font-semibold text-center w-16">{era}</td>
         <td className="px-3 py-2.5 text-right text-danger w-10">—</td>
         <td className="px-3 py-2.5 text-center hidden md:table-cell">
@@ -249,7 +249,7 @@ function BreakdownDetail({ era, bd, colSpan }) {
   const inactiveUnrewarded = bd.unrewarded.filter(v => !v.isActive)
 
   return (
-    <tr className="bg-surface/30">
+    <tr className="bg-card">
       <td colSpan={colSpan} className="px-4 py-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
           {/* Rewarded validators */}
@@ -262,13 +262,13 @@ function BreakdownDetail({ era, bd, colSpan }) {
                 <table className="w-full text-xs min-w-[240px]">
                   <thead>
                     <tr>
-                      <th className="text-left px-2 py-1 text-dim font-semibold">Validator</th>
-                      <th className="text-right px-2 py-1 text-dim font-semibold">ENJ Reward</th>
+                      <th className="text-left px-2 py-1 text-[10px] uppercase text-muted font-bold">Validator</th>
+                      <th className="text-right px-2 py-1 text-[10px] uppercase text-muted font-bold">ENJ Reward</th>
                     </tr>
                   </thead>
                   <tbody>
                     {bd.rewarded.map(v => (
-                      <tr key={`${era}-r-${v.address}`} className="border-b border-border/30">
+                      <tr key={`${era}-r-${v.address}`} className="hover:bg-surface-bright transition-colors">
                         <td className="px-2 py-1">
                           <div className="flex items-center gap-2">
                             <span className="text-text-secondary font-mono text-[11px] truncate">{v.display || truncateAddress(v.address)}</span>

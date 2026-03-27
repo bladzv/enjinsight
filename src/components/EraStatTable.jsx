@@ -27,13 +27,13 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
   return (
     <div>
       {/* pagination controls */}
-      <div className="flex items-center justify-between mb-2 text-xs text-dim">
+      <div className="flex items-center justify-between mb-2 text-xs text-text-secondary">
         <div className="flex items-center gap-1">
           <span>Per page:</span>
           <select
             value={pageSize}
             onChange={e => { setPageSize(Number(e.target.value)); setPage(0) }}
-            className="text-xs bg-surface border border-border rounded px-2 py-1"
+            className="text-xs bg-card rounded px-2 py-1 text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
           >
             {[5,10,20,50].map(n => <option key={n} value={n}>{n}</option>)}
           </select>
@@ -60,22 +60,22 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
           </div>
         )}
       </div>
-      <div className="scroll-x rounded-lg border border-border">
+      <div className="scroll-x rounded-xl">
       <table className="w-full text-xs min-w-[520px]">
         <thead>
-          <tr className="bg-surface border-b border-border">
-            <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim w-16">Era</th>
-            <th className="sticky top-0 bg-surface text-right px-3 py-2.5 font-semibold text-dim">Start Block</th>
-            <th className="sticky top-0 bg-surface text-right px-3 py-2.5 font-semibold text-dim">End Block</th>
-            <th className="sticky top-0 bg-surface text-right px-3 py-2.5 font-semibold text-dim">Reward Point</th>
-            <th className="sticky top-0 bg-surface text-right px-3 py-2.5 font-semibold text-dim">Blocks Produced</th>
+          <tr className="bg-surface-high">
+            <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-16">Era</th>
+            <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Start Block</th>
+            <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">End Block</th>
+            <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Reward Point</th>
+            <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Blocks Produced</th>
           </tr>
         </thead>
         <tbody>
           {pageItems.map(({ era, data, missed }) =>
             missed ? (
               // Gap row
-              <tr key={`miss-${era}`} className="bg-danger/5 border-b border-danger/20">
+              <tr key={`miss-${era}`} className="bg-danger/5">
                 <td className="px-3 py-2.5 font-mono text-danger font-semibold">{era}</td>
                 <td className="px-3 py-2.5 text-right text-danger" colSpan={4}>
                   <span className="hidden md:inline">— No era stat recorded —</span>
@@ -84,7 +84,7 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
               </tr>
             ) : (
               // Normal row
-              <tr key={`era-${era}`} className="border-b border-border/50 hover:bg-surface/50 transition-colors">
+              <tr key={`era-${era}`} className="hover:bg-surface-bright transition-colors">
                 <td className="px-3 py-2.5 font-mono text-text-secondary">{era}</td>
                 <td className="px-3 py-2.5 font-mono text-text-secondary text-right">
                   {data?.startBlock?.toLocaleString() ?? '—'}

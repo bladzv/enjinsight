@@ -473,9 +473,7 @@ export default function BalanceExplorer() {
     return ''
   })()
 
-  const inputField = 'w-full bg-surface border border-border rounded-lg px-3 py-1.5 text-[0.8rem] ' +
-    'text-text font-mono placeholder-muted disabled:opacity-50 focus:outline-none ' +
-    'focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-colors'
+  const inputField = 'w-full bg-card rounded px-3 py-1.5 text-[0.8rem] text-text font-mono placeholder-muted disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-primary transition-colors'
 
   // Step label/hint
   const stepLabel       = rangeMode === 'date' ? 'Step (Every N Days)' :
@@ -489,13 +487,13 @@ export default function BalanceExplorer() {
     <div className="space-y-4 sm:space-y-5">
 
       {/* ── Unified input card (tab bar + pane) ────────────────────── */}
-      <div className="card overflow-hidden">
+      <div className="bg-surface rounded-xl overflow-hidden">
 
         {/* Tab bar */}
         <div
           role="tablist"
           aria-label="Balance explorer mode"
-          className="flex border-b border-border bg-surface/30"
+          className="flex bg-card rounded-xl p-1 m-4 mb-0"
         >
           {TABS.map(({ key, label, icon: Icon }) => (
             <button
@@ -504,12 +502,12 @@ export default function BalanceExplorer() {
               aria-selected={tab === key}
               disabled={isLoading}
               onClick={() => { setTab(key); if (key === 'query') setShowImportResults(false) }}
-              className={`flex items-center justify-center gap-1.5 flex-1 px-4 py-3
-                          text-xs sm:text-sm font-medium border-b-2 transition-colors
+              className={`flex items-center justify-center gap-1.5 flex-1 px-4 py-2.5
+                          text-xs sm:text-sm font-medium rounded-lg transition-colors
                           disabled:opacity-50 disabled:cursor-not-allowed
                           ${tab === key
-                            ? 'border-primary text-text bg-primary/5'
-                            : 'border-transparent text-dim hover:text-text hover:bg-surface/60'}`}
+                            ? 'bg-surface-bright text-cyan'
+                            : 'text-muted hover:text-text'}`}
             >
               <Icon size={14} />
               {label}
@@ -523,27 +521,27 @@ export default function BalanceExplorer() {
 
             {/* Section heading */}
             {/* ── Live chain snapshot ──────────────────────────────── */}
-            <div className="flex flex-wrap gap-x-5 gap-y-1 px-3 py-2 rounded-lg bg-surface border border-border text-[11px] font-mono">
-              <span className="text-dim">Era:&nbsp;
+            <div className="flex flex-wrap gap-x-5 gap-y-1 px-3 py-2 rounded-lg bg-card text-[11px] font-mono">
+              <span className="text-text-secondary">Era:&nbsp;
                 <span className="text-cyan">{chainInfo.loading ? '…' : (chainInfo.era != null ? chainInfo.era.toLocaleString() : '—')}</span>
               </span>
-              <span className="text-dim">Block:&nbsp;
+              <span className="text-text-secondary">Block:&nbsp;
                 <span className="text-text">{chainInfo.loading ? '…' : (chainInfo.block != null ? chainInfo.block.toLocaleString() : '—')}</span>
               </span>
-              <span className="text-dim">Time:&nbsp;
+              <span className="text-text-secondary">Time:&nbsp;
                 <span className="text-text">{chainInfo.loading ? '…' : (chainInfo.timestamp != null ? new Date(chainInfo.timestamp).toUTCString().replace(' GMT', ' UTC') : '—')}</span>
               </span>
             </div>
 
             <div className="flex items-center gap-2">
               <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-              <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">RPC Configuration</h3>
+              <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">RPC Configuration</h3>
             </div>
 
             {/* Network dropdown + address */}
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label htmlFor="bal-rpc-net" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                <label htmlFor="bal-rpc-net" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
                   Archive Node WS Endpoint
                 </label>
                 <div className="relative">
@@ -558,14 +556,14 @@ export default function BalanceExplorer() {
                       <option key={n.key} value={n.key}>{n.label}</option>
                     ))}
                   </select>
-                  <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-dim" />
+                  <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-text-secondary" />
                 </div>
                 <p className="mt-1.5 text-[11px] font-mono text-muted truncate" title={activeNetwork.endpoint}>
                   {activeNetwork.endpoint}
                 </p>
               </div>
               <div>
-                <label htmlFor="bal-addr" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                <label htmlFor="bal-addr" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
                   Wallet Address (SS58)
                 </label>
                 <input
@@ -592,14 +590,14 @@ export default function BalanceExplorer() {
             {/* ── Range mode toggle ─────────────────────────────────────── */}
             {isDateRangeSupported && (
               <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">Query Range</span>
-                <div className="flex rounded-lg border border-border overflow-hidden">
+                <span className="text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary">Query Range</span>
+                <div className="flex rounded-xl bg-card p-1 overflow-hidden">
                   <button
                     type="button"
                     onClick={() => { setRangeMode('block'); setStep('') }}
                     disabled={isLoading}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-r border-border transition-colors
-                      ${rangeMode === 'block' ? 'bg-primary/20 text-text' : 'text-dim hover:text-text'}`}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors
+                      ${rangeMode === 'block' ? 'bg-primary/15 text-primary' : 'text-muted hover:text-text'}`}
                   >
                     Block Range
                   </button>
@@ -607,8 +605,8 @@ export default function BalanceExplorer() {
                     type="button"
                     onClick={() => { setRangeMode('era'); setStep('1') }}
                     disabled={isLoading}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-r border-border transition-colors
-                      ${rangeMode === 'era' ? 'bg-primary/20 text-text' : 'text-dim hover:text-text'}`}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors
+                      ${rangeMode === 'era' ? 'bg-primary/15 text-primary' : 'text-muted hover:text-text'}`}
                   >
                     Era Range
                   </button>
@@ -616,8 +614,8 @@ export default function BalanceExplorer() {
                     type="button"
                     onClick={() => { setRangeMode('date'); setStep('1') }}
                     disabled={isLoading}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors
-                      ${rangeMode === 'date' ? 'bg-primary/20 text-text' : 'text-dim hover:text-text'}`}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors
+                      ${rangeMode === 'date' ? 'bg-primary/15 text-primary' : 'text-muted hover:text-text'}`}
                   >
                     <Calendar size={12} />
                     Date Range
@@ -631,7 +629,7 @@ export default function BalanceExplorer() {
               <div className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div>
-                    <label htmlFor="bal-start-era" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                    <label htmlFor="bal-start-era" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
                       Start Era
                     </label>
                     <input
@@ -646,7 +644,7 @@ export default function BalanceExplorer() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="bal-end-era" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                    <label htmlFor="bal-end-era" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
                       End Era
                     </label>
                     <input
@@ -661,7 +659,7 @@ export default function BalanceExplorer() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="bal-step-era" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                    <label htmlFor="bal-step-era" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
                       {stepLabel}
                     </label>
                     <input
@@ -688,7 +686,7 @@ export default function BalanceExplorer() {
                   </p>
                 )}
                 {startBlock && endBlock && rangeMode === 'era' && (
-                  <p className="text-[11px] font-mono text-dim">
+                  <p className="text-[11px] font-mono text-text-secondary">
                     Resolved block range: <span className="text-cyan">{Number(startBlock).toLocaleString('en')}</span>
                     {' – '}
                     <span className="text-cyan">{Number(endBlock).toLocaleString('en')}</span>
@@ -702,7 +700,7 @@ export default function BalanceExplorer() {
               <div className="space-y-2">
                 <div className="grid gap-3 sm:grid-cols-3">
                 <div>
-                  <label htmlFor="bal-start" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                  <label htmlFor="bal-start" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
                     Start Block
                   </label>
                   <input
@@ -717,7 +715,7 @@ export default function BalanceExplorer() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="bal-end" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                  <label htmlFor="bal-end" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
                     End Block
                   </label>
                   <input
@@ -732,7 +730,7 @@ export default function BalanceExplorer() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="bal-step" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                  <label htmlFor="bal-step" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
                     {stepLabel}
                   </label>
                   <input
@@ -760,7 +758,7 @@ export default function BalanceExplorer() {
               <div className="space-y-3">
                 {/* Quick presets */}
                 <div>
-                  <span className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">Quick Range</span>
+                  <span className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">Quick Range</span>
                   <div className="flex flex-wrap gap-2">
                     {DATE_PRESETS.map(({ label, days }) => (
                       <button
@@ -768,10 +766,10 @@ export default function BalanceExplorer() {
                         type="button"
                         onClick={() => applyDatePreset(days, label)}
                         disabled={isLoading}
-                        className={`px-2.5 py-1 rounded-md border text-[11px] transition-colors disabled:opacity-50
+                        className={`px-2.5 py-1 rounded-md text-[11px] transition-colors disabled:opacity-50
                           ${activePreset === label
-                            ? 'bg-primary/20 border-primary/60 text-text font-semibold'
-                            : 'border-border text-dim hover:border-primary/50 hover:text-text'}`}
+                            ? 'bg-primary/15 text-primary font-semibold'
+                            : 'bg-card text-text-secondary hover:text-text'}`}
                       >
                         {label} ago
                       </button>
@@ -782,7 +780,7 @@ export default function BalanceExplorer() {
                 {/* Start / End date + step */}
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div>
-                    <label htmlFor="bal-start-date" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                    <label htmlFor="bal-start-date" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
                       Start Date
                     </label>
                     <input
@@ -797,7 +795,7 @@ export default function BalanceExplorer() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="bal-end-date" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                    <label htmlFor="bal-end-date" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
                       End Date
                     </label>
                     <input
@@ -812,7 +810,7 @@ export default function BalanceExplorer() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="bal-step-date" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
+                    <label htmlFor="bal-step-date" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
                       {stepLabel}
                     </label>
                     <input
@@ -842,7 +840,7 @@ export default function BalanceExplorer() {
 
                 {/* Resolved block range preview */}
                 {startBlock && endBlock && rangeMode === 'date' && (
-                  <p className="text-[11px] font-mono text-dim">
+                  <p className="text-[11px] font-mono text-text-secondary">
                     Resolved block range: <span className="text-cyan">{Number(startBlock).toLocaleString('en')}</span>
                     {' – '}
                     <span className="text-cyan">{Number(endBlock).toLocaleString('en')}</span>
@@ -852,9 +850,9 @@ export default function BalanceExplorer() {
             )}
 
             {/* ── Disclaimer — Archive RPC ─────────────────── */}
-            <div className="flex gap-2.5 px-3 py-2.5 rounded-lg bg-primary/5 border border-primary/20">
+            <div className="flex gap-2.5 px-3 py-2.5 rounded-lg bg-primary/5">
               <Info size={14} className="text-primary/70 flex-shrink-0 mt-0.5" />
-              <p className="text-[11px] text-dim leading-relaxed">
+              <p className="text-[11px] text-text-secondary leading-relaxed">
                 <span className="text-text font-medium">Note:</span> Balance data is fetched
                 directly from the Archive RPC endpoint — queries may take time, especially over
                 a wide range. Narrowing the range or increasing the step will reduce query time.
@@ -865,7 +863,7 @@ export default function BalanceExplorer() {
             {status === STATUS.ERROR && errorMsg && (
               <div
                 role="alert"
-                className="flex gap-3 px-4 py-3 rounded-xl bg-danger/10 border border-danger/30 animate-fade-in"
+                className="flex gap-3 px-4 py-3 rounded-xl bg-danger/10 animate-fade-in"
               >
                 <AlertTriangle size={16} className="text-danger flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-danger leading-relaxed">{errorMsg}</p>
@@ -901,7 +899,7 @@ export default function BalanceExplorer() {
                 </button>
               )}
               {estCalls != null && addressNote?.type !== 'error' && !(rangeMode === 'block' ? !!blockErr : rangeMode === 'era' ? !!eraValidErr : !!dateValidErr) && (
-                <span className="text-xs font-mono text-dim">
+                <span className="text-xs font-mono text-text-secondary">
                   {estCalls > MAX_RPC_CALLS
                     ? (
                       <span className="text-warning flex items-center gap-1">
@@ -924,11 +922,11 @@ export default function BalanceExplorer() {
             {/* Progress bar */}
             {isLoading && progress && (
               <div aria-live="polite" className="space-y-1.5">
-                <div className="flex justify-between text-xs text-dim font-mono">
+                <div className="flex justify-between text-xs text-text-secondary font-mono">
                   <span>{progress.text}</span>
                   <span>{progress.pct}%</span>
                 </div>
-                <div className="h-2 bg-surface rounded-full overflow-hidden">
+                <div className="h-2 bg-card rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-primary-dim via-primary to-cyan transition-all duration-300"
                     style={{ width: `${progress.pct}%` }}
@@ -946,9 +944,9 @@ export default function BalanceExplorer() {
               <>
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-                  <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">Import Balance Data</h3>
+                  <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">Import Balance Data</h3>
                 </div>
-                <p className="text-xs text-dim mb-4 leading-relaxed">
+                <p className="text-xs text-text-secondary mb-4 leading-relaxed">
                   Only files previously exported by this tool (JSON, CSV, or XML) can be imported.
                   Files from other sources or tools are not supported.
                 </p>
@@ -963,18 +961,18 @@ export default function BalanceExplorer() {
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
                     <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-                    <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">Imported Data</h3>
+                    <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">Imported Data</h3>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowImportResults(false)}
-                    className="text-xs text-dim hover:text-text transition-colors"
+                    className="text-xs text-text-secondary hover:text-text transition-colors"
                   >
                     ← Import another file
                   </button>
                 </div>
                 {hasResults && (
-                  <p className="text-xs text-dim">
+                  <p className="text-xs text-text-secondary">
                     {records.length.toLocaleString('en')} records loaded. Switch to the <strong className="text-text">Query Node</strong> tab to run a new query.
                   </p>
                 )}
@@ -989,7 +987,7 @@ export default function BalanceExplorer() {
         <>
           {/* Records summary bar */}
           {hasResults && (
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 bg-card border border-border rounded-xl shadow-card px-5 py-3.5">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 bg-surface rounded-xl px-5 py-3.5">
               {[
                 { label: 'Records',        value: records.length.toLocaleString('en') },
                 { label: 'Block Range',    value: minBlk != null ? `${minBlk.toLocaleString('en')} – ${maxBlk.toLocaleString('en')}` : '—' },
@@ -997,10 +995,10 @@ export default function BalanceExplorer() {
               ].map(({ label, value }, i, arr) => (
                 <div key={label} className="flex items-center gap-6">
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] font-bold tracking-widest uppercase text-dim">{label}</span>
+                    <span className="text-[11px] font-bold tracking-widest uppercase text-text-secondary">{label}</span>
                     <span className="text-sm font-bold text-text font-mono">{value}</span>
                   </div>
-                  {i < arr.length - 1 && <div className="w-px h-7 bg-border flex-shrink-0" />}
+                  {i < arr.length - 1 && <div className="w-px h-7 bg-card flex-shrink-0" />}
                 </div>
               ))}
             </div>

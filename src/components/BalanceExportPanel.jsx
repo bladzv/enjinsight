@@ -49,19 +49,19 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
   }
 
   return (
-    <div className="card p-4 animate-fade-in">
+    <div className="bg-surface rounded-xl p-4 animate-fade-in">
       <div className="flex items-center gap-2 mb-4">
         <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-        <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">Export Data</h3>
+        <h3 className="text-xs font-bold tracking-widest uppercase text-cyan font-headline">Export Data</h3>
       </div>
 
       {message && (
         <div
           role="alert"
-          className={`mb-4 px-4 py-2.5 rounded-lg border text-sm font-medium
+          className={`mb-4 px-4 py-2.5 rounded-lg text-sm font-medium
             ${message.type === 'ok'
-              ? 'bg-success/10 border-success/30 text-success'
-              : 'bg-danger/10 border-danger/30 text-danger'}`}
+              ? 'bg-success/10 text-success'
+              : 'bg-danger/10 text-danger'}`}
         >
           {message.text}
         </div>
@@ -79,15 +79,15 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
         <div
           role="switch"
           aria-checked={encOn}
-          className={`relative w-9 h-5 rounded-full border transition-all flex-shrink-0
-                      ${encOn ? 'bg-cyan border-cyan' : 'bg-surface border-border'}`}
+          className={`relative w-9 h-5 rounded-full transition-all flex-shrink-0
+                      ${encOn ? 'bg-cyan' : 'bg-card'}`}
         >
           <span
             className={`absolute top-0.5 left-0 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform
                         ${encOn ? 'translate-x-[18px]' : 'translate-x-0.5'}`}
           />
         </div>
-        <span className="text-sm font-semibold text-dim flex items-center gap-1.5">
+        <span className="text-sm font-semibold text-text-secondary flex items-center gap-1.5">
           {encOn ? <Lock size={13} className="text-cyan" /> : <Unlock size={13} />}
           Encrypt Output (AES-256-GCM)
         </span>
@@ -96,7 +96,7 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
       {/* Password field (visible when encrypt on) */}
       {encOn && (
         <div className="mb-4 max-w-sm">
-          <label htmlFor="enc-pwd" className="block text-xs font-bold tracking-widest uppercase text-dim mb-1.5">
+          <label htmlFor="enc-pwd" className="block text-xs font-bold tracking-widest uppercase text-muted mb-1.5">
             Encryption Password
           </label>
           <input
@@ -106,9 +106,9 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
             maxLength={1024}
             value={password}
             onChange={e => setPassword(e.target.value)}
-            className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-base
-                       text-text font-mono placeholder-muted focus:outline-none
-                       focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-colors"
+            className="w-full bg-card rounded px-3 py-2 text-sm
+                       text-text font-mono placeholder:text-muted focus-visible:outline-none
+                       focus-visible:ring-1 focus-visible:ring-primary transition-colors"
           />
         </div>
       )}
@@ -116,7 +116,7 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
       {/* Filename + format + export button */}
       <div className="grid gap-3 sm:grid-cols-[1fr_120px_auto] items-end">
         <div>
-          <label htmlFor="exp-fname" className="block text-xs font-bold tracking-widest uppercase text-dim mb-1.5">
+          <label htmlFor="exp-fname" className="block text-xs font-bold tracking-widest uppercase text-muted mb-1.5">
             Filename
           </label>
           <input
@@ -128,22 +128,22 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
             placeholder={defaultFilename()}
             value={filename}
             onChange={e => setFilename(e.target.value)}
-            className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-base
-                       text-text font-mono placeholder-muted focus:outline-none
-                       focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-colors"
+            className="w-full bg-card rounded px-3 py-2 text-sm
+                       text-text font-mono placeholder:text-muted focus-visible:outline-none
+                       focus-visible:ring-1 focus-visible:ring-primary transition-colors"
           />
         </div>
 
         <div>
-          <label htmlFor="exp-fmt" className="block text-xs font-bold tracking-widest uppercase text-dim mb-1.5">
+          <label htmlFor="exp-fmt" className="block text-xs font-bold tracking-widest uppercase text-muted mb-1.5">
             Format
           </label>
           <select
             id="exp-fmt"
             value={format}
             onChange={e => setFormat(e.target.value)}
-            className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-base
-                       text-text focus:outline-none focus:border-primary/50 transition-colors"
+            className="w-full bg-card rounded px-3 py-2 text-sm
+                       text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary transition-colors"
           >
             <option value="json">JSON</option>
             <option value="csv">CSV</option>

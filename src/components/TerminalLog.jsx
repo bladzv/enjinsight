@@ -21,36 +21,61 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
     })
   }
 
+  function onHeaderKeyDown(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      toggle()
+    }
+  }
+
   const lastLog = logs[logs.length - 1]
 
   const wrapClass = sticky
-    ? 'fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-ink/95 backdrop-blur overflow-hidden font-mono text-xs'
-    : 'card overflow-hidden font-mono text-xs'
+    ? 'fixed bottom-0 left-0 right-0 z-20 bg-term overflow-hidden font-mono text-xs shadow-[0_-4px_24px_rgba(182,160,255,0.06)]'
+    : 'bg-term rounded-xl overflow-hidden font-mono text-xs'
 
   return (
     <div className={wrapClass}>
-      {/* Toggle bar — always visible */}
-      <button
+      {/* Terminal tab header bar */}
+      <div
+        className="flex items-center bg-ink cursor-pointer select-none"
+        role="button"
+        tabIndex={0}
         onClick={toggle}
-        className="w-full flex items-center gap-2 px-4 py-2.5 bg-term hover:bg-surface/80
-                   transition-colors text-left"
+        onKeyDown={onHeaderKeyDown}
         aria-expanded={expanded}
         aria-controls="terminal-body"
-        aria-label={expanded ? 'Collapse terminal log' : 'Expand terminal log'}
+        aria-label={expanded ? 'Collapse logs drawer' : 'Expand logs drawer'}
       >
-        <Terminal size={13} className="text-primary flex-shrink-0" />
-        <span className="text-dim text-[11px] font-semibold uppercase tracking-widest">Logs</span>
-        <span className="flex-1 truncate text-dim ml-2">
-          {lastLog
-            ? <><span className="log-ts">{lastLog.ts}</span> <span className={LEVEL_CLASS[lastLog.level]}>[{lastLog.level}]</span> {lastLog.message}</>
-            : <span className="text-muted italic">Ready — waiting for CHECK…</span>
-          }
-        </span>
-        <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-border text-dim">
-          {logs.length}
-        </span>
-        {expanded ? <ChevronUp size={13} className="text-dim flex-shrink-0" /> : <ChevronDown size={13} className="text-dim flex-shrink-0" />}
-      </button>
+        <div
+          className={`flex items-center gap-2 px-6 py-2 h-full text-[10px] uppercase font-bold tracking-widest transition-colors
+            ${expanded
+              ? 'text-primary border-t-2 border-primary bg-card'
+              : 'text-text-secondary hover:bg-surface-high'
+            }`}
+        >
+          <Terminal size={12} className="flex-shrink-0" />
+          Logs
+        </div>
+
+        {/* Log count + last message preview */}
+        <div className="flex-1 flex items-center gap-2 px-4 min-w-0">
+          <span className="text-[10px] text-muted truncate hidden sm:block">
+            {lastLog
+              ? <><span className="text-muted">{lastLog.ts}</span> <span className={LEVEL_CLASS[lastLog.level]}>[{lastLog.level}]</span> <span className="text-text-secondary">{lastLog.message}</span></>
+              : <span className="italic text-muted">Ready</span>
+            }
+          </span>
+        </div>
+
+        {/* Right controls */}
+        <div className="flex items-center gap-3 px-4">
+          <span className="text-[10px] text-muted tabular-nums">{logs.length}</span>
+          <span className="text-text-secondary p-1" aria-hidden="true">
+            {expanded ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+          </span>
+        </div>
+      </div>
 
       {/* Log body */}
       {expanded && (
@@ -60,15 +85,15 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
           style={{ maxHeight: 'min(300px, 40vh)' }}
           role="log"
           aria-live="polite"
-          aria-label="Terminal log output"
+          aria-label="Logs output"
         >
           {logs.length === 0 ? (
             <p className="px-4 py-4 text-muted italic">No output yet.</p>
           ) : (
-            <div className="px-4 py-3 space-y-0.5">
+            <div className="px-4 py-3 space-y-1">
               {logs.map(entry => (
-                <div key={entry.id} className="flex gap-2 items-start leading-relaxed">
-                  <span className="log-ts flex-shrink-0 select-none">{entry.ts}</span>
+                <div key={entry.id} className="flex gap-4 items-start leading-relaxed">
+                  <span className="text-muted flex-shrink-0 select-none">{entry.ts}</span>
                   <span className={`flex-shrink-0 select-none ${LEVEL_CLASS[entry.level]}`}>
                     [{entry.level}]
                   </span>
@@ -76,7 +101,7 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
                   {(() => {
                     const isRetry = typeof entry.message === 'string' && /Retry\s+\d+\/\d+/i.test(entry.message)
                     return (
-                      <span className={`text-[#C8C8E8] break-all ${isRetry ? 'log-retry' : ''}`}>
+                      <span className={`text-text break-all ${isRetry ? 'log-retry' : ''}`}>
                         {entry.message}
                       </span>
                     )

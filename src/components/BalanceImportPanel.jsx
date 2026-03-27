@@ -97,11 +97,11 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
   }
 
   return (
-    <div className={bare ? '' : 'card p-4 animate-fade-in'}>
+    <div className={bare ? '' : 'bg-surface rounded-xl p-4 animate-fade-in'}>
       {!bare && (
         <div className="flex items-center gap-2 mb-4">
           <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-          <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">Import Balance Data</h3>
+          <h3 className="text-xs font-bold tracking-widest uppercase text-cyan font-headline">Import Balance Data</h3>
         </div>
       )}
 
@@ -109,10 +109,10 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
       {alert && (
         <div
           role="alert"
-          className={`mb-4 px-4 py-2.5 rounded-lg border text-sm font-medium
+          className={`mb-4 px-4 py-2.5 rounded-lg text-sm font-medium
             ${alert.type === 'ok'
-              ? 'bg-success/10 border-success/30 text-success'
-              : 'bg-danger/10 border-danger/30 text-danger'}`}
+              ? 'bg-success/10 text-success'
+              : 'bg-danger/10 text-danger'}`}
         >
           {alert.text}
         </div>
@@ -123,10 +123,10 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
         role="button"
         tabIndex={0}
         aria-label="Drop a file or click to browse"
-        className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-all
+        className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all
                     ${isDragOver
                       ? 'border-cyan bg-cyan/10'
-                      : 'border-border hover:border-rim hover:bg-surface/50'}`}
+                      : 'border-[rgba(70,71,82,0.10)] hover:border-primary hover:bg-card'}`}
         onClick={() => fileInputRef.current?.click()}
         onKeyDown={e => e.key === 'Enter' && fileInputRef.current?.click()}
         onDragOver={onDragOver}
@@ -137,14 +137,14 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
           ? (
             <div className="flex flex-col items-center gap-2">
               <span className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-              <p className="text-sm text-dim">Reading file…</p>
+              <p className="text-sm text-text-secondary">Reading file…</p>
             </div>
           )
           : (
             <>
-              <FolderOpen size={36} className="mx-auto mb-3 text-dim" />
+              <FolderOpen size={36} className="mx-auto mb-3 text-text-secondary" />
               <p className="font-semibold text-text mb-1">Drop file here or click to browse</p>
-              <p className="text-sm text-dim">
+              <p className="text-sm text-text-secondary">
                 Supports JSON, CSV, XML exports from this app (max {MAX_IMPORT_MB} MB)
               </p>
             </>
@@ -163,12 +163,12 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
       {/* Decrypt block (shown when encrypted file detected) */}
       {encPending && (
         <div className="mt-4">
-          <div className="flex gap-2 px-4 py-3 rounded-lg bg-cyan/10 border border-cyan/30 text-sm text-cyan mb-3">
+          <div className="flex gap-2 px-4 py-3 rounded-lg bg-cyan/10 text-sm text-cyan mb-3">
             🔒 This file is AES-256-GCM encrypted. Enter the password to decrypt.
           </div>
           <div className="flex gap-3 items-end">
             <div className="flex-1">
-              <label htmlFor="dec-pwd" className="block text-xs font-bold tracking-widest uppercase text-dim mb-1.5">
+              <label htmlFor="dec-pwd" className="block text-xs font-bold tracking-widest uppercase text-muted mb-1.5">
                 Decryption Password
               </label>
               <input
@@ -179,9 +179,9 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
                 value={decPwd}
                 onChange={e => setDecPwd(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleDecrypt()}
-                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-base
-                           text-text font-mono placeholder-muted focus:outline-none
-                           focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-colors"
+                className="w-full bg-card rounded px-3 py-2 text-sm
+                           text-text font-mono placeholder:text-muted focus-visible:outline-none
+                           focus-visible:ring-1 focus-visible:ring-primary transition-colors"
               />
             </div>
             <button

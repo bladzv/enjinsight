@@ -68,29 +68,22 @@ export default function ControlPanel({
   const disableAction = !isLoading && !isResetState && !!error
 
   const showWarning = !error && parseInt(value, 10) > 30
-  const helperTextClass = error ? 'text-danger' : showWarning ? 'text-warning' : 'text-dim'
+  const helperTextClass = error ? 'text-danger' : showWarning ? 'text-warning' : 'text-text-secondary'
 
   return (
-    <div id="scan-controls" className="card w-full p-4 sm:p-5 text-center">
+    <div id="scan-controls" className="bg-surface rounded-b-xl w-full p-5 sm:p-6">
       {/* Title row */}
-      <div className="mb-4">
-        <div>
-          <h2 className="text-base font-semibold text-text">{title}</h2>
-          <p className="text-xs text-dim mt-0.5">
-            {helper}
-          </p>
-        </div>
+      <div className="mb-5 text-center">
+        <h2 className="text-base font-semibold font-headline text-text">{title}</h2>
+        <p className="text-xs text-text-secondary mt-1">{helper}</p>
       </div>
 
-      {/* Proxy status hint removed — use the built-in serverless proxy in production. */}
-
       {/* Input row */}
-      <div>
-        <label htmlFor="reward-count" className="block text-xs font-medium text-dim mb-1.5">
-          Number of recent eras to check (max 100)
-        </label>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-center gap-3">
-        <div className="relative w-full sm:w-[25%]">
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+        <div className="flex flex-col gap-1">
+          <label htmlFor="reward-count" className="text-[10px] uppercase font-bold text-muted tracking-widest">
+            Scan Range (Eras)
+          </label>
           <input
             id="reward-count"
             type="text"
@@ -103,58 +96,57 @@ export default function ControlPanel({
             aria-describedby={error ? 'reward-count-error' : undefined}
             aria-invalid={!!error}
             maxLength={3}
-            className={`w-full h-12 pl-0 pr-[108px] rounded-lg bg-surface border text-text text-lg font-mono leading-none text-center
-                        focus:outline-none focus:ring-2 focus:ring-primary transition-colors
+            className={`w-24 h-10 bg-card text-primary font-mono rounded px-3 text-center text-lg
+                        focus:outline-none focus:ring-1 focus:ring-primary transition-colors
                         disabled:opacity-50 disabled:cursor-not-allowed
-                        ${error ? 'border-danger focus:ring-danger' : 'border-border focus:border-primary'}`}
+                        ${error ? 'ring-1 ring-danger' : ''}`}
           />
-
-          <button
-            onClick={handleAction}
-            disabled={disableAction}
-            aria-label={btnAria}
-            className={`absolute right-1.5 top-1/2 -translate-y-1/2 h-9 min-w-[104px] px-3 text-sm ${isLoading ? 'btn-stop' : 'btn-primary'}`}
-          >
-            {isLoading ? (
-              <>
-                <Square size={14} className="fill-white stroke-white" />
-                <span>STOP</span>
-              </>
-            ) : isResetState ? (
-              <>
-                <RotateCcw size={14} />
-                <span>RESET</span>
-              </>
-            ) : (
-              <>
-                <Search size={14} />
-                <span>CHECK</span>
-              </>
-            )}
-          </button>
-        </div>
         </div>
 
-        <p
-          id="reward-count-helper"
-          role={error ? 'alert' : undefined}
-          aria-hidden={!error && !showWarning}
-          className={`mt-2 text-xs flex items-center gap-1 justify-center min-h-[1.25rem] ${helperTextClass}`}
-        >
-          {error ? (
-            <>
-              <AlertCircle size={11} /> {error}
-            </>
-          ) : showWarning ? (
-            <>
-              <AlertCircle size={11} className="text-warning" />
-              Checking {value} rewards may take longer. Large scans are batched automatically.
-            </>
+        <div className="flex gap-2 mt-4 sm:mt-5">
+          {isLoading ? (
+            <button onClick={handleAction} className="btn-stop px-5 py-2 text-sm" aria-label={btnAria}>
+              <Square size={14} className="fill-white stroke-white" />
+              <span>STOP</span>
+            </button>
+          ) : isResetState ? (
+            <button onClick={handleAction} className="btn-secondary px-5 py-2 text-sm" aria-label={btnAria}>
+              <RotateCcw size={14} />
+              <span>RESET</span>
+            </button>
           ) : (
-            <span className="invisible">placeholder</span>
+            <button
+              onClick={handleAction}
+              disabled={disableAction}
+              className="btn-primary px-5 py-2 text-sm"
+              aria-label={btnAria}
+            >
+              <Search size={14} />
+              <span>RUN</span>
+            </button>
           )}
-        </p>
+        </div>
       </div>
+
+      <p
+        id="reward-count-helper"
+        role={error ? 'alert' : undefined}
+        aria-hidden={!error && !showWarning}
+        className={`mt-3 text-xs flex items-center gap-1 justify-center min-h-[1.25rem] ${helperTextClass}`}
+      >
+        {error ? (
+          <>
+            <AlertCircle size={11} /> {error}
+          </>
+        ) : showWarning ? (
+          <>
+            <AlertCircle size={11} className="text-warning" />
+            Checking {value} rewards may take longer. Large scans are batched automatically.
+          </>
+        ) : (
+          <span className="invisible">placeholder</span>
+        )}
+      </p>
     </div>
   )
 }

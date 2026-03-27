@@ -274,39 +274,39 @@ export default function BalanceChart({ records }) {
   ]
 
   return (
-    <div className="card p-4 animate-fade-in">
+    <div className="bg-surface rounded-xl p-4 animate-fade-in">
       {/* Card header */}
       <div className="flex items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2">
           <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-          <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">Balance Chart</h3>
+          <h3 className="text-xs font-bold tracking-widest uppercase text-cyan font-headline">Balance Chart</h3>
         </div>
         <div className="flex items-center gap-3">
           {isDecimated && (
-            <span className="text-xs text-dim">
+            <span className="text-xs text-text-secondary">
               ~{CHART_MAX_PTS} sampled of {records.length.toLocaleString('en')}
             </span>
           )}
           {/* Height zoom controls */}
           <div className="flex items-center gap-1" title="Chart height">
             <button
-              className="w-6 h-6 rounded border border-border bg-surface text-dim text-sm font-bold
-                         flex items-center justify-center hover:border-cyan hover:text-cyan transition-colors"
+              className="w-6 h-6 rounded bg-card text-text-secondary text-sm font-bold
+                         flex items-center justify-center hover:text-cyan transition-colors"
               onClick={() => setZoomIdx(i => Math.max(0, i - 1))}
               aria-label="Chart zoom out"
               disabled={zoomIdx === 0}
             >−</button>
-            <span className="font-mono text-[11px] text-dim w-9 text-center">{zoomPct}%</span>
+            <span className="font-mono text-[11px] text-text-secondary w-9 text-center">{zoomPct}%</span>
             <button
-              className="w-6 h-6 rounded border border-border bg-surface text-dim text-sm font-bold
-                         flex items-center justify-center hover:border-cyan hover:text-cyan transition-colors"
+              className="w-6 h-6 rounded bg-card text-text-secondary text-sm font-bold
+                         flex items-center justify-center hover:text-cyan transition-colors"
               onClick={() => setZoomIdx(i => Math.min(ZOOM_STEPS.length - 1, i + 1))}
               aria-label="Chart zoom in"
               disabled={zoomIdx === ZOOM_STEPS.length - 1}
             >+</button>
             <button
-              className="w-6 h-6 rounded border border-border bg-surface text-[10px] text-dim font-bold
-                         flex items-center justify-center hover:border-cyan hover:text-cyan transition-colors"
+              className="w-6 h-6 rounded bg-card text-[10px] text-text-secondary font-bold
+                         flex items-center justify-center hover:text-cyan transition-colors"
               onClick={() => setZoomIdx(DEFAULT_ZOOM_IDX)}
               aria-label="Reset chart zoom"
             >⊙</button>
@@ -322,7 +322,7 @@ export default function BalanceChart({ records }) {
             className={`px-3 py-1 rounded-full border text-xs font-bold tracking-wide transition-all
                         ${mode === key
                           ? activeColour
-                          : 'border-border text-dim hover:border-rim hover:text-text bg-transparent'}`}
+                          : 'border-[rgba(70,71,82,0.10)] text-text-secondary hover:text-text bg-transparent'}`}
             onClick={() => setMode(key)}
           >
             {label}
@@ -332,7 +332,7 @@ export default function BalanceChart({ records }) {
 
       {/* Canvas wrapper */}
       <div
-        className="relative bg-surface border border-border rounded-lg p-4 transition-all duration-200"
+        className="relative bg-card rounded-xl p-4 transition-all duration-200"
         style={{ height: `${heightPx}px` }}
       >
         <canvas ref={canvasRef} />

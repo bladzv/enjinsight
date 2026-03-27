@@ -1,7 +1,7 @@
 /**
  * LandingPage — entry screen shown when view === 'home'.
- * Renders four feature cards: Era Block Explorer, Staking Rewards Cadence, 
- * Historical Balance Viewer, and Reward History Viewer (placeholder).
+ * Renders four feature cards: Era Block Explorer, Staking Rewards Cadence,
+ * Historical Balance Viewer, and Reward History Viewer.
  */
 import { BarChart3, LineChart, Layers, TrendingUp } from 'lucide-react'
 
@@ -50,18 +50,18 @@ const FEATURES = [
 
 export default function LandingPage({ onNavigate }) {
   return (
-    <div className="pt-5 pb-12 sm:pt-8 sm:pb-20">
+    <div className="pt-8 pb-12 sm:pt-12 sm:pb-20">
       {/* Hero */}
-      <div className="text-center mb-10 px-2">
-        <div className="inline-flex items-center gap-2 px-3 py-1 mb-5 rounded-full
-                        bg-primary/10 border border-primary/25 text-xs font-semibold
-                        tracking-widest uppercase text-violet-400">
+      <div className="text-center mb-12 px-2">
+        <div className="inline-flex items-center gap-2 px-3 py-1 mb-5 rounded
+                        bg-primary/10 text-[10px] font-bold
+                        tracking-widest uppercase text-primary">
           Enjin Blockchain
         </div>
-        <h2 className="text-3xl sm:text-4xl font-bold text-text mb-4 leading-tight">
+        <h2 className="text-3xl sm:text-5xl font-bold font-headline text-text mb-4 leading-tight tracking-tight">
           EnjinSight
         </h2>
-        <p className="text-sm sm:text-base text-dim max-w-md mx-auto leading-relaxed">
+        <p className="text-sm sm:text-base text-text-secondary max-w-md mx-auto leading-relaxed">
           Monitoring and analytics utilities for the Enjin Blockchain ecosystem.<br className="hidden sm:block" />
           <br className="hidden sm:block" />
           Choose a tool to get started.
@@ -69,40 +69,40 @@ export default function LandingPage({ onNavigate }) {
       </div>
 
       {/* Feature cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 sm:gap-6 max-w-7xl mx-auto">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5 max-w-7xl mx-auto">
         {FEATURES.map(({ key, icon: Icon, title, description, label, resource, disabled }) => (
-          <div key={key} className={`card flex flex-col gap-5 p-6 sm:p-7 transition-colors ${
-            disabled ? 'opacity-60 hover:border-border' : 'hover:border-primary/40'
-          }`}>
+          <div key={key} className={`bg-surface rounded-xl p-6 sm:p-7 flex flex-col gap-4 transition-colors group
+            ${disabled ? 'opacity-60' : 'hover:bg-card cursor-pointer'}
+          `}>
             {/* Icon + title */}
             <div className="flex items-start gap-4">
-              <div className="w-11 h-11 flex-shrink-0 rounded-xl bg-primary/15 border border-primary/30
-                              flex items-center justify-center">
-                <Icon size={20} className="text-primary" />
+              <div className="w-12 h-12 flex-shrink-0 rounded bg-card flex items-center justify-center
+                              text-primary group-hover:bg-surface-bright transition-colors">
+                <Icon size={22} />
               </div>
-              <h3 className="text-base font-semibold text-text pt-1.5 leading-snug">{title}</h3>
+              <h3 className="text-base font-semibold font-headline text-text pt-2 leading-snug">{title}</h3>
             </div>
 
             {/* Description */}
-            <p className="text-sm text-dim leading-relaxed flex-1 text-justify">{description}</p>
+            <p className="text-sm text-text-secondary leading-relaxed">{description}</p>
 
             {/* Resource chip + CTA */}
-            <div className="flex flex-col items-center gap-3">
+            <div className="mt-auto flex flex-col gap-3">
               <button
                 onClick={() => !disabled && onNavigate(key)}
                 disabled={disabled}
-                className={`btn-primary focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                className={`btn-primary w-full ${
                   disabled ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
                 aria-label={label}
               >
                 {label}
               </button>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full
-                               bg-surface border border-border text-[11px] font-medium text-muted
-                               tracking-wide">
+              <span className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded
+                               bg-card px-2.5 text-[10px] font-bold text-muted leading-tight
+                               tracking-widest uppercase">
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan/60 flex-shrink-0" />
-                Data Source: {resource}
+                <span className="text-center">{resource}</span>
               </span>
             </div>
           </div>

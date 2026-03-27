@@ -11,15 +11,14 @@ export default function AppHeader({ status, view, onBack }) {
   const viewLabel = VIEW_LABELS[view] ?? ''
 
   return (
-    <header className="sticky top-0 z-30 bg-ink/90 backdrop-blur border-b border-border">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+    <header className="sticky top-0 z-30 bg-ink/95 backdrop-blur-xl">
+      <nav className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
 
-        {/* Left — brand only */}
+        {/* Left — brand */}
         <div className="flex items-center gap-3 min-w-0">
-
           {/* Logo mark */}
           <div className="relative flex-shrink-0">
-            <div className="w-8 h-8 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center">
+            <div className="w-8 h-8 rounded bg-card flex items-center justify-center">
                 <img src="/enjin-logo.png" alt="Enjin logo" className="w-4 h-4" />
             </div>
             {status === 'loading' && (
@@ -28,53 +27,57 @@ export default function AppHeader({ status, view, onBack }) {
           </div>
 
           {/* Title */}
-          <div className="min-w-0">
-            <h1 className="text-sm sm:text-base font-semibold text-text leading-tight truncate">
-              EnjinSight
-            </h1>
-          </div>
+          <h1 className="text-base sm:text-lg font-bold font-brand text-primary tracking-tighter leading-tight truncate">
+            EnjinSight
+          </h1>
+
+          {/* Nav links — shown on non-home views as breadcrumb */}
+          {view && view !== 'home' && (
+            <div className="hidden md:flex items-center gap-1.5 ml-4">
+              <button
+                onClick={onBack}
+                className="text-text-secondary hover:text-primary transition-colors text-sm"
+              >
+                Dashboard
+              </button>
+              <span className="text-muted text-xs">/</span>
+              <span className="text-primary text-sm font-medium truncate">{viewLabel}</span>
+            </div>
+          )}
         </div>
 
         {/* Right — status + GitHub link */}
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+        <div className="flex items-center gap-3 flex-shrink-0">
           {status === 'loading' && (
-            <span className="flex items-center gap-1 text-[11px] sm:text-xs text-cyan font-mono">
+            <span className="flex items-center gap-1.5 text-[11px] sm:text-xs text-cyan font-mono">
               <Activity size={12} className="animate-pulse" />
-              Scanning
+              <span className="hidden sm:inline">Scanning</span>
             </span>
           )}
           <a
             href="https://github.com/bladzv/enjinsight"
             target="_blank"
             rel="noopener noreferrer"
-            className="btn-ghost text-dim hover:text-cyan flex items-center gap-1"
+            className="p-2 text-text-secondary hover:bg-surface-bright transition-all rounded"
             aria-label="Open source on GitHub"
           >
-            <Github size={14} />
-            <span className="text-xs sm:text-sm">GitHub</span>
+            <Github size={16} />
           </a>
         </div>
-      </div>
+      </nav>
 
-      {/* Breadcrumb bar (non-home views) */}
+      {/* Mobile breadcrumb + back (non-home views) */}
       {view && view !== 'home' && (
-        <div className="border-t border-border/40 bg-ink/90">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2 flex flex-col gap-2">
-            <div className="text-xs text-muted flex items-center gap-1.5">
-              <span className="flex-shrink-0">Tool Selection</span>
-              <span className="flex-shrink-0 text-border">›</span>
-              <span className="text-text font-medium truncate">{viewLabel}</span>
-            </div>
-            <button
-              onClick={onBack}
-              className="flex items-center gap-1 text-xs text-dim hover:text-cyan transition-colors
-                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded flex-shrink-0 w-fit"
-              aria-label="Back to tool selection"
-            >
-              <ChevronLeft size={13} />
-              Go back
-            </button>
-          </div>
+        <div className="md:hidden px-4 sm:px-6 pb-2">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1 text-xs text-text-secondary hover:text-primary transition-colors
+                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded flex-shrink-0 w-fit"
+            aria-label="Back to tool selection"
+          >
+            <ChevronLeft size={13} />
+            <span>{viewLabel}</span>
+          </button>
         </div>
       )}
     </header>

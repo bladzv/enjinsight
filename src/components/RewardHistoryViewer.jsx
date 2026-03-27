@@ -291,8 +291,8 @@ function RewardChart({ data }) {
               labels: { color: '#A0A0C8', font: { size: 11 }, boxWidth: 14, padding: 16 },
             },
             tooltip: {
-              backgroundColor: 'rgba(18,18,30,0.97)',
-              borderColor:     '#2A2A45',
+              backgroundColor: 'rgba(12,14,23,0.97)',
+              borderColor:     'rgba(70,71,82,0.15)',
               borderWidth:     1,
               titleColor:      '#00d9ff',
               bodyColor:       '#A0A0C8',
@@ -327,11 +327,11 @@ function RewardChart({ data }) {
 
   if (!data.length) return null
   return (
-    <div className="card p-4">
+    <div className="bg-surface rounded-xl p-4">
       <div className="flex items-center gap-2 mb-3">
         <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-        <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">Reward Chart</h3>
-        <span className="text-[10px] text-dim ml-1">(all filtered eras · aggregated by pool)</span>
+        <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">Reward Chart</h3>
+        <span className="text-[10px] text-text-secondary ml-1">(all filtered eras · aggregated by pool)</span>
       </div>
       <div style={{ height: '280px' }}>
         <canvas ref={canvasRef} />
@@ -366,8 +366,8 @@ function makePieChart(canvasEl, labels, values, colors) {
             labels: { color: '#A0A0C8', font: { size: 11 }, boxWidth: 12, padding: 10 },
           },
           tooltip: {
-            backgroundColor: 'rgba(18,18,30,0.97)',
-            borderColor: '#2A2A45',
+            backgroundColor: 'rgba(12,14,23,0.97)',
+            borderColor: 'rgba(70,71,82,0.15)',
             borderWidth: 1,
             titleColor: '#00d9ff',
             bodyColor: '#A0A0C8',
@@ -424,11 +424,11 @@ function PoolBondedPieChart({ data }) {
 
   if (!data.length) return null
   return (
-    <div className="card p-4 flex flex-col">
+    <div className="bg-surface rounded-xl p-4 flex flex-col">
       <div className="flex items-center gap-2 mb-3">
         <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-        <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">My Bonded ENJ by Pool</h3>
-        <span className="text-[10px] text-dim ml-1">(wallet share · latest era per pool)</span>
+        <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">My Bonded ENJ by Pool</h3>
+        <span className="text-[10px] text-text-secondary ml-1">(wallet share · latest era per pool)</span>
       </div>
       <div style={{ height: '240px' }}>
         <canvas ref={canvasRef} />
@@ -470,11 +470,11 @@ function PoolRewardPieChart({ data }) {
 
   if (!data.length) return null
   return (
-    <div className="card p-4 flex flex-col">
+    <div className="bg-surface rounded-xl p-4 flex flex-col">
       <div className="flex items-center gap-2 mb-3">
         <div className="w-0.5 h-3.5 bg-violet-400 rounded-sm" />
-        <h3 className="text-xs font-bold tracking-widest uppercase text-violet-400">Reward ENJ by Pool</h3>
-        <span className="text-[10px] text-dim ml-1">(aggregated across filtered eras)</span>
+        <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-violet-400">Reward ENJ by Pool</h3>
+        <span className="text-[10px] text-text-secondary ml-1">(aggregated across filtered eras)</span>
       </div>
       <div style={{ height: '240px' }}>
         <canvas ref={canvasRef} />
@@ -528,22 +528,22 @@ function PoolMultiSelect({ pools, value, onChange }) {
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 bg-surface border border-border rounded px-2.5 py-1 text-xs text-text hover:border-rim transition-colors min-w-[110px] justify-between"
+        className="flex items-center gap-1.5 bg-card rounded px-2.5 py-1 text-xs text-text hover:bg-surface-bright transition-colors min-w-[110px] justify-between"
       >
-        <span className={allSelected ? 'text-dim' : 'text-cyan font-semibold'}>{countLabel}</span>
-        <ChevronDown size={10} className={`text-dim transition-transform ${open ? 'rotate-180' : ''}`} />
+        <span className={allSelected ? 'text-text-secondary' : 'text-cyan font-semibold'}>{countLabel}</span>
+        <ChevronDown size={10} className={`text-text-secondary transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
         <div className="absolute z-50 top-full mt-1 left-0 min-w-[200px] max-h-64 overflow-y-auto
-                        bg-surface border border-border rounded-lg shadow-xl shadow-black/40 py-1">
+                        bg-card rounded-lg shadow-xl shadow-black/40 py-1">
           {/* Select All / Clear */}
-          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/50">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-bright rounded-t-lg">
             <button
               onClick={() => { onChange(null); setOpen(false) }}
               className="text-[10px] font-bold tracking-widest uppercase text-violet-400 hover:text-cyan transition-colors"
             >All</button>
-            <span className="text-dim text-[10px]">·</span>
+            <span className="text-text-secondary text-[10px]">·</span>
             <button
               onClick={() => onChange(new Set())}
               className="text-[10px] font-bold tracking-widest uppercase text-dim hover:text-danger transition-colors"
@@ -655,17 +655,17 @@ function RewardTableV2({ results, onFilter }) {
   const pageSlice  = filtered.slice((safePage - 1) * pageSize, safePage * pageSize)
 
   return (
-    <div className="card p-4">
+    <div className="bg-surface rounded-xl p-4">
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         <div className="w-0.5 h-3.5 bg-cyan rounded-sm flex-shrink-0" />
-        <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">Reward History</h3>
-        <span className="text-xs text-dim font-mono ml-1">{filtered.length} / {results.length} rows</span>
+        <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">Reward History</h3>
+        <span className="text-xs text-text-secondary font-mono ml-1">{filtered.length} / {results.length} rows</span>
       </div>
 
       {/* Filters */}
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-bold tracking-widest uppercase text-dim">Pool:</span>
+          <span className="text-[10px] font-bold tracking-widest uppercase text-text-secondary">Pool:</span>
           <PoolMultiSelect
             pools={pools}
             value={filterPools}
@@ -673,26 +673,26 @@ function RewardTableV2({ results, onFilter }) {
           />
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-bold tracking-widest uppercase text-dim">Era:</span>
+          <span className="text-[10px] font-bold tracking-widest uppercase text-text-secondary">Era:</span>
           <input type="number" placeholder="Min" value={filterEraMin}
             onChange={e => { setFilterEraMin(e.target.value); setPage(1) }}
-            className="w-16 bg-surface border border-border rounded px-2 py-1 text-xs text-text font-mono focus:outline-none focus:border-primary/50" />
-          <span className="text-dim text-xs">–</span>
+            className="w-16 bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary" />
+          <span className="text-text-secondary text-xs">–</span>
           <input type="number" placeholder="Max" value={filterEraMax}
             onChange={e => { setFilterEraMax(e.target.value); setPage(1) }}
-            className="w-16 bg-surface border border-border rounded px-2 py-1 text-xs text-text font-mono focus:outline-none focus:border-primary/50" />
+            className="w-16 bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary" />
         </div>
         <div className="ml-auto flex items-center gap-1.5">
-          <span className="text-[10px] font-bold tracking-widest uppercase text-dim">Per page:</span>
+          <span className="text-[10px] font-bold tracking-widest uppercase text-text-secondary">Per page:</span>
           <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
-            className="bg-surface border border-border rounded px-1.5 py-0.5 text-xs text-text focus:outline-none focus:border-primary/50">
+            className="bg-card rounded px-1.5 py-0.5 text-xs text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary">
             {PAGE_SIZES.map(n => <option key={n} value={n}>{n}</option>)}
           </select>
         </div>
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto border border-border rounded-lg">
+      <div className="overflow-x-auto rounded-lg">
         <table className="border-collapse text-xs font-mono w-max">
           <thead className="sticky top-0 z-10">
             <tr>
@@ -700,12 +700,12 @@ function RewardTableV2({ results, onFilter }) {
                 const isSorted = sortCol === col.key
                 return (
                   <th key={col.key} onClick={() => col.sortable && handleSort(col.key)}
-                    className={`bg-surface border-b border-border px-3 py-2 font-bold tracking-widest
-                                uppercase select-none whitespace-nowrap transition-colors text-[calc(1em*0.79)]
+                    className={`bg-surface-high px-3 py-2 font-bold tracking-widest
+                                uppercase select-none whitespace-nowrap transition-colors text-[10px]
                                 relative group
                                 ${col.align === 'right' ? 'text-right' : 'text-left'}
                                 ${col.sortable ? 'cursor-pointer' : ''}
-                                ${isSorted ? 'text-cyan' : 'text-dim hover:text-cyan'}`}>
+                                ${isSorted ? 'text-cyan' : 'text-muted hover:text-cyan'}`}>
                     {col.label}{isSorted && (sortDir === 1 ? ' ↑' : ' ↓')}
                     {col.tooltip && (
                       <div className={`pointer-events-none absolute z-50 top-full mt-1 w-56 p-2.5
@@ -724,11 +724,11 @@ function RewardTableV2({ results, onFilter }) {
           </thead>
           <tbody>
             {pageSlice.length === 0 ? (
-              <tr><td colSpan={TABLE_COLS.length} className="px-3 py-6 text-center text-dim">No rows match filters.</td></tr>
+              <tr><td colSpan={TABLE_COLS.length} className="px-3 py-6 text-center text-text-secondary">No rows match filters.</td></tr>
             ) : pageSlice.map((r, i) => (
-              <tr key={`${r.era}-${r.poolId}`} className={`border-b border-border/40 hover:bg-surface/50 transition-colors ${i % 2 ? 'bg-surface/20' : ''}`}>
+              <tr key={`${r.era}-${r.poolId}`} className={`hover:bg-surface-bright transition-colors ${i % 2 ? 'bg-card' : ''}`}>
                 <td className="px-3 py-1.5 text-cyan font-bold">{r.era}</td>
-                <td className="px-3 py-1.5 text-dim whitespace-nowrap">{fmtDate(r.eraStartDateUtc)}</td>
+                <td className="px-3 py-1.5 text-text-secondary whitespace-nowrap">{fmtDate(r.eraStartDateUtc)}</td>
                 <td className="px-3 py-1.5 text-text whitespace-nowrap font-semibold">#{r.poolId}</td>
                 <td className="px-3 py-1.5 text-text min-w-[180px]" title={getPoolName(r)}>{getPoolName(r)}</td>
                 <td className="px-3 py-1.5 text-right text-text">{fmtEnj(r.memberBalance)}</td>
@@ -744,25 +744,25 @@ function RewardTableV2({ results, onFilter }) {
       </div>
 
       {/* APY footnote */}
-      <p className="text-[0.6rem] text-dim font-mono mt-1.5">
+      <p className="text-[0.6rem] text-text-secondary font-mono mt-1.5">
         * APY: per-era estimate — (1 + reinvested÷poolSupply)^365 − 1. APY 15d: 15-era rolling window, same formula compounded. Actual returns vary with era length and pool fees.
       </p>
 
       {/* Pagination */}
       {filtered.length > pageSize && (
         <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
-          <span className="text-xs text-dim font-mono">
+          <span className="text-xs text-text-secondary font-mono">
             Page {safePage}/{totalPages} · {((safePage-1)*pageSize+1).toLocaleString('en')}–{Math.min(safePage*pageSize,filtered.length).toLocaleString('en')}
           </span>
           <div className="flex items-center gap-1">
-            <button onClick={() => setPage(1)} disabled={safePage===1} className="px-2 py-1 rounded border border-border bg-surface text-xs text-dim hover:text-cyan disabled:opacity-40 transition-colors">«</button>
-            <button onClick={() => setPage(p=>Math.max(1,p-1))} disabled={safePage===1} className="px-2 py-1 rounded border border-border bg-surface text-xs text-dim hover:text-cyan disabled:opacity-40 transition-colors">‹</button>
+            <button onClick={() => setPage(1)} disabled={safePage===1} className="px-2 py-1 rounded bg-card text-xs text-muted hover:text-cyan disabled:opacity-40 transition-colors">«</button>
+            <button onClick={() => setPage(p=>Math.max(1,p-1))} disabled={safePage===1} className="px-2 py-1 rounded bg-card text-xs text-muted hover:text-cyan disabled:opacity-40 transition-colors">‹</button>
             {Array.from({length:Math.min(5,totalPages)},(_,i)=>{
               const p=totalPages<=5?i+1:safePage<=3?i+1:safePage>=totalPages-2?totalPages-4+i:safePage-2+i
-              return <button key={p} onClick={()=>setPage(p)} className={`w-7 h-7 rounded text-xs transition-colors ${p===safePage?'bg-primary text-white border border-primary':'border border-border bg-surface text-dim hover:text-cyan'}`} aria-current={p===safePage?'page':undefined}>{p}</button>
+              return <button key={p} onClick={()=>setPage(p)} className={`w-7 h-7 rounded text-xs transition-colors ${p===safePage?'bg-primary text-white':'bg-card text-muted hover:text-cyan'}`} aria-current={p===safePage?'page':undefined}>{p}</button>
             })}
-            <button onClick={() => setPage(p=>Math.min(totalPages,p+1))} disabled={safePage===totalPages} className="px-2 py-1 rounded border border-border bg-surface text-xs text-dim hover:text-cyan disabled:opacity-40 transition-colors">›</button>
-            <button onClick={() => setPage(totalPages)} disabled={safePage===totalPages} className="px-2 py-1 rounded border border-border bg-surface text-xs text-dim hover:text-cyan disabled:opacity-40 transition-colors">»</button>
+            <button onClick={() => setPage(p=>Math.min(totalPages,p+1))} disabled={safePage===totalPages} className="px-2 py-1 rounded bg-card text-xs text-muted hover:text-cyan disabled:opacity-40 transition-colors">›</button>
+            <button onClick={() => setPage(totalPages)} disabled={safePage===totalPages} className="px-2 py-1 rounded bg-card text-xs text-muted hover:text-cyan disabled:opacity-40 transition-colors">»</button>
           </div>
         </div>
       )}
@@ -801,21 +801,21 @@ function RewardSummary({ results }) {
   ]
 
   return (
-    <div className="card p-4">
+    <div className="bg-surface rounded-xl p-4">
       <div className="flex items-center gap-2 mb-3">
         <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-        <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">Summary</h3>
+        <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">Summary</h3>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {stats.map(({ label, value, accent }) => (
-          <div key={label} className="bg-surface/40 border border-border rounded-lg p-3 text-center">
-            <p className="text-[10px] font-bold tracking-widest uppercase text-dim mb-1">{label}</p>
+          <div key={label} className="bg-card rounded-xl p-6 hover:bg-surface-bright text-center transition-colors">
+            <p className="text-[10px] font-bold tracking-widest uppercase text-muted mb-1">{label}</p>
             <p className={`text-sm font-bold font-mono leading-tight ${accent}`}>{value}</p>
           </div>
         ))}
       </div>
       {bestPool && (
-        <p className="mt-3 text-xs text-dim">
+        <p className="mt-3 text-xs text-text-secondary">
           Best pool: <span className="text-text font-semibold">{bestPool[1].label}</span>
           {' · '}{fmtEnj(bestPool[1].total)} ENJ over {bestPool[1].rows} era(s)
         </p>
@@ -858,10 +858,10 @@ function RewardExportPanel({ results, address }) {
   }
 
   return (
-    <div className="card p-4">
+    <div className="bg-surface rounded-xl p-4">
       <div className="flex items-center gap-2 mb-4">
         <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-        <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">Export Data</h3>
+        <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">Export Data</h3>
       </div>
       {msg && (
         <div role="alert" className={`mb-4 px-3 py-2 rounded-lg border text-sm font-medium
@@ -875,34 +875,34 @@ function RewardExportPanel({ results, address }) {
         onKeyDown={e => { if (e.key==='Enter'||e.key===' ') { e.preventDefault(); setEncOn(v => { if(v) setPassword(''); return !v }) } }}
         className="flex items-center gap-3 mb-4 cursor-pointer select-none w-fit">
         <div role="switch" aria-checked={encOn}
-          className={`relative w-9 h-5 rounded-full border transition-all flex-shrink-0 ${encOn?'bg-cyan border-cyan':'bg-surface border-border'}`}>
+          className={`relative w-9 h-5 rounded-full transition-all flex-shrink-0 ${encOn?'bg-cyan':'bg-surface-bright'}`}>
           <span className={`absolute top-0.5 left-0 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${encOn?'translate-x-[18px]':'translate-x-0.5'}`} />
         </div>
-        <span className="text-sm font-semibold text-dim flex items-center gap-1.5">
+        <span className="text-sm font-semibold text-text-secondary flex items-center gap-1.5">
           {encOn ? <Lock size={13} className="text-cyan" /> : <Unlock size={13} />}
           Encrypt Output (AES-256-GCM)
         </span>
       </div>
       {encOn && (
         <div className="mb-4 max-w-sm">
-          <label htmlFor="rh-enc-pwd" className="block text-xs font-bold tracking-widest uppercase text-dim mb-1.5">Encryption Password</label>
+          <label htmlFor="rh-enc-pwd" className="block text-xs font-bold tracking-widest uppercase text-text-secondary mb-1.5">Encryption Password</label>
           <input id="rh-enc-pwd" type="password" placeholder="Enter password…" maxLength={1024}
             value={password} onChange={e => setPassword(e.target.value)}
-            className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-base text-text font-mono focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20" />
+            className="w-full bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary" />
         </div>
       )}
       <div className="grid gap-3 sm:grid-cols-[1fr_120px_auto] items-end">
         <div>
-          <label htmlFor="rh-fname" className="block text-xs font-bold tracking-widest uppercase text-dim mb-1.5">Filename</label>
+          <label htmlFor="rh-fname" className="block text-xs font-bold tracking-widest uppercase text-text-secondary mb-1.5">Filename</label>
           <input id="rh-fname" type="text" maxLength={200} autoComplete="off" spellCheck="false"
             placeholder={`reward-history-${(address||'').slice(0,10)}`}
             value={filename} onChange={e => setFilename(e.target.value)}
-            className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text font-mono focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20" />
+            className="w-full bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary" />
         </div>
         <div>
-          <label htmlFor="rh-fmt" className="block text-xs font-bold tracking-widest uppercase text-dim mb-1.5">Format</label>
+          <label htmlFor="rh-fmt" className="block text-xs font-bold tracking-widest uppercase text-text-secondary mb-1.5">Format</label>
           <select id="rh-fmt" value={format} onChange={e => setFormat(e.target.value)}
-            className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-primary/50">
+            className="w-full bg-card rounded px-3 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary">
             <option value="json">JSON</option>
             <option value="csv">CSV</option>
             <option value="xml">XML</option>
@@ -978,7 +978,7 @@ function RewardImportPanel({ onImport }) {
       )}
       <div role="button" tabIndex={0} aria-label="Drop file or click to browse"
         className={`border-2 border-dashed rounded-lg p-10 text-center cursor-pointer transition-all
-          ${isDragOver?'border-cyan bg-cyan/10':'border-border hover:border-rim hover:bg-surface/50'}`}
+          ${isDragOver?'border-cyan bg-cyan/10':'border-[rgba(70,71,82,0.10)] hover:border-primary hover:bg-surface-bright'}`}
         onClick={() => fileInputRef.current?.click()}
         onKeyDown={e => e.key==='Enter'&&fileInputRef.current?.click()}
         onDragOver={e=>{e.preventDefault();setIsDragOver(true)}}
@@ -987,13 +987,13 @@ function RewardImportPanel({ onImport }) {
         {isPending ? (
           <div className="flex flex-col items-center gap-2">
             <span className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-            <p className="text-sm text-dim">Reading file…</p>
+            <p className="text-sm text-text-secondary">Reading file…</p>
           </div>
         ) : (
           <>
-            <FolderOpen size={32} className="mx-auto mb-3 text-dim" />
+            <FolderOpen size={32} className="mx-auto mb-3 text-text-secondary" />
             <p className="font-semibold text-text mb-1">Drop file here or click to browse</p>
-            <p className="text-sm text-dim">JSON or CSV exports from this tool (max {MAX_IMPORT_MB} MB)</p>
+            <p className="text-sm text-text-secondary">JSON or CSV exports from this tool (max {MAX_IMPORT_MB} MB)</p>
           </>
         )}
         <input ref={fileInputRef} type="file" accept=".json,.csv" className="hidden" onChange={onFileChange} aria-hidden />
@@ -1005,10 +1005,10 @@ function RewardImportPanel({ onImport }) {
           </div>
           <div className="flex gap-3 items-end">
             <div className="flex-1">
-              <label htmlFor="rh-dec-pwd" className="block text-xs font-bold tracking-widest uppercase text-dim mb-1.5">Password</label>
+              <label htmlFor="rh-dec-pwd" className="block text-xs font-bold tracking-widest uppercase text-text-secondary mb-1.5">Password</label>
               <input id="rh-dec-pwd" type="password" placeholder="Enter password…" maxLength={1024}
                 value={decPwd} onChange={e=>setDecPwd(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleDecrypt()}
-                className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-base text-text font-mono focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20" />
+                className="w-full bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary" />
             </div>
             <button onClick={handleDecrypt} disabled={isPending} className="btn-primary py-2 px-4 self-end">
               {isPending?<span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"/>:<Upload size={14}/>}
@@ -1158,8 +1158,8 @@ export default function RewardHistoryViewer() {
     <div className={`space-y-4 transition-[padding] duration-200 ${logExpanded ? 'pb-[380px]' : 'pb-16'}`}>
 
       {/* ── Tabs ── */}
-      <div className="card overflow-hidden">
-        <div role="tablist" className="flex border-b border-border bg-surface/30">
+      <div className="bg-surface rounded-xl overflow-hidden">
+        <div role="tablist" className="flex bg-card">
           {[
             { key: 'compute', label: 'Compute Rewards', icon: Server },
             { key: 'import',  label: 'Import Data',     icon: Upload },
@@ -1168,8 +1168,8 @@ export default function RewardHistoryViewer() {
               disabled={isLoading}
               onClick={() => setTab(key)}
               className={`flex items-center justify-center gap-1.5 flex-1 px-4 py-3
-                text-xs sm:text-sm font-medium border-b-2 transition-colors disabled:opacity-50
-                ${tab===key?'border-primary text-text bg-primary/5':'border-transparent text-dim hover:text-text hover:bg-surface/60'}`}>
+                text-xs sm:text-sm font-medium transition-colors disabled:opacity-50
+                ${tab===key?'bg-surface-bright text-cyan':'text-muted hover:text-text'}`}>
               <Icon size={14} />{label}
             </button>
           ))}
@@ -1189,18 +1189,17 @@ export default function RewardHistoryViewer() {
               )}
             </div>
 
-            <p className="text-xs text-dim leading-relaxed">
+            <p className="text-xs text-text-secondary leading-relaxed">
               Computes staking rewards per era for pools you are staked in,
               using archive-node RPC. Subscan is only used when
               <span className="text-text/70"> Include past pool interactions </span>
               is enabled.
-              See <code className="text-violet-400">docs/reward-history-computation.md</code> for formula details.
             </p>
 
             {/* Tax information note */}
             <div className="flex gap-2.5 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
               <AlertTriangle size={13} className="text-amber-400 flex-shrink-0 mt-0.5" />
-              <div className="text-[11px] text-dim leading-relaxed space-y-1.5">
+              <div className="text-[11px] text-text-secondary leading-relaxed space-y-1.5">
                 <p>
                   <span className="font-semibold text-text/80">Tax note:</span>{' '}
                   In most jurisdictions, nomination pool staking is treated as a{' '}
@@ -1219,32 +1218,32 @@ export default function RewardHistoryViewer() {
             </div>
 
             {/* ── Live chain snapshot ──────────────────────────────── */}
-            <div className="flex flex-wrap gap-x-5 gap-y-1 px-3 py-2 rounded-lg bg-surface border border-border text-[11px] font-mono">
-              <span className="text-dim">Era:&nbsp;
+            <div className="flex flex-wrap gap-x-5 gap-y-1 px-3 py-2 rounded-lg bg-card text-[11px] font-mono">
+              <span className="text-text-secondary">Era:&nbsp;
                 <span className="text-cyan">{chainInfo.loading ? '…' : (chainInfo.era != null ? chainInfo.era.toLocaleString() : '—')}</span>
               </span>
-              <span className="text-dim">Block:&nbsp;
+              <span className="text-text-secondary">Block:&nbsp;
                 <span className="text-text">{chainInfo.loading ? '…' : (chainInfo.block != null ? chainInfo.block.toLocaleString() : '—')}</span>
               </span>
-              <span className="text-dim">Time:&nbsp;
+              <span className="text-text-secondary">Time:&nbsp;
                 <span className="text-text">{chainInfo.loading ? '…' : (chainInfo.timestamp != null ? new Date(chainInfo.timestamp).toUTCString().replace(' GMT', ' UTC') : '—')}</span>
               </span>
             </div>
 
             <div className="flex items-center gap-2">
               <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-              <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">RPC Configuration</h3>
+              <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">RPC Configuration</h3>
             </div>
 
             {/* Address */}
             <div className="space-y-1.5">
-              <label className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">Wallet Address</label>
+              <label className="text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary">Wallet Address</label>
               <input type="text" value={address}
                 onChange={e => setAddress(e.target.value)}
                 placeholder="en…" disabled={isLoading}
-                className={`w-full bg-surface border rounded-lg px-3 py-2 text-sm font-mono text-text placeholder:text-muted
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 transition-colors
-                  ${addrErr ? 'border-danger/50' : 'border-border'}`}
+                className={`w-full bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted
+                  focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50 transition-colors
+                  ${addrErr ? 'border border-danger/50' : ''}`}
                 maxLength={60} />
               {addrErr && (
                 <p className="flex items-center gap-1 text-xs text-danger">
@@ -1254,7 +1253,7 @@ export default function RewardHistoryViewer() {
             </div>
 
             {/* Pool scope toggle */}
-            <div className="p-3 rounded-lg bg-surface/40 border border-border space-y-1">
+            <div className="p-3 rounded-lg bg-card space-y-1">
               <div className="flex items-center gap-2.5">
                 <button
                   type="button"
@@ -1264,14 +1263,14 @@ export default function RewardHistoryViewer() {
                   onClick={() => setIncludeHistory(v => !v)}
                   className={`relative flex-shrink-0 w-10 h-5 rounded-full transition-colors focus-visible:outline-none
                     focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50
-                    ${includeHistory ? 'bg-primary' : 'bg-border'}`}
+                    ${includeHistory ? 'bg-primary' : 'bg-surface-bright'}`}
                 >
                   <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform
                     ${includeHistory ? 'translate-x-5' : 'translate-x-0'}`} />
                 </button>
                 <span className="text-xs font-medium text-text">Include past pool interactions</span>
               </div>
-              <p className="text-[11px] text-dim leading-relaxed">
+              <p className="text-[11px] text-text-secondary leading-relaxed">
                 When enabled, also queries Subscan for pools this address
                 has ever interacted with (bond, unbond, withdraw). Useful
                 if you have exited a pool but want rewards from those eras.
@@ -1280,16 +1279,16 @@ export default function RewardHistoryViewer() {
 
             {/* Range mode toggle */}
             <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">Query Mode</span>
-              <div className="flex rounded-lg border border-border overflow-hidden">
+              <span className="text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary">Query Mode</span>
+              <div className="flex rounded-lg bg-card overflow-hidden">
                 <button type="button" onClick={() => setRangeMode('era')} disabled={isLoading}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-r border-border transition-colors
-                    ${rangeMode==='era'?'bg-primary/20 text-text':'text-dim hover:text-text'}`}>
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors
+                    ${rangeMode==='era'?'bg-surface-bright text-cyan':'text-muted hover:text-text'}`}>
                   Era Range
                 </button>
                 <button type="button" onClick={() => setRangeMode('date')} disabled={isLoading}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors
-                    ${rangeMode==='date'?'bg-primary/20 text-text':'text-dim hover:text-text'}`}>
+                    ${rangeMode==='date'?'bg-surface-bright text-cyan':'text-muted hover:text-text'}`}>
                   <Calendar size={12} /> Date Range
                 </button>
               </div>
@@ -1299,18 +1298,18 @@ export default function RewardHistoryViewer() {
             {rangeMode === 'era' && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">Start Era</label>
+                  <label className="text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary">Start Era</label>
                   <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
                     onChange={e => setStartEra(e.target.value)}
                     placeholder="e.g. 980" disabled={isLoading}
-                    className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
+                    className="w-full bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">End Era</label>
+                  <label className="text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary">End Era</label>
                   <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
                     onChange={e => setEndEra(e.target.value)}
                     placeholder="e.g. 1000" disabled={isLoading}
-                    className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
+                    className="w-full bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50" />
                 </div>
                 {eraValidErr && <p className="col-span-2 flex items-center gap-1 text-xs text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{eraValidErr}</p>}
               </div>
@@ -1321,16 +1320,16 @@ export default function RewardHistoryViewer() {
               <div className="space-y-3">
                 {/* Quick presets */}
                 <div>
-                  <span className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">Quick Range</span>
+                  <span className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">Quick Range</span>
                   <div className="flex flex-wrap gap-2">
                     {DATE_PRESETS.map(({ label, days }) => (
                       <button key={label} type="button"
                         onClick={() => applyDatePreset(days, label)}
                         disabled={isLoading}
-                        className={`px-2.5 py-1 rounded-md border text-[11px] transition-colors disabled:opacity-50
+                        className={`px-2.5 py-1 rounded-md text-[11px] transition-colors disabled:opacity-50
                           ${activePreset===label
-                            ?'bg-primary/20 border-primary/60 text-text font-semibold'
-                            :'border-border text-dim hover:border-primary/50 hover:text-text'}`}>
+                            ?'bg-primary/15 text-primary font-semibold'
+                            :'bg-card text-text-secondary hover:bg-surface-bright hover:text-text'}`}>
                         {label} ago
                       </button>
                     ))}
@@ -1338,39 +1337,38 @@ export default function RewardHistoryViewer() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <label className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">Start Date</label>
+                    <label className="text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary">Start Date</label>
                     <input type="date" placeholder="2026-03-01" max={toDateInput(new Date())} value={startDate}
                       onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
-                      className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm font-mono text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 [color-scheme:dark]" />
+                      className="w-full bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50 [color-scheme:dark]" />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">End Date</label>
+                    <label className="text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary">End Date</label>
                     <input type="date" placeholder="2026-03-04" max={toDateInput(new Date())} value={endDate}
                       onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
-                      className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm font-mono text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 [color-scheme:dark]" />
+                      className="w-full bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50 [color-scheme:dark]" />
                   </div>
                 </div>
                 {dateValidErr && <p className="flex items-center gap-1 text-xs text-danger"><AlertTriangle size={11} className="flex-shrink-0"/>{dateValidErr}</p>}
               </div>
             )}
 
-            {/* Action buttons */}
+            {/* Action button — single slot: Stop → Reset → Compute Rewards */}
             <div className="flex flex-wrap gap-2">
-              {!isLoading ? (
-                <button onClick={handleRun} className="btn-primary gap-1.5 px-5"
-                  disabled={!address.trim() || !!addrErr || (rangeMode === 'era' ? (!startEra || !endEra || !!eraValidErr) : (!startDate || !endDate || !!dateValidErr))}>
-                  <Play size={14} />Compute Rewards
-                </button>
-              ) : (
+              {isLoading ? (
                 <button onClick={stop} className="btn-danger gap-1.5 px-5">
                   <Square size={14} />Stop
                 </button>
-              )}
-              {(isDone || isStopped || isError || importedResults) && (
-                <button onClick={() => { reset(); setImportedResults(null) }} className="btn-secondary gap-1.5 px-4">
+              ) : (isDone || isStopped || isError || importedResults) ? (
+                <button onClick={() => { reset(); setImportedResults(null) }} className="btn-primary gap-1.5 px-5">
                   <RotateCcw size={14} />Reset
+                </button>
+              ) : (
+                <button onClick={handleRun} className="btn-primary gap-1.5 px-5"
+                  disabled={!address.trim() || !!addrErr || (rangeMode === 'era' ? (!startEra || !endEra || !!eraValidErr) : (!startDate || !endDate || !!dateValidErr))}>
+                  <Play size={14} />Compute Rewards
                 </button>
               )}
             </div>
@@ -1382,9 +1380,9 @@ export default function RewardHistoryViewer() {
           <div role="tabpanel" className="p-4 sm:p-5 space-y-3">
             <div className="flex items-center gap-2">
               <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-              <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">Import Reward Data</h3>
+              <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">Import Reward Data</h3>
             </div>
-            <p className="text-xs text-dim leading-relaxed">
+            <p className="text-xs text-text-secondary leading-relaxed">
               Import previously exported reward history (JSON or CSV). Encrypted files (.enc.json) are also supported.
             </p>
             <RewardImportPanel onImport={handleImportResults} />
@@ -1394,9 +1392,9 @@ export default function RewardHistoryViewer() {
 
       {/* ── Progress ── */}
       {isLoading && phases.length > 0 && (
-        <section className="card p-4 space-y-3" aria-live="polite">
+        <section className="bg-surface rounded-xl p-4 space-y-3" aria-live="polite">
           <div className="flex items-center justify-between text-xs mb-1">
-            <p className="text-dim">{allDone ? 'Complete!' : (activePhase?.label ?? 'Computing…')}</p>
+            <p className="text-text-secondary">{allDone ? 'Complete!' : (activePhase?.label ?? 'Computing…')}</p>
             <p className="font-mono text-text">{activePhase?.completed ?? 0} / {activePhase?.total ?? 0} ({phasePct}%)</p>
           </div>
           <div className="h-2 rounded-full bg-surface overflow-hidden">
@@ -1408,7 +1406,7 @@ export default function RewardHistoryViewer() {
               const cls = ph.status==='completed'?'text-success':ph.status==='in_progress'?'text-cyan':'text-dim'
               const lbl = ph.status==='completed'?'Done':ph.status==='in_progress'?'Running':'Pending'
               return (
-                <div key={ph.key} className="flex items-center justify-between text-[11px] bg-surface/40 rounded border border-border px-2.5 py-1.5">
+                <div key={ph.key} className="flex items-center justify-between text-[11px] bg-card rounded px-2.5 py-1.5">
                   <span className={`font-medium ${cls}`}>Phase {i}: {ph.label}</span>
                   <span className={`font-semibold ${cls}`}>{lbl}</span>
                 </div>
@@ -1420,22 +1418,22 @@ export default function RewardHistoryViewer() {
 
       {/* ── Error ── */}
       {isError && errorMsg && (
-        <div className="card p-4 border-danger/30 bg-danger/5">
+        <div className="bg-surface rounded-xl p-4 border border-danger/30 bg-danger/5">
           <p className="text-sm text-danger">{errorMsg}</p>
         </div>
       )}
 
       {/* ── Stopped ── */}
       {isStopped && !activeResults.length && (
-        <div className="card p-4 border-warning/30 bg-warning/5">
+        <div className="bg-surface rounded-xl p-4 border border-warning/30 bg-warning/5">
           <p className="text-sm text-warning">Computation stopped before results were available.</p>
         </div>
       )}
 
       {/* ── Empty result ── */}
       {isDone && !activeResults.length && (
-        <div className="card p-6 text-center">
-          <p className="text-sm text-dim">No rewards found for the given address and era range.</p>
+        <div className="bg-surface rounded-xl p-6 text-center">
+          <p className="text-sm text-text-secondary">No rewards found for the given address and era range.</p>
           <p className="text-xs text-muted mt-2">
             If you have exited your pool(s), enable "Include past pool interactions"
             to scan historical pools.
@@ -1455,7 +1453,7 @@ export default function RewardHistoryViewer() {
           </div>
           {!importedResults && <RewardExportPanel results={activeResults} address={address} />}
           {importedResults && (
-            <div className="flex items-center gap-2 text-xs text-dim px-1">
+            <div className="flex items-center gap-2 text-xs text-text-secondary px-1">
               <span>Showing imported data.</span>
               <button onClick={() => setImportedResults(null)} className="text-violet-400 hover:underline">Clear import</button>
             </div>
