@@ -131,13 +131,17 @@ Follow the template of PR description below:
 
 **PR Description Format:**
 ```markdown
-# PR: [Descriptive title summarizing all changes]
+# PR: [Descriptive title summarizing all changes. Short imperative title — what this PR does]
 Timestamp: [YYYY-MM-DD HH:MM:SS UTC] Fetch the current time programmatically using this command: date -u +"%Y-%m-%d %H:%M:%S UTC"
 Git Branch: [semantic-branch-name]
-Git Commit Message: [concise one-liner commit message]
+Git Commit Message: [concise one-liner conventional commit message]
+
+---
 
 ## Summary
-[2-3 sentence overview of what this PR accomplishes, why it matters, and the value it provides to users or the project]
+[2-4 sentence overview of what this PR accomplishes, why it matters, and the value it provides to users or the project. What changed, why, and the most important outcomes. No bullet points — write it as a paragraph someone can read in 30 seconds to understand the full scope.]
+
+---
 
 ## Related Issues
 [List GitHub Issues this PR addresses. If none found, write "None"]
@@ -145,25 +149,41 @@ Git Commit Message: [concise one-liner commit message]
 - Fixes #145  
 - Related to #162
 
+---
+
 ## Added Features
 [List new functionality or capabilities. If none, write "None"]
-- [Feature description with user benefit]
-- [Another feature if applicable]
+
+### [Feature Area / Component]
+- **[Feature name]**: [Description of what it does and why it matters.]
+- **[Feature name]**: [Description.]
+
+### [Another Feature Area]
+- **[Feature name]**: [Description.]
+
+---
 
 ## Changes
-[List modifications to existing functionality or refactoring. If none, write "None"]
-- [Change description with reasoning]
-- [Improvement description]
+[List modifications to existing functionality or refactoring. Behavioral or structural changes that aren't new features and aren't bug fixes — renames, refactors, removals, config updates, wording changes, etc. If none, write "None"]
+- **[Component/area — change name]**: [What changed and why.]
+
+---
 
 ## Fixes
 [List bugs or issues resolved. If none, write "None"]
-- [Bug fix description with impact]
-- [Security vulnerability addressed]
+- **[Short fix name]**: [Bug fix description with impact, root cause, what was broken, what the fix does, Security vulnerability addressed.]
+
+---
 
 ## Files Changed
-- `path/to/file1.js` - [description of changes and purpose]
-- `path/to/file2.css` - [description of changes and purpose]
-- `path/to/file3.html` - [description of changes and purpose]
+
+| File | Change |
+|---|---|
+| `path/to/file.ext` | [One-line description of changes and purpose] |
+| `path/to/file.ext` | **NEW**: [Description] |
+| `path/to/file.ext` | [Description] |
+
+---
 
 ## Testing Notes
 [Testing approach and verification steps]
@@ -178,31 +198,42 @@ Git Commit Message: [concise one-liner commit message]
 - [Devices tested]
 - [Scenarios validated]
 
+---
+
 ## Security Considerations
 [Security-related changes, validations, or OWASP categories addressed]
 
 **Security Measures:**
-- [OWASP category]: [How addressed]
-- [Vulnerability fixed]: [Mitigation approach]
+- **[OWASP category or concern]**: [What was done or considered.]
+- **[Vulnerability fixed]**: [Mitigation approach]
 
 **If no security changes:** "No security changes in this PR"
+
+---
 
 ## Performance Impact
 [Performance implications, if any]
 - [Improvements made]
 - [Trade-offs considered]
 - [Metrics affected]
+- [Note any bundle size, render, or runtime implications — or state "No performance impact."]
 
 **If no impact:** "No significant performance impact"
+
+---
 
 ## Breaking Changes
 [List any breaking changes. If none, write "None"]
 - [What changed]
 - [Migration path]
 
+---
+
 ## Dependencies
 [New dependencies added or updated. If none, write "None"]
 - `package@version` - [Why added/updated]
+
+---
 
 ## Follow-up Items
 [Tasks or improvements for future PRs. If none, write "None"]

@@ -20,8 +20,9 @@ import {
   PLANCK_PER_ENJ,
   API_DELAY_MS,
 } from '../constants.js'
-import { validateWsEndpoint, buildTokenAccountKey, buildTokenKey, decodeCompactFirst, buildBondedPoolsPrefix, poolIdFromBondedPoolsKey } from '../utils/substrate.js'
-import { fetchHistoricalPoolIds, delay, enqueueRequest } from '../utils/api.js'
+import { WsProvider, ApiPromise } from '@polkadot/api'
+import { validateWsEndpoint, buildTokenAccountKey, buildTokenKey, decodeCompactFirst, buildBondedPoolsPrefix, poolIdFromBondedPoolsKey, computePoolBondedAccountId, buildStakingLedgerKey, decodeStakingLedgerActive } from '../utils/substrate.js'
+import { fetchHistoricalPoolIds, fetchAllPools, delay, enqueueRequest } from '../utils/api.js'
 import { nowHHMMSS } from '../utils/format.js'
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -379,9 +380,6 @@ export function useRewardHistory() {
   }
 
   async function openRpcEventApi(endpoint) {
-    const mod = await import('@polkadot/api')
-    const WsProvider = mod.WsProvider
-    const ApiPromise = mod.ApiPromise
     const provider = new WsProvider(endpoint, WS_CONNECT_TIMEOUT_MS)
     const api = await ApiPromise.create({
       provider,
@@ -514,8 +512,9 @@ export function useRewardHistory() {
 
     // Mutable phases array — avoids the functional-update anti-pattern with useReducer
     const phasesArr = [
-      { key: 'csv',      label: 'Load Era Reference',       status: 'in_progress', total: 1,        completed: 0 },
-      { key: 'connect',  label: 'Connect to Archive Node',  status: 'pending',     total: 1,        completed: 0 },
+      { key: 'csv',       label: 'Load Era Reference',       status: 'in_progress', total: 1, completed: 0 },
+      { key: 'poolnames', label: 'Fetch Pool Names',         status: 'pending',     total: 1, completed: 0 },
+      { key: 'connect',   label: 'Connect to Archive Node',  status: 'pending',     total: 1, completed: 0 },
       { key: 'pools',    label: 'Discover Pool Membership', status: 'pending',     total: 1,        completed: 0 },
       ...(includeHistory ? [{ key: 'history', label: 'Fetch Past Pool Interactions', status: 'pending', total: 1, completed: 0 }] : []),
       { key: 'balances', label: 'Query Era Balances',        status: 'pending',     total: eraRange, completed: 0 },
@@ -553,6 +552,28 @@ export function useRewardHistory() {
       logFn('OK', `Era CSV: ${csvEras.length} era(s) loaded.`)
       if (csvPath) logFn('INFO', `Using CSV source: ${csvPath}`)
       patchPhase('csv', { status: 'completed', completed: 1 })
+      patchPhase('poolnames', { status: 'in_progress' })
+      syncProgress()
+      if (signal.aborted) { dispatch({ type: 'STOP' }); return }
+
+      // ── Phase 0.5: Fetch pool names from Subscan ──────────────────────
+      logFn('INFO', '─── Phase 0.5: Fetching pool names from Subscan ───')
+      const poolNameMap = new Map()  // poolId (number) -> name (string)
+      try {
+        const poolList = await enqueueRequest(() =>
+          fetchAllPools('', signal, (pg, cnt) => logFn('INFO', `Pool names page ${pg}: ${cnt} pool(s) fetched.`))
+        )
+        for (const p of poolList) {
+          const id   = Number(p?.pool_id)
+          const name = String(p?.metadata ?? '').trim()
+          if (id > 0 && name) poolNameMap.set(id, name)
+        }
+        logFn('OK', `Pool names fetched: ${poolNameMap.size} named pool(s).`)
+      } catch (e) {
+        if (signal.aborted) { dispatch({ type: 'STOP' }); return }
+        logFn('WARN', `Pool name fetch failed: ${e.message} — pool names will show as IDs.`)
+      }
+      patchPhase('poolnames', { status: 'completed', completed: 1 })
       patchPhase('connect', { status: 'in_progress' })
       syncProgress()
       if (signal.aborted) { dispatch({ type: 'STOP' }); return }
@@ -699,9 +720,10 @@ export function useRewardHistory() {
       logFn('INFO', `Chain reports ${poolIdCount} bonded pool(s).`)
 
       // Build the pool list solely from chain-enumerated IDs.
+      // Enrich with names fetched in Phase 0.5.
       const allPools = bondedPoolIds.map(id => ({
         poolId:   id,
-        metadata: '',
+        metadata: poolNameMap.get(id) ?? '',
       }))
 
       if (!allPools.length) {
@@ -747,8 +769,8 @@ export function useRewardHistory() {
               if (poolMeta) {
                 memberPools.push(poolMeta)
               } else {
-                // Pool may have been destroyed; keep a pool-id-only stub.
-                memberPools.push({ poolId: pid, metadata: '' })
+                // Pool may have been destroyed; keep a stub with name from Subscan if available.
+                memberPools.push({ poolId: pid, metadata: poolNameMap.get(pid) ?? '' })
               }
               logFn('INFO', `[HISTORICAL] Pool #${pid}: added from past interactions.`)
               added++
@@ -840,12 +862,27 @@ export function useRewardHistory() {
             }
           }
 
+          // Fetch Staking.Ledger for the pool's bonded account to get exact activeStake.
+          // activeStake is the actual ENJ bonded — used as APY denominator for accuracy.
+          let activeStake = 0n
+          if (memberBalance > 0n && poolSupply > 0n) {
+            try {
+              const bondedIdHex = computePoolBondedAccountId(pool.poolId)
+              const ledgerKey   = buildStakingLedgerKey(bondedIdHex)
+              const ledgerRaw   = await rpc.call('state_getStorage', [ledgerKey, blockHash])
+              activeStake = decodeStakingLedgerActive(ledgerRaw)
+            } catch {
+              // non-fatal: fallback to poolSupply-based APY below
+            }
+          }
+
           if (memberBalance > 0n && poolSupply > 0n) {
             eraPoolData.push({
               era,
               pool,
               memberBalance,
               poolSupply,
+              activeStake,
               blockHash,
               startBlock:   eraStartBlock,
               endBlock:     eraEndBlock,
@@ -881,7 +918,7 @@ export function useRewardHistory() {
       for (let i = 0; i < eraPoolData.length; i++) {
         if (signal.aborted) { dispatch({ type: 'STOP' }); return }
 
-        const { era, pool, memberBalance, poolSupply, startBlock, eraEndBoundary, startDateUtc } = eraPoolData[i]
+        const { era, pool, memberBalance, poolSupply, activeStake, startBlock, eraEndBoundary, startDateUtc } = eraPoolData[i]
 
         const eventStart = eraEndBoundary
         const eventEnd   = eventStart + EVENT_SCAN_AFTER
@@ -909,12 +946,12 @@ export function useRewardHistory() {
         // reward = (memberBalance × reinvested) / poolSupply
         const reward = (memberBalance * reinvested) / poolSupply
 
-        // APY formula mirrors staking-rewards-rpc.py:
-        // era_apy = ((total_points + reinvested) / total_points) ^ 365 − 1
-        // Compute reinvested/poolSupply via scaled BigInt division to avoid
-        // Number precision loss (poolSupply can exceed Number.MAX_SAFE_INTEGER).
+        // APY: use activeStake (actual ENJ bonded) as denominator when available.
+        // Fallback to poolSupply (sENJ points) if ledger fetch failed.
+        // Compute via scaled BigInt division to avoid Number precision loss.
         const RATIO_PREC = 1_000_000_000n
-        const perEraGainScaled = poolSupply > 0n ? (reinvested * RATIO_PREC) / poolSupply : 0n
+        const apyDenom = activeStake > 0n ? activeStake : poolSupply
+        const perEraGainScaled = apyDenom > 0n ? (reinvested * RATIO_PREC) / apyDenom : 0n
         const ratio = 1 + Number(perEraGainScaled) / Number(RATIO_PREC)
         const apy   = (Math.pow(ratio, ERAS_PER_YEAR) - 1) * 100
 
@@ -923,9 +960,10 @@ export function useRewardHistory() {
         results.push({
           era,
           poolId:       pool.poolId,
-          poolLabel:    pool.metadata || `Pool #${pool.poolId}`,
+          poolLabel:    pool.metadata ? `#${pool.poolId} — ${pool.metadata}` : `#${pool.poolId}`,
           memberBalance,
           poolSupply,
+          activeStake,
           reinvested,
           reward,
           accumulated:  accumulatedByPool[pool.poolId],
@@ -942,6 +980,27 @@ export function useRewardHistory() {
 
       patchPhase('rewards', { status: 'completed' })
       syncProgress()
+
+      // ── Post-process: rolling APY (15-era window, per pool) ──────────────
+      const ROLLING_WINDOW = 15
+      const RATIO_PREC2 = 1_000_000_000n
+      const rowsByPool = {}
+      for (const r of results) {
+        if (!rowsByPool[r.poolId]) rowsByPool[r.poolId] = []
+        rowsByPool[r.poolId].push(r)
+      }
+      for (const rows of Object.values(rowsByPool)) {
+        rows.sort((a, b) => a.era - b.era)
+        for (let i = 0; i < rows.length; i++) {
+          const window = rows.slice(Math.max(0, i - ROLLING_WINDOW + 1), i + 1)
+          const windowRatio = window.reduce((prod, r) => {
+            const denom = (r.activeStake > 0n ? r.activeStake : r.poolSupply)
+            const gainScaled = denom > 0n ? (r.reinvested * RATIO_PREC2) / denom : 0n
+            return prod * (1 + Number(gainScaled) / Number(RATIO_PREC2))
+          }, 1)
+          rows[i].rollingApy = (Math.pow(windowRatio, ERAS_PER_YEAR / window.length) - 1) * 100
+        }
+      }
 
       const total = results.reduce((s, r) => s + r.reward, 0n)
       logFn('OK', `─── Done. ${results.length} era+pool record(s). Grand total: ${fmtEnj(total)} ENJ ───`)
@@ -970,5 +1029,5 @@ export function useRewardHistory() {
     dispatch({ type: 'RESET' })
   }, [])
 
-  return { ...state, run, stop, reset }
+  return { ...state, run, stop, reset, log }
 }

@@ -122,11 +122,13 @@ export default function App() {
 
   function handleNavigate(dest) {
     if (status === 'loading') return // block navigation during active scan
+    if (view === 'staking' && dest !== 'staking') handleReset()
     setView(dest)
   }
 
   function handleBack() {
     if (status === 'loading') return
+    if (view === 'staking') handleReset()
     setView('home')
   }
 

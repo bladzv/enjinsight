@@ -601,15 +601,31 @@ class EraExplorerController {
     this.dispatch({ type: 'LOOKUP_START' })
     const csvRow = this.csvCache[targetEra] || null
     if (csvRow && !isNaN(csvRow.start_block)) {
+      const endBlock   = csvRow.end_block ?? (csvRow.start_block + ERA_LEN - 1)
+      let endDateUtc   = csvRow.end_datetime_utc ?? null
+      if (!endDateUtc) {
+        try {
+          await this.archiveRpc(async callFn => {
+            const h = await callFn('chain_getBlockHash', [endBlock]).catch(() => null)
+            if (h) {
+              const tsRaw = await callFn('state_getStorage', [TIMESTAMP_NOW_KEY, h]).catch(() => null)
+              if (tsRaw) {
+                const ms = decodeTimestampMs(tsRaw)
+                if (ms != null) endDateUtc = tsToUtcString(ms)
+              }
+            }
+          })
+        } catch (e) { this.log('warn', `Archive end timestamp: ${e.message}`) }
+      }
       this.dispatch({
         type: 'LOOKUP_DONE',
         result: {
           era: targetEra,
           startBlock: csvRow.start_block,
-          endBlock:   csvRow.end_block ?? (csvRow.start_block + ERA_LEN - 1),
-          source: 'preloaded',
+          endBlock,
+          source: 'Cached',
           startDateUtc:   csvRow.start_datetime_utc ?? null,
-          endDateUtc:     csvRow.end_datetime_utc   ?? null,
+          endDateUtc,
           startBlockHash: csvRow.start_block_hash   ?? null,
         },
       })
@@ -649,6 +665,7 @@ class EraExplorerController {
       : (withinHistory ? 'math (key not found)' : 'math · beyond history')
     let startBlockHash = null
     let startDateUtc   = null
+    let endDateUtc     = null
 
     // Open one archive connection to either binary-search (when fStart is still
     // unknown) or to enrich the result with block hash + UTC timestamp.
@@ -670,6 +687,15 @@ class EraExplorerController {
                 if (ms != null) startDateUtc = tsToUtcString(ms)
               }
             }
+            const endBlock = fStart + ERA_LEN - 1
+            const endH = await callFn('chain_getBlockHash', [endBlock]).catch(() => null)
+            if (endH) {
+              const endTsRaw = await callFn('state_getStorage', [TIMESTAMP_NOW_KEY, endH]).catch(() => null)
+              if (endTsRaw) {
+                const endMs = decodeTimestampMs(endTsRaw)
+                if (endMs != null) endDateUtc = tsToUtcString(endMs)
+              }
+            }
           }
         })
       } catch (e) { this.log('warn', `Archive era lookup: ${e.message}`) }
@@ -687,7 +713,7 @@ class EraExplorerController {
         endBlock:   fStart + ERA_LEN - 1,
         source,
         startDateUtc,
-        endDateUtc:     null,
+        endDateUtc,
         startBlockHash,
       },
     })

@@ -214,6 +214,8 @@ def find_era_start_block(api, era, chain_head):
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
+    global CSV_FILE  # may be overridden by --output
+
     parser = argparse.ArgumentParser(
         description="Build and maintain relay-era-reference.csv — era block boundaries, hashes, and timestamps for the Enjin Relaychain.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -221,7 +223,15 @@ def main():
     )
     parser.add_argument("--endpoint", metavar="URL", default=DEFAULT_ENDPOINT,
                         help="Archive node WebSocket URL (default: {})".format(DEFAULT_ENDPOINT))
+    parser.add_argument("--output", metavar="FILE", default=None,
+                        help="Output CSV file path (default: {})".format(CSV_FILE))
+    parser.add_argument("--ss58-prefix", metavar="N", type=int, default=ENJ_SS58_PREFIX,
+                        help="SS58 address prefix for the chain (default: {})".format(ENJ_SS58_PREFIX))
     args = parser.parse_args()
+
+    # Allow --output to override the module-level CSV path
+    if args.output:
+        CSV_FILE = os.path.abspath(args.output)
 
     print("\n  Enjin Era Block Finder")
     print("  " + "-" * 50)
@@ -244,7 +254,7 @@ def main():
     try:
         api = SubstrateInterface(
             url=args.endpoint,
-            ss58_format=ENJ_SS58_PREFIX,
+            ss58_format=args.ss58_prefix,
             type_registry_preset="polkadot",
             ws_options={
                 'sslopt': {'cert_reqs': ssl.CERT_NONE},

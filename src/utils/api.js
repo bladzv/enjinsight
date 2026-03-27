@@ -366,6 +366,14 @@ export async function fetchRewardSlash(address, blockRange, proxyUrl, signal) {
   return data?.data?.list ?? []
 }
 
+// Module-level cache: address → Set<number>. Persists across runs for the same address.
+const _histPoolCache = new Map()
+
+/** Clear the cached pool-ID set for a specific address (call when address changes). */
+export function clearHistPoolCache(address) {
+  _histPoolCache.delete(address)
+}
+
 /**
  * Fetch nomination-pool IDs a wallet address has interacted with via
  * bond/unbond/withdraw-style nominationpools extrinsics on Subscan.
@@ -374,12 +382,16 @@ export async function fetchRewardSlash(address, blockRange, proxyUrl, signal) {
  *  - enrich with /api/scan/extrinsic/params
  *  - extract pool_id from params
  *
+ * Results are cached in memory by address; a second call for the same address
+ * returns immediately without any network requests.
+ *
  * @param {string} address - Relaychain wallet address
  * @param {AbortSignal} signal
  * @param {function} [onPage] - optional callback(page, count) for progress logging
  * @returns {Promise<Set<number>>} set of pool IDs
  */
 export async function fetchHistoricalPoolIds(address, signal, onPage) {
+  if (_histPoolCache.has(address)) return _histPoolCache.get(address)
   const poolIds = new Set()
   let page = 0
   const rowPerPage = 100
@@ -469,6 +481,7 @@ export async function fetchHistoricalPoolIds(address, signal, onPage) {
     await delay(API_DELAY_MS)
   }
 
+  _histPoolCache.set(address, poolIds)
   return poolIds
 }
 

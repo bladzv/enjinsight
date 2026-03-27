@@ -6,7 +6,7 @@
  * Network: Enjin Relaychain only.
  */
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { ChevronDown, ChevronUp, Search, Globe, Clock } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ChevronUp, Search, Globe, Clock, Copy, CheckCircle2 } from 'lucide-react'
 import { useEraExplorer, ERA_STATUS } from '../hooks/useEraExplorer.js'
 import TerminalLog from './TerminalLog.jsx'
 
@@ -110,6 +110,7 @@ function fmtDateLocal(utcStr) {
     const d = new Date(utcStr)
     if (isNaN(d.getTime())) return null
     return d.toLocaleString(undefined, {
+      weekday: 'short',
       year: 'numeric', month: 'short', day: 'numeric',
       hour: '2-digit', minute: '2-digit', second: '2-digit',
       timeZoneName: 'short',
@@ -134,9 +135,9 @@ function unixToUtcStr(unix) {
 
 function StatCard({ label, value, accent = false, sub = null }) {
   return (
-    <div className="card p-3 text-center">
+    <div className="card p-3 text-center overflow-hidden">
       <p className="text-[10px] font-bold tracking-widest uppercase text-dim mb-1">{label}</p>
-      <p className={`text-xl font-bold font-mono leading-tight ${accent ? 'text-cyan' : 'text-text'}`}>{value}</p>
+      <p className={`text-xl font-bold font-mono leading-tight break-all ${accent ? 'text-cyan' : 'text-text'}`}>{value}</p>
       {sub && <p className="text-[10px] text-muted mt-0.5 font-mono leading-tight truncate" title={sub}>{sub}</p>}
     </div>
   )
@@ -153,6 +154,7 @@ export default function EraBlockExplorer() {
   const [eraInput, setEraInput]     = useState('')
   const [showDebug, setShowDebug]   = useState(false)
   const [localTime, setLocalTime]   = useState(false)   // toggle for lookup dates
+  const [hashCopied, setHashCopied] = useState(false)
 
   const eraEnd   = eraStart != null ? eraStart + ERA_LEN - 1 : null
   const remaining = eraEnd != null && block != null ? Math.max(0, eraEnd - block) : null
@@ -162,15 +164,22 @@ export default function EraBlockExplorer() {
 
   const statusCfg = STATUS_CONFIG[status] ?? STATUS_CONFIG[ERA_STATUS.IDLE]
 
-  const onLookup = useCallback(e => {
-    e.preventDefault()
-    const n = parseInt(eraInput.trim(), 10)
-    if (!isNaN(n)) lookupEra(n)
-  }, [eraInput, lookupEra])
-
   // Derive human-readable start/end labels for active era
   const eraStartLabel = eraStart != null ? eraStart.toLocaleString() : '—'
   const eraEndLabel   = eraEnd   != null ? eraEnd.toLocaleString()   : '—'
+
+  // Real-time validation for era lookup input
+  const eraInputNum = eraInput.trim() === '' ? null : parseInt(eraInput.trim(), 10)
+  const eraInputErr = eraInput.trim() === '' ? '' :
+    (isNaN(eraInputNum) || eraInputNum <= 0) ? 'Era number must be greater than 0.' :
+    (era != null && eraInputNum >= era) ? `Era ${eraInputNum} is still active or hasn't ended yet (current: ${era}).` :
+    ''
+
+  const onLookup = useCallback(e => {
+    e.preventDefault()
+    const n = parseInt(eraInput.trim(), 10)
+    if (!isNaN(n) && !eraInputErr) lookupEra(n)
+  }, [eraInput, eraInputErr, lookupEra])
 
   return (
     <main className="px-4 py-5 max-w-4xl mx-auto space-y-4 pb-24">
@@ -205,7 +214,7 @@ export default function EraBlockExplorer() {
             </div>
           </div>
           {/* Era progress — same style used across the app */}
-          <div className="card p-3">
+          <div className="card p-3 flex flex-col justify-center">
             <div className="flex justify-between text-xs mb-1.5">
               <span className="text-dim">Era progress</span>
               <span className="font-mono text-text">{pct}%</span>
@@ -215,17 +224,6 @@ export default function EraBlockExplorer() {
                 className="h-full rounded-full bg-gradient-to-r from-primary-dim via-primary to-cyan transition-[width] duration-700"
                 style={{ width: `${pct}%` }}
               />
-            </div>
-            {/* Phase-steps row (single step for live era) */}
-            <div className="mt-2">
-              <div className="flex items-center justify-between text-[10px] bg-surface/40 rounded border border-border px-2 py-1">
-                <span className={`font-medium ${status === ERA_STATUS.LIVE ? 'text-success' : 'text-cyan animate-pulse'}`}>
-                  {status === ERA_STATUS.LIVE ? 'Live — tracking current era' : statusCfg.label}
-                </span>
-                <span className={`font-semibold ${status === ERA_STATUS.LIVE ? 'text-success' : 'text-cyan'}`}>
-                  {status === ERA_STATUS.LIVE ? 'Live' : '…'}
-                </span>
-              </div>
             </div>
           </div>
         </div>
@@ -238,7 +236,7 @@ export default function EraBlockExplorer() {
           <h2 className="text-sm font-semibold text-text">Past Era Lookup</h2>
           {csvCount > 0 && (
             <span className="text-xs text-muted font-mono bg-surface px-2 py-0.5 rounded-full border border-border">
-              {csvCount} eras preloaded
+              {csvCount} eras cached
             </span>
           )}
           <div className="ml-auto flex items-center gap-1.5">
@@ -258,27 +256,35 @@ export default function EraBlockExplorer() {
           </div>
         </div>
 
-        <form onSubmit={onLookup} className="flex gap-2">
-          <input
-            type="number"
-            min="0"
-            step="1"
-            value={eraInput}
-            onChange={e => { setEraInput(e.target.value); resetLookup() }}
-            placeholder="Era number"
-            className="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            aria-label="Era number to look up"
-          />
-          <button
-            type="submit"
-            className="btn-primary gap-1.5 px-4 py-2 text-sm"
-            disabled={lookupLoading || !eraInput}
-            aria-label="Look up era"
-          >
-            {lookupLoading
-              ? <span className="animate-pulse">Searching…</span>
-              : <><Search size={14} />Look Up</>}
-          </button>
+        <form onSubmit={onLookup} className="space-y-2">
+          <div className="flex gap-2">
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={eraInput}
+              onChange={e => { setEraInput(e.target.value); resetLookup() }}
+              placeholder="Era number"
+              className={`w-36 bg-surface border rounded-lg px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary
+                ${eraInputErr ? 'border-danger/50' : 'border-border'}`}
+              aria-label="Era number to look up"
+            />
+            <button
+              type="submit"
+              className="btn-primary gap-1.5 px-4 py-2 text-sm"
+              disabled={lookupLoading || !eraInput || !!eraInputErr}
+              aria-label="Look up era"
+            >
+              {lookupLoading
+                ? <span className="animate-pulse">Searching…</span>
+                : <><Search size={14} />Look Up</>}
+            </button>
+          </div>
+          {eraInputErr && (
+            <p className="flex items-center gap-1 text-xs text-danger">
+              <AlertTriangle size={11} className="flex-shrink-0" />{eraInputErr}
+            </p>
+          )}
         </form>
 
         {lookupError && (
@@ -346,7 +352,24 @@ export default function EraBlockExplorer() {
 
             {lookup.startBlockHash && (
               <div className="card p-3 col-span-2 sm:col-span-4">
-                <p className="text-[10px] font-bold tracking-widest uppercase text-dim mb-1">Start Block Hash</p>
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-[10px] font-bold tracking-widest uppercase text-dim">Start Block Hash</p>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(lookup.startBlockHash)
+                        setHashCopied(true)
+                        setTimeout(() => setHashCopied(false), 2000)
+                      } catch {}
+                    }}
+                    className="btn-icon"
+                    aria-label="Copy start block hash"
+                  >
+                    {hashCopied
+                      ? <CheckCircle2 size={12} className="text-success" />
+                      : <Copy size={12} />}
+                  </button>
+                </div>
                 <p className="text-xs font-mono text-text break-all">{lookup.startBlockHash}</p>
               </div>
             )}

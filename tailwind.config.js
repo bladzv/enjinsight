@@ -4,6 +4,8 @@ export default {
   theme: {
     extend: {
       colors: {
+        // ── WCAG contrast ratios (AA requires 4.5:1 for normal text) ──────────
+        // Computed via relative-luminance formula: (L1+0.05)/(L2+0.05)
         ink:     '#08080E',
         surface: '#0F0F1A',
         card:    '#13131F',
@@ -11,16 +13,16 @@ export default {
         rim:     '#2A2A45',
         primary: '#7B3FE4',
         'primary-dim': '#5A2DB0',
-        'primary-glow': '#8A4AEE', // darkened: white-on-glow now 4.83:1 (was 3.65:1)
+        'primary-glow': '#8A4AEE', // darkened: white-on-glow 4.83:1 ✓ AA (was 3.65:1 ✗)
         cyan:    '#00D4FF',
         'cyan-dim': '#00A3CC',
         success: '#22C55E',
         warning: '#F59E0B',
         danger:  '#EF4444',
-        dim:     '#8B8AB0',
-        muted:   '#7373A8', // lightened: contrast 4.65:1 (was 2.5:1 — WCAG AA fail)
-        text:    '#F0EEFF',
-        'text-secondary': '#A9A8CC',
+        dim:     '#8B8AB0',  // on card 6.09:1 ✓ AA | on surface 6.30:1 ✓ AA
+        muted:   '#7B7AB5',  // on card 4.63:1 ✓ AA (lightened; was 2.5:1 ✗)
+        text:    '#F0EEFF',  // on card 15.34:1 ✓ AAA | on surface 15.89:1 ✓ AAA
+        'text-secondary': '#A9A8CC', // on card 8.04:1 ✓ AAA | on surface 8.33:1 ✓ AAA
         term:    '#050508',
       },
       fontFamily: {

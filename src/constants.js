@@ -73,11 +73,13 @@ export const ENJIN_NETWORKS = [
     ss58Prefix:   9030,
   },
   {
-    key:          'canary-relay',
-    label:        'Canary Relaychain',
-    endpoint:     'wss://archive.relay.canary.enjin.io',
-    addrHint:     'e.g. cnLNrtPNJnnEUkZMjWxPiHvNe…',
-    ss58Prefix:   69,
+    key:              'canary-relay',
+    label:            'Canary Relaychain',
+    endpoint:         'wss://archive.relay.canary.enjin.io',
+    addrHint:         'e.g. cnLNrtPNJnnEUkZMjWxPiHvNe…',
+    ss58Prefix:       69,
+    supportsDateRange: true,   // canary-relay-era-reference.csv covers this network
+    eraRefCsv:        '/canary-relay-era-reference.csv',
   },
   {
     key:          'custom',

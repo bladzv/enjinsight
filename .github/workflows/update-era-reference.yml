@@ -25,19 +25,22 @@ jobs:
       - name: Install Python dependencies
         run: pip install substrate-interface
 
-      - name: Run era reference fetcher
-        run: python scripts/era-range-fetch.py
+      - name: Run era reference fetcher (Enjin Relaychain)
+        run: python scripts/relay-era-range-fetch.py --output public/relay-era-reference.csv --ss58-prefix 2135
         env:
           RPC_ENDPOINT: wss://archive.relay.blockchain.enjin.io
+
+      - name: Run era reference fetcher (Canary Relaychain)
+        run: python scripts/relay-era-range-fetch.py --output public/canary-relay-era-reference.csv --ss58-prefix 69 --endpoint wss://archive.relay.canary.enjin.io
 
       - name: Commit and push changes
         run: |
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add public/relay-era-reference.csv
+          git add public/relay-era-reference.csv public/canary-relay-era-reference.csv
           if git diff --staged --quiet; then
-            echo "No changes to relay-era-reference.csv"
+            echo "No changes to era reference CSVs"
           else
-            git commit -m "chore(data): update relay-era-reference.csv [automated]"
+            git commit -m "chore(data): update era reference CSVs [automated]"
             git push
           fi

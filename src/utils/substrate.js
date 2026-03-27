@@ -354,3 +354,66 @@ export function decodeCompactFirst(hex) {
   }
 }
 
+/**
+ * Decode a SCALE compact-encoded integer from a Uint8Array at a given byte offset.
+ * Returns { value: BigInt, nextOffset: number }.
+ * Used to parse variable-offset fields such as StakingLedger.active.
+ */
+export function decodeCompactAt(bytes, offset) {
+  const mode = bytes[offset] & 0b11
+  switch (mode) {
+    case 0: return { value: BigInt(bytes[offset] >> 2), nextOffset: offset + 1 }
+    case 1: return { value: BigInt(((bytes[offset] | (bytes[offset + 1] << 8)) >>> 0) >> 2), nextOffset: offset + 2 }
+    case 2: return { value: BigInt(((bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0) >>> 2), nextOffset: offset + 4 }
+    default: {  // big integer
+      const n = (bytes[offset] >> 2) + 4
+      let v = 0n
+      for (let i = n; i >= 1; i--) v = (v << 8n) | BigInt(bytes[offset + i])
+      return { value: v, nextOffset: offset + 1 + n }
+    }
+  }
+}
+
+/**
+ * Build the Staking.Ledger storage key for a given AccountId32 (bonded pool stash).
+ *
+ * Key layout: twox128("Staking") + twox128("Ledger") + Blake2_128Concat(accountId)
+ *
+ * @param {string} accountIdHex - 32-byte account ID as a hex string (no 0x prefix)
+ * @returns {string} storage key with 0x prefix
+ */
+export function buildStakingLedgerKey(accountIdHex) {
+  const id     = fromHex(accountIdHex)
+  const hashed = _b128concat(id)
+  const out    = new Uint8Array(32 + hashed.length)
+  let off = 0
+  out.set(_hexToBytes(_twox128('Staking')), off); off += 16
+  out.set(_hexToBytes(_twox128('Ledger')),  off); off += 16
+  out.set(hashed, off)
+  return '0x' + toHex(out)
+}
+
+/**
+ * Decode Staking.Ledger raw SCALE bytes to extract the `active` field (actual ENJ staked).
+ *
+ * StakingLedger layout:
+ *   stash:            AccountId32 (32 bytes fixed)
+ *   total:            Compact<u128>
+ *   active:           Compact<u128>
+ *   unlocking + claimedRewards (not decoded)
+ *
+ * Returns 0n if the raw value is missing or unparseable.
+ */
+export function decodeStakingLedgerActive(hex) {
+  if (!hex || hex === '0x' || hex === null) return 0n
+  const bytes = fromHex(hex)
+  if (bytes.length < 34) return 0n
+  try {
+    const { nextOffset } = decodeCompactAt(bytes, 32)  // skip stash (32), decode total
+    const { value }      = decodeCompactAt(bytes, nextOffset)  // decode active
+    return value
+  } catch {
+    return 0n
+  }
+}
+

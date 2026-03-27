@@ -14,7 +14,7 @@
  * - Custom endpoint option removed (only preset networks)
  */
 import { useState, useRef, useEffect } from 'react'
-import { decodeAddress, encodeAddress } from '@polkadot/util-crypto'
+import { fetchLiveChainInfo } from '../utils/chainInfo.js'
 import { Activity, AlertTriangle, Calendar, ChevronDown, Info, RotateCcw, Server, Square, Upload } from 'lucide-react'
 import useBalanceExplorer, { STATUS } from '../hooks/useBalanceExplorer.js'
 import { ENJIN_NETWORKS, MAX_RPC_CALLS } from '../constants.js'
@@ -38,50 +38,84 @@ const PRESET_NETWORKS = ENJIN_NETWORKS.filter(n => n.key !== 'custom')
 
 // ── Era CSV helpers ─────────────────────────────────────────────────────────
 
-let _eraCache = null
+// Cache per CSV path so switching networks doesn't force a re-fetch
+const _eraCacheMap = new Map()
 
-async function loadEraData() {
-  if (_eraCache) return _eraCache
-  const resp = await fetch('/relay-era-reference.csv')
+async function loadEraData(csvPath = '/relay-era-reference.csv') {
+  if (_eraCacheMap.has(csvPath)) return _eraCacheMap.get(csvPath)
+  const resp = await fetch(csvPath)
   const text = await resp.text()
   const lines = text.trim().split('\n').slice(1)
-  _eraCache = lines.map(line => {
+  const data = lines.map(line => {
     const p = line.split(',')
+    const stMs = parseInt(p[4], 10) || null  // CSV stores unix ms
+    const etMs = parseInt(p[6], 10) || null  // CSV stores unix ms
     return {
       era:        parseInt(p[0], 10),
       startBlock: parseInt(p[1], 10),
       endBlock:   parseInt(p[2], 10) || null,
-      startTs:    parseInt(p[4], 10) || null, // unix seconds
-      endTs:      parseInt(p[6], 10) || null, // unix seconds
+      startTs:    stMs ? Math.floor(stMs / 1000) : null, // unix seconds
+      endTs:      etMs ? Math.floor(etMs / 1000) : null, // unix seconds
     }
   }).filter(r => !isNaN(r.era) && !isNaN(r.startBlock))
-  return _eraCache
+  _eraCacheMap.set(csvPath, data)
+  return data
 }
 
-function findBlocksForDateRange(eraData, startDateStr, endDateStr) {
+async function findBlocksForDateRange(eraData, startDateStr, endDateStr, archiveWss) {
   const startMs = new Date(startDateStr).getTime()
   const endMs   = new Date(endDateStr).getTime() + 86_400_000 - 1 // end of day
 
-  let startEra = eraData[0]
+  // Find best matching eras from CSV (startTs is unix seconds, hence * 1000)
+  let startEraRow = eraData[0]
   for (let i = eraData.length - 1; i >= 0; i--) {
-    if (((eraData[i].startTs ?? 0) * 1000) <= startMs) { startEra = eraData[i]; break }
+    if (((eraData[i].startTs ?? 0) * 1000) <= startMs) { startEraRow = eraData[i]; break }
   }
 
-  let endEra = eraData[eraData.length - 1]
+  let endEraRow = eraData[eraData.length - 1]
   for (let i = eraData.length - 1; i >= 0; i--) {
-    if (((eraData[i].startTs ?? 0) * 1000) <= endMs) { endEra = eraData[i]; break }
+    if (((eraData[i].startTs ?? 0) * 1000) <= endMs) { endEraRow = eraData[i]; break }
   }
 
-  // If endDate is beyond the last CSV era's coverage, estimate additional eras.
-  // Block numbers are approximate (~14400 blocks/era); the hook queries whatever
-  // blocks actually exist and skips any that don't.
   const lastRow = eraData[eraData.length - 1]
-  if (lastRow?.startTs) {
-    const lastCoverageMs = (lastRow.endTs ?? (lastRow.startTs + 86400)) * 1000
-    if (endMs > lastCoverageMs) {
-      const extraEras   = Math.ceil((endMs - lastCoverageMs) / 86_400_000)
+  const lastCoverageMs = lastRow?.startTs
+    ? (lastRow.endTs ?? (lastRow.startTs + 86400)) * 1000
+    : 0
+
+  if (lastRow?.startTs && endMs > lastCoverageMs) {
+    // End date extends beyond CSV — fetch exact era boundaries via RPC binary search.
+    // Estimate how many extra eras are needed (+2 buffer + 1 for endBlock derivation).
+    const extraEras    = Math.ceil((endMs - lastCoverageMs) / 86_400_000)
+    const firstMissing = lastRow.era + 1
+    const lastNeeded   = lastRow.era + extraEras + 3
+    const erasToFetch  = Array.from({ length: lastNeeded - firstMissing + 1 }, (_, i) => firstMissing + i)
+
+    try {
+      const rpcData = await fetchEraBoundariesFromRpc(archiveWss, erasToFetch)
+      // rpcData timestamps are already in unix seconds (eraRpc.js divides by 1000)
+      const rpcRows = Object.entries(rpcData)
+        .map(([era, d]) => ({ era: Number(era), ...d }))
+        .sort((a, b) => a.era - b.era)
+
+      // Latest RPC era whose start is on or before endMs
+      for (let i = rpcRows.length - 1; i >= 0; i--) {
+        if (rpcRows[i].startTs && rpcRows[i].startTs * 1000 <= endMs) {
+          endEraRow = rpcRows[i]; break
+        }
+      }
+
+      // If startDate is also beyond the CSV, refine startEraRow from RPC data too
+      if (startMs > lastCoverageMs) {
+        for (let i = rpcRows.length - 1; i >= 0; i--) {
+          if (rpcRows[i].startTs && rpcRows[i].startTs * 1000 <= startMs) {
+            startEraRow = rpcRows[i]; break
+          }
+        }
+      }
+    } catch {
+      // RPC unavailable — fall back to math estimation
       const lastEndBlock = lastRow.endBlock ?? (lastRow.startBlock + 14399)
-      endEra = {
+      endEraRow = {
         era:        lastRow.era + extraEras,
         startBlock: lastEndBlock + 1,
         endBlock:   lastEndBlock + extraEras * 14400,
@@ -92,10 +126,10 @@ function findBlocksForDateRange(eraData, startDateStr, endDateStr) {
   }
 
   return {
-    startBlock: startEra.startBlock,
-    endBlock:   endEra.endBlock ?? (endEra.startBlock + 14399),
-    startEra:   startEra.era,
-    endEra:     endEra.era,
+    startBlock: startEraRow.startBlock,
+    endBlock:   endEraRow.endBlock ?? (endEraRow.startBlock + 14399),
+    startEra:   startEraRow.era,
+    endEra:     endEraRow.era,
   }
 }
 
@@ -184,7 +218,7 @@ export default function BalanceExplorer() {
   const [address,    setAddress]    = useState('')
   const [startBlock, setStartBlock] = useState('')
   const [endBlock,   setEndBlock]   = useState('')
-  const [step,       setStep]       = useState('100')
+  const [step,       setStep]       = useState('')
 
   // Range mode: 'block' | 'date' | 'era'
   const [rangeMode, setRangeMode]   = useState('block')
@@ -202,22 +236,20 @@ export default function BalanceExplorer() {
   const [addressNote, setAddressNote] = useState(null)
   const addrDebounceRef = useRef(null)
 
+  // Live chain info (era, block, timestamp) — fetched once per network change
+  const [chainInfo, setChainInfo] = useState({ era: null, block: null, timestamp: null, loading: false })
+
   // Derived: active network preset
   const activeNetwork        = PRESET_NETWORKS.find(n => n.key === networkKey) ?? PRESET_NETWORKS[0]
   const endpoint             = activeNetwork.endpoint
   const isDateRangeSupported = activeNetwork.supportsDateRange === true
-  const isRelaychain         = networkKey === 'relaychain'
 
-  // On Relaychain: switch to era range by default; on non-Relaychain: revert if needed
+  // Reset era/date modes when switching to a network without CSV support
   useEffect(() => {
-    if (isRelaychain) {
-      if (rangeMode === 'block') {
-        setRangeMode('era')
-        setStep('14400')
-      }
-    } else {
-      if ((rangeMode === 'era') || (rangeMode === 'date' && !isDateRangeSupported)) {
+    if (!isDateRangeSupported) {
+      if (rangeMode === 'era' || rangeMode === 'date') {
         setRangeMode('block')
+        setStep('')
       }
     }
   }, [networkKey]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -225,42 +257,23 @@ export default function BalanceExplorer() {
   // Load era data when date range or era range is active
   useEffect(() => {
     if ((rangeMode === 'date' || rangeMode === 'era') && isDateRangeSupported) {
-      loadEraData().then(setEraDataRef).catch(() => {})
+      loadEraData(activeNetwork.eraRefCsv).then(setEraDataRef).catch(() => {})
     }
-  }, [rangeMode, isDateRangeSupported])
+  }, [rangeMode, isDateRangeSupported, activeNetwork.eraRefCsv])
 
   /**
    * Validate address against expected prefix for the selected network.
    */
   function checkAddressForNetwork(rawAddr, network) {
     if (!rawAddr.trim()) { setAddressNote(null); return }
-    // First check the expected human-readable prefix
     const prefixInfo = ADDR_PREFIX_MAP[network.key]
-    if (prefixInfo) {
-      const trimmed = rawAddr.trim()
-      if (!trimmed.startsWith(prefixInfo.prefix)) {
-        setAddressNote({
-          type: 'prefix-warn',
-          msg: `${prefixInfo.label} addresses start with "${prefixInfo.prefix}". This address may be for a different network.`,
-        })
-        return
-      }
-    }
-    // Then do full SS58 validation
-    if (network.ss58Prefix === null || network.ss58Prefix === undefined) {
+    if (prefixInfo && !rawAddr.trim().startsWith(prefixInfo.prefix)) {
+      setAddressNote({
+        type: 'error',
+        msg: `${prefixInfo.label} addresses start with "${prefixInfo.prefix}". Please enter a valid ${prefixInfo.label} address.`,
+      })
+    } else {
       setAddressNote(null)
-      return
-    }
-    try {
-      const pubkey    = decodeAddress(rawAddr.trim())
-      const converted = encodeAddress(pubkey, network.ss58Prefix)
-      if (converted === rawAddr.trim()) {
-        setAddressNote(null)
-      } else {
-        setAddressNote({ type: 'converted', convertedAddress: converted, networkLabel: network.label })
-      }
-    } catch (e) {
-      setAddressNote({ type: 'error', msg: e.message || 'Invalid SS58 address.' })
     }
   }
 
@@ -280,8 +293,29 @@ export default function BalanceExplorer() {
 
   const {
     status, records, logs, progress, dataSource, errorMsg,
-    reset, cancel, runQuery, importData, importEncrypted,
+    log, reset, cancel, runQuery, importData, importEncrypted,
   } = useBalanceExplorer()
+
+  // Fetch live chain info (era, block, timestamp) whenever the network changes
+  useEffect(() => {
+    let cancelled = false
+    setChainInfo({ era: null, block: null, timestamp: null, loading: true })
+    log('info', `Fetching chain info from ${endpoint}…`)
+    fetchLiveChainInfo(endpoint)
+      .then(info => {
+        if (!cancelled) {
+          setChainInfo({ ...info, loading: false })
+          log('info', `Chain info: era=${info.era ?? '—'}, block=${info.block != null ? info.block.toLocaleString() : '—'}`)
+        }
+      })
+      .catch(err => {
+        if (!cancelled) {
+          setChainInfo({ era: null, block: null, timestamp: null, loading: false })
+          log('warn', `Chain info fetch failed: ${err?.message ?? 'unknown error'}`)
+        }
+      })
+    return () => { cancelled = true }
+  }, [endpoint, log])
 
   useEffect(() => () => { cancel() }, [cancel])
 
@@ -298,7 +332,7 @@ export default function BalanceExplorer() {
       setEraLoadErr(null)
       let eraData
       try {
-        eraData = await loadEraData()
+        eraData = await loadEraData(activeNetwork.eraRefCsv)
         setEraDataRef(eraData)
       } catch {
         setEraLoadErr('Failed to load era reference data. Check network.')
@@ -316,6 +350,9 @@ export default function BalanceExplorer() {
       effEnd   = String(eb)
       setStartBlock(effStart)
       setEndBlock(effEnd)
+      // Convert era step (N eras) to block step
+      const eraStepVal = parseInt(step, 10) || 1
+      effStep = String(computeDayStep(eraData, eraStepVal))
     }
 
     if (rangeMode === 'date') {
@@ -323,13 +360,20 @@ export default function BalanceExplorer() {
       setEraLoadErr(null)
       let eraData
       try {
-        eraData = await loadEraData()
+        eraData = await loadEraData(activeNetwork.eraRefCsv)
         setEraDataRef(eraData)
       } catch {
         setEraLoadErr('Failed to load era reference data. Check network.')
         return
       }
-      const { startBlock: sb, endBlock: eb } = findBlocksForDateRange(eraData, startDate, endDate)
+      let dateBlocks
+      try {
+        dateBlocks = await findBlocksForDateRange(eraData, startDate, endDate, endpoint)
+      } catch (e) {
+        setEraLoadErr(e.message ?? 'Failed to resolve date range blocks.')
+        return
+      }
+      const { startBlock: sb, endBlock: eb } = dateBlocks
       effStart = String(sb)
       effEnd   = String(eb)
       setStartBlock(effStart)
@@ -339,9 +383,7 @@ export default function BalanceExplorer() {
       effStep = String(computeDayStep(eraData, dayStepVal))
     }
 
-    const effectiveAddress = addressNote?.type === 'converted'
-      ? addressNote.convertedAddress
-      : address
+    const effectiveAddress = address.trim()
     rpcMetaRef.current = { endpoint, address: effectiveAddress }
     await runQuery({ endpoint, address: effectiveAddress, startBlock: effStart, endBlock: effEnd, step: effStep })
   }
@@ -390,17 +432,58 @@ export default function BalanceExplorer() {
   const maxBlk  = hasResults ? Math.max(...blks) : null
   const hasNewFmt = hasResults && records.some(d => d.newFormat)
 
+  // ── Real-time range validation ────────────────────────────────────────────
+  const blockErr = (() => {
+    if (rangeMode !== 'block') return ''
+    const s = parseInt(startBlock, 10), e = parseInt(endBlock, 10)
+    const cur = chainInfo.block
+    if (startBlock && (isNaN(s) || s < 1)) return 'Start block must be a positive number.'
+    if (endBlock   && (isNaN(e) || e < 1)) return 'End block must be a positive number.'
+    if (startBlock && cur && !isNaN(s) && s > cur)
+      return `Start block ${s.toLocaleString()} is in the future (current: ${cur.toLocaleString()}).`
+    if (endBlock && cur && !isNaN(e) && e > cur)
+      return `End block ${e.toLocaleString()} is in the future (current: ${cur.toLocaleString()}).`
+    if (startBlock && endBlock && !isNaN(s) && !isNaN(e) && s > e)
+      return 'Start block must be less than or equal to end block.'
+    return ''
+  })()
+
+  const eraValidErr = (() => {
+    if (rangeMode !== 'era') return ''
+    const s = parseInt(startEraNum, 10), e = parseInt(endEraNum, 10)
+    const cur = chainInfo.era
+    if (startEraNum && (isNaN(s) || s < 1)) return 'Start era must be ≥ 1.'
+    if (endEraNum   && (isNaN(e) || e < 1)) return 'End era must be ≥ 1.'
+    if (startEraNum && cur && !isNaN(s) && s > cur)
+      return `Era ${s} is in the future (current era: ${cur}).`
+    if (endEraNum && cur && !isNaN(e) && e > cur)
+      return `Era ${e} is in the future (current era: ${cur}).`
+    if (startEraNum && endEraNum && !isNaN(s) && !isNaN(e) && s > e)
+      return 'Start era must be less than or equal to end era.'
+    return ''
+  })()
+
+  const dateValidErr = (() => {
+    if (rangeMode !== 'date') return ''
+    const today = toDateInput(new Date())
+    if (startDate && startDate > today) return 'Start date cannot be in the future.'
+    if (endDate   && endDate   > today) return 'End date cannot be in the future.'
+    if (startDate && endDate && startDate > endDate)
+      return 'Start date must be before or equal to end date.'
+    return ''
+  })()
+
   const inputField = 'w-full bg-surface border border-border rounded-lg px-3 py-1.5 text-[0.8rem] ' +
     'text-text font-mono placeholder-muted disabled:opacity-50 focus:outline-none ' +
     'focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-colors'
 
   // Step label/hint
-  const stepLabel       = rangeMode === 'date'  ? 'Step (every N days)' :
-                          rangeMode === 'era'   ? 'Step (every N blocks)' :
-                                                 'Step (every N blocks)'
+  const stepLabel       = rangeMode === 'date' ? 'Step (Every N Days)' :
+                          rangeMode === 'era'  ? 'Step (Every N Eras)' :
+                                                'Step (Every N Blocks)'
   const stepMin         = 1
-  const stepPlaceholder = rangeMode === 'date' ? 'e.g. 1' :
-                          rangeMode === 'era'  ? 'e.g. 14400' : 'e.g. 100'
+  const stepPlaceholder = rangeMode === 'date' ? '1' :
+                          rangeMode === 'era'  ? '1' : '14400'
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -439,6 +522,19 @@ export default function BalanceExplorer() {
           <div role="tabpanel" className="p-4 sm:p-6 space-y-4">
 
             {/* Section heading */}
+            {/* ── Live chain snapshot ──────────────────────────────── */}
+            <div className="flex flex-wrap gap-x-5 gap-y-1 px-3 py-2 rounded-lg bg-surface border border-border text-[11px] font-mono">
+              <span className="text-dim">Era:&nbsp;
+                <span className="text-cyan">{chainInfo.loading ? '…' : (chainInfo.era != null ? chainInfo.era.toLocaleString() : '—')}</span>
+              </span>
+              <span className="text-dim">Block:&nbsp;
+                <span className="text-text">{chainInfo.loading ? '…' : (chainInfo.block != null ? chainInfo.block.toLocaleString() : '—')}</span>
+              </span>
+              <span className="text-dim">Time:&nbsp;
+                <span className="text-text">{chainInfo.loading ? '…' : (chainInfo.timestamp != null ? new Date(chainInfo.timestamp).toUTCString().replace(' GMT', ' UTC') : '—')}</span>
+              </span>
+            </div>
+
             <div className="flex items-center gap-2">
               <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
               <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">RPC Configuration</h3>
@@ -478,47 +574,41 @@ export default function BalanceExplorer() {
                   maxLength={64}
                   autoComplete="off"
                   spellCheck="false"
-                  placeholder={activeNetwork.addrHint}
+                  placeholder={`${ADDR_PREFIX_MAP[activeNetwork.key]?.prefix ?? ''}...`}
                   value={address}
                   onChange={e => setAddress(e.target.value)}
                   disabled={isLoading}
-                  className={`${inputField} ${
-                    addressNote?.type === 'error' ? 'border-danger/50 focus:border-danger/70' :
-                    addressNote?.type === 'prefix-warn' ? 'border-warning/50 focus:border-warning/70' : ''
-                  }`}
+                  className={`${inputField} ${addressNote?.type === 'error' ? 'border-danger/50 focus:border-danger/70' : ''}`}
                 />
-                {addressNote?.type === 'converted' && (
-                  <p className="mt-1.5 text-[11px] font-mono text-warning/90 leading-snug break-all">
-                    ⚠️ Converted for {addressNote.networkLabel}:{' '}
-                    <span className="select-all">{addressNote.convertedAddress}</span>
-                  </p>
-                )}
-                {addressNote?.type === 'prefix-warn' && (
-                  <p className="mt-1.5 flex items-start gap-1 text-[11px] font-mono text-warning/90 leading-snug">
-                    <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" />
-                    <span>{addressNote.msg}</span>
-                  </p>
-                )}
                 {addressNote?.type === 'error' && (
                   <p className="mt-1.5 flex items-start gap-1 text-[11px] font-mono text-danger leading-snug">
                     <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" />
-                    <span>❌ Invalid address: {addressNote.msg}</span>
+                    <span>{addressNote.msg}</span>
                   </p>
                 )}
               </div>
             </div>
 
             {/* ── Range mode toggle ─────────────────────────────────────── */}
-            {isRelaychain && (
+            {isDateRangeSupported && (
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">Query Range</span>
                 <div className="flex rounded-lg border border-border overflow-hidden">
                   <button
                     type="button"
-                    onClick={() => { setRangeMode('era'); setStep('14400') }}
+                    onClick={() => { setRangeMode('block'); setStep('') }}
                     disabled={isLoading}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-r border-border transition-colors
-                      ${rangeMode === 'era' ? 'bg-primary/20 text-primary' : 'text-dim hover:text-text'}`}
+                      ${rangeMode === 'block' ? 'bg-primary/20 text-text' : 'text-dim hover:text-text'}`}
+                  >
+                    Block Range
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setRangeMode('era'); setStep('1') }}
+                    disabled={isLoading}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-r border-border transition-colors
+                      ${rangeMode === 'era' ? 'bg-primary/20 text-text' : 'text-dim hover:text-text'}`}
                   >
                     Era Range
                   </button>
@@ -527,33 +617,7 @@ export default function BalanceExplorer() {
                     onClick={() => { setRangeMode('date'); setStep('1') }}
                     disabled={isLoading}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors
-                      ${rangeMode === 'date' ? 'bg-primary/20 text-primary' : 'text-dim hover:text-text'}`}
-                  >
-                    <Calendar size={12} />
-                    Date Range
-                  </button>
-                </div>
-              </div>
-            )}
-            {!isRelaychain && isDateRangeSupported && (
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">Query Range</span>
-                <div className="flex rounded-lg border border-border overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setRangeMode('block')}
-                    disabled={isLoading}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-r border-border transition-colors
-                      ${rangeMode === 'block' ? 'bg-primary/20 text-primary' : 'text-dim hover:text-text'}`}
-                  >
-                    Block Range
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRangeMode('date')}
-                    disabled={isLoading}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors
-                      ${rangeMode === 'date' ? 'bg-primary/20 text-primary' : 'text-dim hover:text-text'}`}
+                      ${rangeMode === 'date' ? 'bg-primary/20 text-text' : 'text-dim hover:text-text'}`}
                   >
                     <Calendar size={12} />
                     Date Range
@@ -573,8 +637,8 @@ export default function BalanceExplorer() {
                     <input
                       id="bal-start-era"
                       type="number"
-                      placeholder="e.g. 900"
-                      min={1} step={1}
+                      placeholder="1000"
+                      min={1} max={chainInfo.era ?? undefined} step={1}
                       value={startEraNum}
                       onChange={e => setStartEraNum(e.target.value)}
                       disabled={isLoading}
@@ -588,8 +652,8 @@ export default function BalanceExplorer() {
                     <input
                       id="bal-end-era"
                       type="number"
-                      placeholder="e.g. 950"
-                      min={1} step={1}
+                      placeholder="1010"
+                      min={1} max={chainInfo.era ?? undefined} step={1}
                       value={endEraNum}
                       onChange={e => setEndEraNum(e.target.value)}
                       disabled={isLoading}
@@ -612,6 +676,11 @@ export default function BalanceExplorer() {
                     />
                   </div>
                 </div>
+                {eraValidErr && (
+                  <p className="flex items-center gap-1.5 text-[11px] font-mono text-danger">
+                    <AlertTriangle size={11} className="flex-shrink-0" />{eraValidErr}
+                  </p>
+                )}
                 {eraLoadErr && (
                   <p className="flex items-start gap-1.5 text-[11px] font-mono text-danger">
                     <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" />
@@ -630,7 +699,8 @@ export default function BalanceExplorer() {
 
             {/* ── Block range inputs ─────────────────────────── */}
             {rangeMode === 'block' && (
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-2">
+                <div className="grid gap-3 sm:grid-cols-3">
                 <div>
                   <label htmlFor="bal-start" className="block text-[0.6rem] font-bold tracking-widest uppercase text-dim mb-1.5">
                     Start Block
@@ -638,8 +708,8 @@ export default function BalanceExplorer() {
                   <input
                     id="bal-start"
                     type="number"
-                    placeholder="e.g. 1000000"
-                    min={0} max={999999999} step={1}
+                    placeholder="14400"
+                    min={0} max={chainInfo.block ?? 999999999} step={1}
                     value={startBlock}
                     onChange={e => setStartBlock(e.target.value)}
                     disabled={isLoading}
@@ -653,8 +723,8 @@ export default function BalanceExplorer() {
                   <input
                     id="bal-end"
                     type="number"
-                    placeholder="e.g. 1001000"
-                    min={0} max={999999999} step={1}
+                    placeholder="28799"
+                    min={0} max={chainInfo.block ?? 999999999} step={1}
                     value={endBlock}
                     onChange={e => setEndBlock(e.target.value)}
                     disabled={isLoading}
@@ -676,6 +746,12 @@ export default function BalanceExplorer() {
                     className={inputField}
                   />
                 </div>
+                </div>
+                {blockErr && (
+                  <p className="flex items-center gap-1.5 text-[11px] font-mono text-danger">
+                    <AlertTriangle size={11} className="flex-shrink-0" />{blockErr}
+                  </p>
+                )}
               </div>
             )}
 
@@ -694,8 +770,8 @@ export default function BalanceExplorer() {
                         disabled={isLoading}
                         className={`px-2.5 py-1 rounded-md border text-[11px] transition-colors disabled:opacity-50
                           ${activePreset === label
-                            ? 'bg-primary/20 border-primary/60 text-primary font-semibold'
-                            : 'border-border text-dim hover:border-primary/50 hover:text-primary'}`}
+                            ? 'bg-primary/20 border-primary/60 text-text font-semibold'
+                            : 'border-border text-dim hover:border-primary/50 hover:text-text'}`}
                       >
                         {label} ago
                       </button>
@@ -712,11 +788,12 @@ export default function BalanceExplorer() {
                     <input
                       id="bal-start-date"
                       type="date"
+                      placeholder="2026-03-01"
                       max={toDateInput(new Date())}
                       value={startDate}
                       onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
-                      className={inputField}
+                      className={`${inputField} [color-scheme:dark]`}
                     />
                   </div>
                   <div>
@@ -726,11 +803,12 @@ export default function BalanceExplorer() {
                     <input
                       id="bal-end-date"
                       type="date"
+                      placeholder="2026-03-04"
                       max={toDateInput(new Date())}
                       value={endDate}
                       onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
-                      className={inputField}
+                      className={`${inputField} [color-scheme:dark]`}
                     />
                   </div>
                   <div>
@@ -750,6 +828,11 @@ export default function BalanceExplorer() {
                   </div>
                 </div>
 
+                {dateValidErr && (
+                  <p className="flex items-center gap-1.5 text-[11px] font-mono text-danger">
+                    <AlertTriangle size={11} className="flex-shrink-0" />{dateValidErr}
+                  </p>
+                )}
                 {eraLoadErr && (
                   <p className="flex items-start gap-1.5 text-[11px] font-mono text-danger">
                     <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" />
@@ -808,16 +891,16 @@ export default function BalanceExplorer() {
                   disabled={
                     !address.trim() ||
                     addressNote?.type === 'error' ||
-                    (rangeMode === 'block' ? (!startBlock || !endBlock) :
-                     rangeMode === 'era'   ? (!startEraNum || !endEraNum) :
-                                            (!startDate || !endDate))
+                    (rangeMode === 'block' ? (!startBlock || !endBlock || !!blockErr) :
+                     rangeMode === 'era'   ? (!startEraNum || !endEraNum || !!eraValidErr) :
+                                            (!startDate || !endDate || !!dateValidErr))
                   }
                 >
                   <Activity size={14} />
                   Fetch Balance
                 </button>
               )}
-              {estCalls != null && (
+              {estCalls != null && addressNote?.type !== 'error' && !(rangeMode === 'block' ? !!blockErr : rangeMode === 'era' ? !!eraValidErr : !!dateValidErr) && (
                 <span className="text-xs font-mono text-dim">
                   {estCalls > MAX_RPC_CALLS
                     ? (

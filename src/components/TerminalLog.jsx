@@ -9,9 +9,17 @@ const LEVEL_CLASS = {
   DONE: 'log-done',
 }
 
-export default function TerminalLog({ logs, sticky = false }) {
+export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
   const [expanded, setExpanded] = useState(false)
   const endRef = useRef(null)
+
+  function toggle() {
+    setExpanded(e => {
+      const next = !e
+      onExpandChange?.(next)
+      return next
+    })
+  }
 
   const lastLog = logs[logs.length - 1]
 
@@ -23,7 +31,7 @@ export default function TerminalLog({ logs, sticky = false }) {
     <div className={wrapClass}>
       {/* Toggle bar — always visible */}
       <button
-        onClick={() => setExpanded(e => !e)}
+        onClick={toggle}
         className="w-full flex items-center gap-2 px-4 py-2.5 bg-term hover:bg-surface/80
                    transition-colors text-left"
         aria-expanded={expanded}
