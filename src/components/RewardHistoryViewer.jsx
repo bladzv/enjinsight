@@ -18,9 +18,10 @@ import {
   AlertTriangle, Calendar, Server,
 } from 'lucide-react'
 import { useRewardHistory, RH_STATUS } from '../hooks/useRewardHistory.js'
+import { fetchLiveChainInfo } from '../utils/chainInfo.js'
 import TerminalLog from './TerminalLog.jsx'
 import { PLANCK_PER_ENJ } from '../constants.js'
-import { aesEncrypt, downloadFile, safeFilename } from '../utils/balanceExport.js'
+import { aesEncrypt, aesDecrypt, downloadFile, safeFilename } from '../utils/balanceExport.js'
 import { MAX_IMPORT_MB } from '../constants.js'
 
 // ── Era-CSV date helpers (copied from BalanceExplorer) ───────────────────────
@@ -32,12 +33,14 @@ async function loadEraDataRH() {
   const lines = text.trim().split('\n').slice(1)
   _eraCache = lines.map(line => {
     const p = line.split(',')
+    const stMs = parseInt(p[4], 10) || null  // CSV stores unix ms
+    const etMs = parseInt(p[6], 10) || null  // CSV stores unix ms
     return {
       era:        parseInt(p[0], 10),
       startBlock: parseInt(p[1], 10),
       endBlock:   parseInt(p[2], 10) || null,
-      startTs:    parseInt(p[4], 10) || null,
-      endTs:      parseInt(p[6], 10) || null,
+      startTs:    stMs ? Math.floor(stMs / 1000) : null, // unix seconds
+      endTs:      etMs ? Math.floor(etMs / 1000) : null, // unix seconds
     }
   }).filter(r => !isNaN(r.era) && !isNaN(r.startBlock))
   return _eraCache
@@ -122,6 +125,7 @@ function rewardToObj(r) {
     reward_enj:      String(r.reward),
     cumulative_enj:  String(r.accumulated),
     apy_pct:         r.apy.toFixed(4),
+    rolling_apy_pct: Number.isFinite(r.rollingApy) ? r.rollingApy.toFixed(4) : '',
   }
 }
 
@@ -179,6 +183,7 @@ function parseRewardImport(text, ext) {
         reward:          BigInt(String(r.reward_enj ?? r.reward ?? '0').replace(/[^0-9]/g, '') || '0'),
         accumulated:     BigInt(String(r.cumulative_enj ?? r.accumulated ?? '0').replace(/[^0-9]/g, '') || '0'),
         apy:             parseFloat(r.apy_pct ?? r.apy ?? '0') || 0,
+        rollingApy:      parseFloat(r.rolling_apy_pct ?? r.rollingApy ?? '') || undefined,
       })),
       meta,
     }
@@ -207,6 +212,7 @@ function parseRewardImport(text, ext) {
         reward:          BigInt(g('reward_enj').replace(/[^0-9]/g,'') || '0'),
         accumulated:     BigInt(g('cumulative_enj').replace(/[^0-9]/g,'') || '0'),
         apy:             parseFloat(g('apy_pct')) || 0,
+        rollingApy:      parseFloat(g('rolling_apy_pct')) || undefined,
       }
     })
     return { results, meta: address ? { address } : null }
@@ -214,7 +220,7 @@ function parseRewardImport(text, ext) {
   throw new Error('Unsupported format. Export from this app first.')
 }
 
-// ── Reward Chart (combo: bar=member sENJ, line=reward ENJ) ──────────────────
+// ── Reward Chart (line: Reward ENJ per era) ─────────────────────────────────
 // Custom vertical-crosshair plugin for Chart.js
 const crosshairPlugin = {
   id: 'rh-crosshair',
@@ -257,9 +263,8 @@ function RewardChart({ data }) {
     const uniquePools = [...new Set(data.map(r => r.poolLabel))]
     const rwdLabel = uniquePools.length === 1 ? `${uniquePools[0]} — Reward ENJ` : 'Aggregated Reward ENJ'
 
-    import('chart.js').then(({ Chart, CategoryScale, LinearScale, BarElement, Tooltip, Legend }) => {
+    import('chart.js/auto').then(({ Chart }) => {
       if (destroyed) return
-      Chart.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
       if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null }
 
       chartRef.current = new Chart(canvasRef.current, {
@@ -269,10 +274,11 @@ function RewardChart({ data }) {
           datasets: [{
             label:           rwdLabel,
             data:            rwdData,
-            backgroundColor: 'rgba(0,217,255,0.35)',
+            backgroundColor: 'rgba(0,217,255,0.55)',
             borderColor:     '#00d9ff',
             borderWidth:     1,
-            borderRadius:    2,
+            borderRadius:    3,
+            hoverBackgroundColor: 'rgba(0,217,255,0.85)',
           }],
         },
         options: {
@@ -308,6 +314,7 @@ function RewardChart({ data }) {
               ticks: { color: '#00d9ff', font: { size: 10 } },
               grid:  { color: 'rgba(255,255,255,0.04)' },
               title: { display: true, text: 'Reward ENJ', color: '#00d9ff', font: { size: 11 } },
+              beginAtZero: true,
             },
           },
         },
@@ -333,6 +340,149 @@ function RewardChart({ data }) {
   )
 }
 
+// ── Shared pie colour palette ─────────────────────────────────────────────────
+const PIE_COLORS = [
+  '#00d9ff','#7c3aed','#10b981','#f59e0b','#ef4444',
+  '#8b5cf6','#06b6d4','#84cc16','#f97316','#ec4899',
+  '#14b8a6','#a78bfa','#34d399','#fbbf24','#fb7185',
+]
+
+function makePieChart(canvasEl, labels, values, colors) {
+  // Returns a Chart.js instance configured as a doughnut
+  return import('chart.js/auto').then(({ Chart }) => {
+    return new Chart(canvasEl, {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{ data: values, backgroundColor: colors, borderColor: '#0d0d1a', borderWidth: 2 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'right',
+            labels: { color: '#A0A0C8', font: { size: 11 }, boxWidth: 12, padding: 10 },
+          },
+          tooltip: {
+            backgroundColor: 'rgba(18,18,30,0.97)',
+            borderColor: '#2A2A45',
+            borderWidth: 1,
+            titleColor: '#00d9ff',
+            bodyColor: '#A0A0C8',
+            padding: 10,
+            callbacks: {
+              label: ctx => {
+                const total = ctx.dataset.data.reduce((a, b) => a + b, 0)
+                const pct   = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : '0.0'
+                return ` ${ctx.raw.toLocaleString('en', { maximumFractionDigits: 2 })} ENJ (${pct}%)`
+              },
+            },
+          },
+        },
+      },
+    })
+  })
+}
+
+// ── Pie: bonded ENJ per pool ──────────────────────────────────────────────────
+function PoolBondedPieChart({ data }) {
+  const canvasRef = useRef(null)
+  const chartRef  = useRef(null)
+
+  useEffect(() => {
+    if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null }
+    if (!canvasRef.current || !data.length) return
+    let destroyed = false
+
+    // Per pool: wallet's proportional share of bonded ENJ at latest era
+    // userBonded = (memberBalance / poolSupply) × activeStake
+    const latestByPool = new Map()
+    for (const r of data) {
+      const cur = latestByPool.get(r.poolId)
+      if (!cur || r.era > cur.era) {
+        const poolBonded = (r.activeStake && r.activeStake > 0n) ? r.activeStake : r.poolSupply
+        const userBonded = r.poolSupply > 0n ? (r.memberBalance * poolBonded) / r.poolSupply : 0n
+        latestByPool.set(r.poolId, { era: r.era, value: userBonded, label: r.poolLabel })
+      }
+    }
+    const entries = [...latestByPool.entries()].filter(([, v]) => v.value > 0n)
+    if (!entries.length) return
+
+    const labels = entries.map(([, v]) => v.label)
+    const values = entries.map(([, v]) => Number(v.value) / 1e18)
+    const colors = entries.map((_, i) => PIE_COLORS[i % PIE_COLORS.length])
+
+    makePieChart(canvasRef.current, labels, values, colors).then(chart => {
+      if (destroyed) { chart.destroy(); return }
+      chartRef.current = chart
+    })
+
+    return () => { destroyed = true; chartRef.current?.destroy(); chartRef.current = null }
+  }, [data])
+
+  if (!data.length) return null
+  return (
+    <div className="card p-4 flex flex-col">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
+        <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">My Bonded ENJ by Pool</h3>
+        <span className="text-[10px] text-dim ml-1">(wallet share · latest era per pool)</span>
+      </div>
+      <div style={{ height: '240px' }}>
+        <canvas ref={canvasRef} />
+      </div>
+    </div>
+  )
+}
+
+// ── Pie: reward ENJ per pool ──────────────────────────────────────────────────
+function PoolRewardPieChart({ data }) {
+  const canvasRef = useRef(null)
+  const chartRef  = useRef(null)
+
+  useEffect(() => {
+    if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null }
+    if (!canvasRef.current || !data.length) return
+    let destroyed = false
+
+    // Sum reward per pool
+    const rewardByPool = new Map()
+    for (const r of data) {
+      const cur = rewardByPool.get(r.poolId) ?? { value: 0n, label: r.poolLabel }
+      rewardByPool.set(r.poolId, { value: cur.value + r.reward, label: r.poolLabel })
+    }
+    const entries = [...rewardByPool.entries()].filter(([, v]) => v.value > 0n)
+    if (!entries.length) return
+
+    const labels = entries.map(([, v]) => v.label)
+    const values = entries.map(([, v]) => Number(v.value) / 1e18)
+    const colors = entries.map((_, i) => PIE_COLORS[i % PIE_COLORS.length])
+
+    makePieChart(canvasRef.current, labels, values, colors).then(chart => {
+      if (destroyed) { chart.destroy(); return }
+      chartRef.current = chart
+    })
+
+    return () => { destroyed = true; chartRef.current?.destroy(); chartRef.current = null }
+  }, [data])
+
+  if (!data.length) return null
+  return (
+    <div className="card p-4 flex flex-col">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-0.5 h-3.5 bg-violet-400 rounded-sm" />
+        <h3 className="text-xs font-bold tracking-widest uppercase text-violet-400">Reward ENJ by Pool</h3>
+        <span className="text-[10px] text-dim ml-1">(aggregated across filtered eras)</span>
+      </div>
+      <div style={{ height: '240px' }}>
+        <canvas ref={canvasRef} />
+      </div>
+    </div>
+  )
+}
+
 // ── Pool multi-select dropdown ────────────────────────────────────────────────
 function PoolMultiSelect({ pools, value, onChange }) {
   // value = Set<number> of included poolIds; empty Set = all included
@@ -347,23 +497,27 @@ function PoolMultiSelect({ pools, value, onChange }) {
     return () => document.removeEventListener('mousedown', onDown)
   }, [open])
 
-  const allSelected = value.size === 0
+  // null = all selected; Set = explicit include-set (empty Set = none selected)
+  const allSelected = value === null
+  const noneSelected = !allSelected && value.size === 0
   const countLabel  = allSelected
     ? 'All pools'
-    : `${value.size} / ${pools.length} pool${value.size !== 1 ? 's' : ''}`
+    : noneSelected
+      ? 'No pools'
+      : `${value.size} / ${pools.length} pool${value.size !== 1 ? 's' : ''}`
 
   function toggle(id) {
     if (allSelected) {
       // Deselecting from "all" — start an explicit include-set without this pool
       const next = new Set(pools.map(([pid]) => pid))
       next.delete(id)
-      onChange(next.size === pools.length ? new Set() : next)
+      onChange(next)
     } else {
       const next = new Set(value)
       if (next.has(id)) next.delete(id)
       else              next.add(id)
-      // If user re-selected all, collapse back to "all" (empty set)
-      onChange(next.size === pools.length ? new Set() : next)
+      // If user re-selected all pools, collapse back to null (all selected)
+      onChange(next.size === pools.length ? null : next)
     }
   }
 
@@ -386,8 +540,8 @@ function PoolMultiSelect({ pools, value, onChange }) {
           {/* Select All / Clear */}
           <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/50">
             <button
-              onClick={() => { onChange(new Set()); setOpen(false) }}
-              className="text-[10px] font-bold tracking-widest uppercase text-primary hover:text-cyan transition-colors"
+              onClick={() => { onChange(null); setOpen(false) }}
+              className="text-[10px] font-bold tracking-widest uppercase text-violet-400 hover:text-cyan transition-colors"
             >All</button>
             <span className="text-dim text-[10px]">·</span>
             <button
@@ -413,16 +567,35 @@ function PoolMultiSelect({ pools, value, onChange }) {
   )
 }
 
+// ── Pool name helper ─────────────────────────────────────────────────────────
+function getPoolName(r) {
+  const prefix = `#${r.poolId} — `
+  if (r.poolLabel?.startsWith(prefix)) return r.poolLabel.slice(prefix.length)
+  return r.poolLabel || `Pool #${r.poolId}`
+}
+
 // ── Unified results table ────────────────────────────────────────────────────
 const TABLE_COLS = [
-  { key: 'era',          label: 'Era',            align: 'left',  sortable: true },
-  { key: 'eraDate',      label: 'Date',           align: 'left',  sortable: true },
-  { key: 'poolLabel',    label: 'Pool',           align: 'left',  sortable: true },
-  { key: 'memberBalance',label: 'Member sENJ',    align: 'right', sortable: true },
-  { key: 'reinvested',   label: 'Reinvested ENJ', align: 'right', sortable: true },
-  { key: 'reward',       label: 'Reward ENJ',     align: 'right', sortable: true },
-  { key: 'accumulated',  label: 'Cumulative ENJ', align: 'right', sortable: true },
-  { key: 'apy',          label: 'APY',            align: 'right', sortable: true },
+  { key: 'era',          label: 'Era',            align: 'left',  sortable: true,
+    tooltip: 'Era index on the Enjin Relaychain. One era ≈ 24 hours.' },
+  { key: 'eraDate',      label: 'Date',           align: 'left',  sortable: true,
+    tooltip: 'UTC start date of the era.' },
+  { key: 'poolId',       label: 'Pool ID',        align: 'left',  sortable: true,
+    tooltip: 'Nomination pool ID number on the Enjin Relaychain.' },
+  { key: 'poolName',     label: 'Pool Name',      align: 'left',  sortable: true,
+    tooltip: 'Pool name fetched from Subscan. Empty if the pool has no metadata set.' },
+  { key: 'memberBalance',label: 'Member sENJ',    align: 'right', sortable: true,
+    tooltip: 'Your pool share tokens (sENJ) at the era\'s start block. sENJ represents your proportional ownership of the pool — more sENJ = larger share of rewards.' },
+  { key: 'reinvested',   label: 'Reinvested ENJ', align: 'right', sortable: true,
+    tooltip: 'Total ENJ reward the entire pool earned this era, automatically compounded back into the pool\'s bonded stake. This is pool-wide — not wallet-specific.' },
+  { key: 'reward',       label: 'Reward ENJ',     align: 'right', sortable: true,
+    tooltip: 'Your wallet\'s share of the pool\'s reinvested reward: (your sENJ ÷ total pool sENJ) × Reinvested ENJ. The ENJ that accrued to your position this era.' },
+  { key: 'accumulated',  label: 'Cumulative ENJ', align: 'right', sortable: true,
+    tooltip: 'Running total of your Reward ENJ across all eras in the result set, per pool.' },
+  { key: 'apy',          label: 'APY*',           align: 'right', sortable: true,
+    tooltip: 'Per-era annualised yield: ((bonded ENJ + reinvested) ÷ bonded ENJ)^365 − 1. An estimate — actual returns vary each era.' },
+  { key: 'rollingApy',   label: 'APY 15d*',       align: 'right', sortable: true,
+    tooltip: 'Rolling 15-era APY: the same formula compounded over a sliding 15-era window and annualised. Smooths out single-era spikes.' },
 ]
 
 const PAGE_SIZES = [10, 25, 50, 100]
@@ -431,7 +604,7 @@ const PAGE_SIZES = [10, 25, 50, 100]
 function RewardTableV2({ results, onFilter }) {
   const [sortCol, setSortCol]       = useState('era')
   const [sortDir, setSortDir]       = useState(1)
-  const [filterPools, setFilterPools] = useState(new Set())   // empty = all included
+  const [filterPools, setFilterPools] = useState(null)   // null = all included; Set = explicit selection
   const [filterEraMin, setFilterEraMin] = useState('')
   const [filterEraMax, setFilterEraMax] = useState('')
   const [page, setPage]             = useState(1)
@@ -451,7 +624,7 @@ function RewardTableV2({ results, onFilter }) {
 
   const filtered = useMemo(() => {
     let rows = results
-    if (filterPools.size > 0) rows = rows.filter(r => filterPools.has(r.poolId))
+    if (filterPools !== null) rows = rows.filter(r => filterPools.has(r.poolId))
     if (filterEraMin) rows = rows.filter(r => r.era >= parseInt(filterEraMin, 10))
     if (filterEraMax) rows = rows.filter(r => r.era <= parseInt(filterEraMax, 10))
     return rows.sort((a, b) => {
@@ -459,12 +632,14 @@ function RewardTableV2({ results, onFilter }) {
       switch (sortCol) {
         case 'era':          av = a.era;          bv = b.era;          break
         case 'eraDate':      av = a.eraStartDateUtc ?? ''; bv = b.eraStartDateUtc ?? ''; break
-        case 'poolLabel':    av = a.poolLabel;    bv = b.poolLabel;    break
+        case 'poolId':       av = a.poolId;       bv = b.poolId;       break
+        case 'poolName':     av = getPoolName(a); bv = getPoolName(b); break
         case 'memberBalance':av = a.memberBalance;bv = b.memberBalance;break
         case 'reinvested':   av = a.reinvested;   bv = b.reinvested;   break
         case 'reward':       av = a.reward;       bv = b.reward;       break
         case 'accumulated':  av = a.accumulated;  bv = b.accumulated;  break
         case 'apy':          av = a.apy;          bv = b.apy;          break
+        case 'rollingApy':   av = a.rollingApy ?? -1; bv = b.rollingApy ?? -1; break
         default:             av = a.era;          bv = b.era;
       }
       if (typeof av === 'bigint' && typeof bv === 'bigint') return av < bv ? -sortDir : av > bv ? sortDir : 0
@@ -518,7 +693,7 @@ function RewardTableV2({ results, onFilter }) {
 
       {/* Table */}
       <div className="overflow-x-auto border border-border rounded-lg">
-        <table className="w-full border-collapse text-xs font-mono">
+        <table className="border-collapse text-xs font-mono w-max">
           <thead className="sticky top-0 z-10">
             <tr>
               {TABLE_COLS.map(col => {
@@ -527,10 +702,21 @@ function RewardTableV2({ results, onFilter }) {
                   <th key={col.key} onClick={() => col.sortable && handleSort(col.key)}
                     className={`bg-surface border-b border-border px-3 py-2 font-bold tracking-widest
                                 uppercase select-none whitespace-nowrap transition-colors text-[calc(1em*0.79)]
+                                relative group
                                 ${col.align === 'right' ? 'text-right' : 'text-left'}
                                 ${col.sortable ? 'cursor-pointer' : ''}
                                 ${isSorted ? 'text-cyan' : 'text-dim hover:text-cyan'}`}>
                     {col.label}{isSorted && (sortDir === 1 ? ' ↑' : ' ↓')}
+                    {col.tooltip && (
+                      <div className={`pointer-events-none absolute z-50 top-full mt-1 w-56 p-2.5
+                                       rounded-lg border border-rim bg-ink shadow-xl shadow-black/60
+                                       text-[10px] font-normal normal-case tracking-normal leading-relaxed text-text-secondary
+                                       whitespace-normal break-words text-left
+                                       opacity-0 group-hover:opacity-100 transition-opacity duration-150
+                                       ${col.align === 'right' ? 'right-0' : 'left-0'}`}>
+                        {col.tooltip}
+                      </div>
+                    )}
                   </th>
                 )
               })}
@@ -543,17 +729,24 @@ function RewardTableV2({ results, onFilter }) {
               <tr key={`${r.era}-${r.poolId}`} className={`border-b border-border/40 hover:bg-surface/50 transition-colors ${i % 2 ? 'bg-surface/20' : ''}`}>
                 <td className="px-3 py-1.5 text-cyan font-bold">{r.era}</td>
                 <td className="px-3 py-1.5 text-dim whitespace-nowrap">{fmtDate(r.eraStartDateUtc)}</td>
-                <td className="px-3 py-1.5 text-text max-w-[150px] truncate" title={r.poolLabel}>{r.poolLabel}</td>
+                <td className="px-3 py-1.5 text-text whitespace-nowrap font-semibold">#{r.poolId}</td>
+                <td className="px-3 py-1.5 text-text min-w-[180px]" title={getPoolName(r)}>{getPoolName(r)}</td>
                 <td className="px-3 py-1.5 text-right text-text">{fmtEnj(r.memberBalance)}</td>
                 <td className="px-3 py-1.5 text-right text-text">{fmtEnj(r.reinvested)}</td>
                 <td className="px-3 py-1.5 text-right text-success font-semibold">{fmtEnj(r.reward)}</td>
                 <td className="px-3 py-1.5 text-right text-cyan">{fmtEnj(r.accumulated)}</td>
-                <td className="px-3 py-1.5 text-right text-primary">{fmtApy(r.apy)}</td>
+                <td className="px-3 py-1.5 text-right text-violet-400">{fmtApy(r.apy)}</td>
+                <td className="px-3 py-1.5 text-right text-violet-300">{fmtApy(r.rollingApy)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {/* APY footnote */}
+      <p className="text-[0.6rem] text-dim font-mono mt-1.5">
+        * APY: per-era estimate — (1 + reinvested÷poolSupply)^365 − 1. APY 15d: 15-era rolling window, same formula compounded. Actual returns vary with era length and pool fees.
+      </p>
 
       {/* Pagination */}
       {filtered.length > pageSize && (
@@ -600,7 +793,7 @@ function RewardSummary({ results }) {
 
   const stats = [
     { label: 'Total Reward',  value: `${fmtEnj(totalReward)} ENJ`, accent: 'text-success' },
-    { label: 'Avg APY',       value: fmtApy(avgApy),               accent: 'text-primary' },
+    { label: 'Avg APY',       value: fmtApy(avgApy),               accent: 'text-violet-400' },
     { label: 'Era Range',     value: `${eraMin} – ${eraMax}`,      accent: 'text-text' },
     { label: 'Eras with Reward', value: eraCount,                  accent: 'text-cyan' },
     { label: 'Pools',         value: poolCount,                    accent: 'text-text' },
@@ -764,7 +957,6 @@ function RewardImportPanel({ onImport }) {
     if (!decPwd) { showAlert('err', 'Enter the decryption password.'); return }
     setIsPending(true)
     try {
-      const { aesDecrypt } = await import('../utils/balanceExport.js')
       const plain = await aesDecrypt(encPending.text, decPwd)
       const { results } = parseRewardImport(plain, 'json')
       onImport(results)
@@ -831,11 +1023,10 @@ function RewardImportPanel({ onImport }) {
 
 // ── Main component ──────────────────────────────────────────────────────────
 export default function RewardHistoryViewer() {
-  const { status, results, logs, progress, csvCount, errorMsg, run, stop, reset } = useRewardHistory()
+  const { status, results, logs, progress, csvCount, errorMsg, run, stop, reset, log } = useRewardHistory()
 
   const [tab,       setTab]      = useState('compute')  // 'compute' | 'import'
   const [address,   setAddress]  = useState('')
-  const [addrError, setAddrError]= useState('')
 
   // Era range mode
   const [rangeMode,   setRangeMode]   = useState('era')    // 'era' | 'date'
@@ -844,8 +1035,6 @@ export default function RewardHistoryViewer() {
   const [startDate,   setStartDate]   = useState('')
   const [endDate,     setEndDate]     = useState('')
   const [activePreset,setActivePreset]= useState(null)
-  const [eraError,    setEraError]    = useState('')
-  const [dateError,   setDateError]   = useState('')
 
   // Imported results (separate from computed)
   const [importedResults, setImportedResults] = useState(null)
@@ -855,6 +1044,64 @@ export default function RewardHistoryViewer() {
 
   // Filtered rows (from table, drives chart + summary)
   const [filteredRows, setFilteredRows] = useState([])
+
+  // Log drawer expanded state — used to push content above the fixed overlay
+  const [logExpanded, setLogExpanded] = useState(false)
+
+  // Live chain info — fetched from archive at mount
+  const ARCHIVE_WSS = 'wss://archive.relay.blockchain.enjin.io'
+  const [chainInfo, setChainInfo] = useState({ era: null, block: null, timestamp: null, loading: false })
+  useEffect(() => {
+    let cancelled = false
+    setChainInfo({ era: null, block: null, timestamp: null, loading: true })
+    log('info', `Fetching chain info from ${ARCHIVE_WSS}…`)
+    fetchLiveChainInfo(ARCHIVE_WSS)
+      .then(info => {
+        if (!cancelled) {
+          setChainInfo({ ...info, loading: false })
+          log('info', `Chain info: era=${info.era != null ? info.era.toLocaleString() : '—'}, block=${info.block != null ? info.block.toLocaleString() : '—'}`)
+        }
+      })
+      .catch(err => {
+        if (!cancelled) {
+          setChainInfo({ era: null, block: null, timestamp: null, loading: false })
+          log('warn', `Chain info fetch failed: ${err?.message ?? 'unknown error'}`)
+        }
+      })
+    return () => { cancelled = true }
+  }, [log])
+
+  // Scroll to top on mount
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }) }, [])
+
+  // Real-time validation (computed, no state)
+  const addrErr = (() => {
+    const t = address.trim()
+    if (!t) return ''
+    if (!t.startsWith('en')) return 'Relaychain addresses start with "en". Please enter a valid Relaychain address.'
+    return ''
+  })()
+
+  const eraValidErr = (() => {
+    if (rangeMode !== 'era') return ''
+    const s = parseInt(startEra, 10), e = parseInt(endEra, 10)
+    const cur = chainInfo.era
+    if (startEra && (isNaN(s) || s < 1)) return 'Start era must be ≥ 1.'
+    if (endEra   && (isNaN(e) || e < 1)) return 'End era must be ≥ 1.'
+    if (startEra && cur && !isNaN(s) && s > cur) return `Era ${s} is in the future (current era: ${cur}).`
+    if (endEra   && cur && !isNaN(e) && e > cur) return `Era ${e} is in the future (current era: ${cur}).`
+    if (startEra && endEra && !isNaN(s) && !isNaN(e) && s > e) return 'Start era must be ≤ end era.'
+    return ''
+  })()
+
+  const dateValidErr = (() => {
+    if (rangeMode !== 'date') return ''
+    const today = toDateInput(new Date())
+    if (startDate && startDate > today) return 'Start date cannot be in the future.'
+    if (endDate   && endDate   > today) return 'End date cannot be in the future.'
+    if (startDate && endDate && startDate > endDate) return 'Start date must be ≤ end date.'
+    return ''
+  })()
 
   const isLoading = status === RH_STATUS.LOADING
   const isDone    = status === RH_STATUS.DONE
@@ -877,46 +1124,19 @@ export default function RewardHistoryViewer() {
     setFilteredRows(activeResults)
   }, [activeResults])
 
-  // ── Validation ──────────────────────────────────────────────────────────
-  function validate() {
-    let ok = true
-    const trimAddr = address.trim()
-    if (!trimAddr.startsWith('en')) {
-      setAddrError('Enjin Relaychain addresses start with "en".')
-      ok = false
-    } else {
-      setAddrError('')
-    }
-    if (rangeMode === 'era') {
-      const s = parseInt(startEra, 10), e = parseInt(endEra, 10)
-      if (isNaN(s) || isNaN(e) || s < 1 || e < s) {
-        setEraError('Enter valid start and end era numbers (start ≤ end).')
-        ok = false
-      } else { setEraError('') }
-    } else {
-      if (!startDate || !endDate) {
-        setDateError('Select start and end dates.')
-        ok = false
-      } else { setDateError('') }
-    }
-    return ok
-  }
-
   // ── Handle run ──────────────────────────────────────────────────────────
   const handleRun = useCallback(async () => {
-    if (!validate()) return
     setImportedResults(null)
-    const ARCHIVE = 'wss://archive.relay.blockchain.enjin.io'
     if (rangeMode === 'era') {
-      run({ address: address.trim(), startEra: parseInt(startEra,10), endEra: parseInt(endEra,10), endpoint: ARCHIVE, includeHistory })
+      run({ address: address.trim(), startEra: parseInt(startEra,10), endEra: parseInt(endEra,10), endpoint: ARCHIVE_WSS, includeHistory })
     } else {
       // Convert dates to era range via CSV
       try {
         const eraData = await loadEraDataRH()
         const { startEra: s, endEra: e } = findErasForDateRange(eraData, startDate, endDate)
-        run({ address: address.trim(), startEra: s, endEra: e, endpoint: ARCHIVE, includeHistory })
+        run({ address: address.trim(), startEra: s, endEra: e, endpoint: ARCHIVE_WSS, includeHistory })
       } catch {
-        setDateError('Failed to load era reference CSV.')
+        // date era lookup failed — user will see dateValidErr
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -930,13 +1150,12 @@ export default function RewardHistoryViewer() {
   function handleImportResults(rows) {
     setImportedResults(rows)
     setFilteredRows(rows)
-    setTab('compute')  // show results on compute tab
   }
 
   const showResults = (isDone || isStopped || importedResults) && activeResults.length > 0
 
   return (
-    <div className="space-y-4 pb-24">
+    <div className={`space-y-4 transition-[padding] duration-200 ${logExpanded ? 'pb-[380px]' : 'pb-16'}`}>
 
       {/* ── Tabs ── */}
       <div className="card overflow-hidden">
@@ -961,13 +1180,12 @@ export default function RewardHistoryViewer() {
           <div role="tabpanel" className="p-4 sm:p-5 space-y-4">
             <div className="flex items-center gap-2">
               <TrendingUp size={15} className="text-primary flex-shrink-0" />
-              <h2 className="text-sm font-semibold text-text">Reward History Viewer</h2>
-              <span className="inline-flex items-center gap-1 ml-1 px-2 py-0.5 rounded-full
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
                                bg-cyan/10 border border-cyan/25 text-[10px] font-semibold tracking-widest uppercase text-cyan">
                 Relaychain
               </span>
               {csvCount > 0 && (
-                <span className="ml-auto text-xs text-muted font-mono">{csvCount} eras in CSV</span>
+                <span className="ml-1 text-xs text-muted font-mono">{csvCount} eras in CSV</span>
               )}
             </div>
 
@@ -976,7 +1194,7 @@ export default function RewardHistoryViewer() {
               using archive-node RPC. Subscan is only used when
               <span className="text-text/70"> Include past pool interactions </span>
               is enabled.
-              See <code className="text-primary">docs/reward-history-computation.md</code> for formula details.
+              See <code className="text-violet-400">docs/reward-history-computation.md</code> for formula details.
             </p>
 
             {/* Tax information note */}
@@ -1000,27 +1218,44 @@ export default function RewardHistoryViewer() {
               </div>
             </div>
 
+            {/* ── Live chain snapshot ──────────────────────────────── */}
+            <div className="flex flex-wrap gap-x-5 gap-y-1 px-3 py-2 rounded-lg bg-surface border border-border text-[11px] font-mono">
+              <span className="text-dim">Era:&nbsp;
+                <span className="text-cyan">{chainInfo.loading ? '…' : (chainInfo.era != null ? chainInfo.era.toLocaleString() : '—')}</span>
+              </span>
+              <span className="text-dim">Block:&nbsp;
+                <span className="text-text">{chainInfo.loading ? '…' : (chainInfo.block != null ? chainInfo.block.toLocaleString() : '—')}</span>
+              </span>
+              <span className="text-dim">Time:&nbsp;
+                <span className="text-text">{chainInfo.loading ? '…' : (chainInfo.timestamp != null ? new Date(chainInfo.timestamp).toUTCString().replace(' GMT', ' UTC') : '—')}</span>
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
+              <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">RPC Configuration</h3>
+            </div>
+
             {/* Address */}
             <div className="space-y-1.5">
               <label className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">Wallet Address</label>
               <input type="text" value={address}
-                onChange={e => { setAddress(e.target.value); setAddrError('') }}
+                onChange={e => setAddress(e.target.value)}
                 placeholder="en…" disabled={isLoading}
                 className={`w-full bg-surface border rounded-lg px-3 py-2 text-sm font-mono text-text placeholder:text-muted
                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 transition-colors
-                  ${addrError ? 'border-danger/50' : 'border-border'}`}
+                  ${addrErr ? 'border-danger/50' : 'border-border'}`}
                 maxLength={60} />
-              {addrError && (
+              {addrErr && (
                 <p className="flex items-center gap-1 text-xs text-danger">
-                  <AlertTriangle size={11} className="flex-shrink-0" />{addrError}
+                  <AlertTriangle size={11} className="flex-shrink-0" />{addrErr}
                 </p>
               )}
             </div>
 
             {/* Pool scope toggle */}
             <div className="p-3 rounded-lg bg-surface/40 border border-border space-y-1">
-              <div className="flex items-center justify-between gap-2.5">
-                <span className="text-xs font-medium text-text">Include past pool interactions</span>
+              <div className="flex items-center gap-2.5">
                 <button
                   type="button"
                   role="switch"
@@ -1034,6 +1269,7 @@ export default function RewardHistoryViewer() {
                   <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform
                     ${includeHistory ? 'translate-x-5' : 'translate-x-0'}`} />
                 </button>
+                <span className="text-xs font-medium text-text">Include past pool interactions</span>
               </div>
               <p className="text-[11px] text-dim leading-relaxed">
                 When enabled, also queries Subscan for pools this address
@@ -1048,12 +1284,12 @@ export default function RewardHistoryViewer() {
               <div className="flex rounded-lg border border-border overflow-hidden">
                 <button type="button" onClick={() => setRangeMode('era')} disabled={isLoading}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-r border-border transition-colors
-                    ${rangeMode==='era'?'bg-primary/20 text-primary':'text-dim hover:text-text'}`}>
+                    ${rangeMode==='era'?'bg-primary/20 text-text':'text-dim hover:text-text'}`}>
                   Era Range
                 </button>
                 <button type="button" onClick={() => setRangeMode('date')} disabled={isLoading}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors
-                    ${rangeMode==='date'?'bg-primary/20 text-primary':'text-dim hover:text-text'}`}>
+                    ${rangeMode==='date'?'bg-primary/20 text-text':'text-dim hover:text-text'}`}>
                   <Calendar size={12} /> Date Range
                 </button>
               </div>
@@ -1064,19 +1300,19 @@ export default function RewardHistoryViewer() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">Start Era</label>
-                  <input type="number" min="1" step="1" value={startEra}
-                    onChange={e => { setStartEra(e.target.value); setEraError('') }}
+                  <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
+                    onChange={e => setStartEra(e.target.value)}
                     placeholder="e.g. 980" disabled={isLoading}
                     className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">End Era</label>
-                  <input type="number" min="1" step="1" value={endEra}
-                    onChange={e => { setEndEra(e.target.value); setEraError('') }}
+                  <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
+                    onChange={e => setEndEra(e.target.value)}
                     placeholder="e.g. 1000" disabled={isLoading}
                     className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
                 </div>
-                {eraError && <p className="col-span-2 flex items-center gap-1 text-xs text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{eraError}</p>}
+                {eraValidErr && <p className="col-span-2 flex items-center gap-1 text-xs text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{eraValidErr}</p>}
               </div>
             )}
 
@@ -1093,8 +1329,8 @@ export default function RewardHistoryViewer() {
                         disabled={isLoading}
                         className={`px-2.5 py-1 rounded-md border text-[11px] transition-colors disabled:opacity-50
                           ${activePreset===label
-                            ?'bg-primary/20 border-primary/60 text-primary font-semibold'
-                            :'border-border text-dim hover:border-primary/50 hover:text-primary'}`}>
+                            ?'bg-primary/20 border-primary/60 text-text font-semibold'
+                            :'border-border text-dim hover:border-primary/50 hover:text-text'}`}>
                         {label} ago
                       </button>
                     ))}
@@ -1103,20 +1339,20 @@ export default function RewardHistoryViewer() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">Start Date</label>
-                    <input type="date" max={toDateInput(new Date())} value={startDate}
-                      onChange={e => { setStartDate(e.target.value); setActivePreset(null); setDateError('') }}
+                    <input type="date" placeholder="2026-03-01" max={toDateInput(new Date())} value={startDate}
+                      onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
-                      className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm font-mono text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
+                      className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm font-mono text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 [color-scheme:dark]" />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[0.6rem] font-bold tracking-widest uppercase text-dim">End Date</label>
-                    <input type="date" max={toDateInput(new Date())} value={endDate}
-                      onChange={e => { setEndDate(e.target.value); setActivePreset(null); setDateError('') }}
+                    <input type="date" placeholder="2026-03-04" max={toDateInput(new Date())} value={endDate}
+                      onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
-                      className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm font-mono text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
+                      className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm font-mono text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 [color-scheme:dark]" />
                   </div>
                 </div>
-                {dateError && <p className="flex items-center gap-1 text-xs text-danger"><AlertTriangle size={11} className="flex-shrink-0"/>{dateError}</p>}
+                {dateValidErr && <p className="flex items-center gap-1 text-xs text-danger"><AlertTriangle size={11} className="flex-shrink-0"/>{dateValidErr}</p>}
               </div>
             )}
 
@@ -1124,7 +1360,7 @@ export default function RewardHistoryViewer() {
             <div className="flex flex-wrap gap-2">
               {!isLoading ? (
                 <button onClick={handleRun} className="btn-primary gap-1.5 px-5"
-                  disabled={!address.trim()}>
+                  disabled={!address.trim() || !!addrErr || (rangeMode === 'era' ? (!startEra || !endEra || !!eraValidErr) : (!startDate || !endDate || !!dateValidErr))}>
                   <Play size={14} />Compute Rewards
                 </button>
               ) : (
@@ -1213,18 +1449,22 @@ export default function RewardHistoryViewer() {
           <RewardSummary results={filteredRows.length ? filteredRows : activeResults} />
           <RewardTableV2 results={activeResults} onFilter={setFilteredRows} />
           <RewardChart data={filteredRows} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <PoolBondedPieChart data={filteredRows} />
+            <PoolRewardPieChart data={filteredRows} />
+          </div>
           {!importedResults && <RewardExportPanel results={activeResults} address={address} />}
           {importedResults && (
             <div className="flex items-center gap-2 text-xs text-dim px-1">
               <span>Showing imported data.</span>
-              <button onClick={() => setImportedResults(null)} className="text-primary hover:underline">Clear import</button>
+              <button onClick={() => setImportedResults(null)} className="text-violet-400 hover:underline">Clear import</button>
             </div>
           )}
         </>
       )}
 
       {/* ── Sticky terminal log — always visible ── */}
-      <TerminalLog logs={logs} sticky />
+      <TerminalLog logs={logs} sticky onExpandChange={setLogExpanded} />
     </div>
   )
 }

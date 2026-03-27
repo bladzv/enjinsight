@@ -1,9 +1,10 @@
 import { Activity, ChevronLeft, Github } from 'lucide-react'
 
 const VIEW_LABELS = {
-  era:     'Era Block Explorer',
-  staking: 'Staking Rewards Cadence',
-  balance: 'Historical Balance Viewer',
+  era:            'Era Block Explorer',
+  staking:        'Staking Rewards Cadence',
+  balance:        'Historical Balance Viewer',
+  'reward-history': 'Reward History Viewer',
 }
 
 export default function AppHeader({ status, view, onBack }) {

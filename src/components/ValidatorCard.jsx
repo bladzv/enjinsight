@@ -187,7 +187,7 @@ function TabButton({ active, onClick, icon, label, badge, badgeVariant }) {
     <button
       onClick={onClick}
       className={`flex items-center px-4 py-2.5 text-xs font-medium border-b-2 transition-colors w-full
-        ${active ? 'border-primary text-primary' : 'border-transparent text-dim hover:text-text'}`}
+        ${active ? 'border-primary text-text' : 'border-transparent text-dim hover:text-text'}`}
       aria-selected={active}
     >
       <span className="flex items-center gap-1.5 min-w-0">

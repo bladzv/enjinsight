@@ -55,7 +55,7 @@ export default function LandingPage({ onNavigate }) {
       <div className="text-center mb-10 px-2">
         <div className="inline-flex items-center gap-2 px-3 py-1 mb-5 rounded-full
                         bg-primary/10 border border-primary/25 text-xs font-semibold
-                        tracking-widest uppercase text-primary">
+                        tracking-widest uppercase text-violet-400">
           Enjin Blockchain
         </div>
         <h2 className="text-3xl sm:text-4xl font-bold text-text mb-4 leading-tight">

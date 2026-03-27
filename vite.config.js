@@ -16,12 +16,17 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: false, // never expose source maps in production
+      // @polkadot/api + related packages ~985 kB minified — unavoidable given the library size
+      chunkSizeWarningLimit: 1050,
       rollupOptions: {
         output: {
           manualChunks: {
-            vendor: ['react', 'react-dom'],
-            icons: ['lucide-react'],
-            chart: ['chart.js'],
+            vendor:   ['react', 'react-dom'],
+            icons:    ['lucide-react'],
+            chart:    ['chart.js'],
+            // Split heavy polkadot packages into their own chunk to keep
+            // the main app bundle below 500 kB.
+            polkadot: ['@polkadot/api', '@polkadot/util-crypto', '@polkadot/util', '@polkadot/networks'],
           },
         },
       },
