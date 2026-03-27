@@ -72,27 +72,27 @@ export default function BalanceTable({ records, isLoading = false }) {
   }
 
   return (
-    <div className="card p-4 animate-fade-in">
+    <div className="bg-surface rounded-xl p-4 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <div className="flex items-center gap-2">
           <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-          <h3 className="text-xs font-bold tracking-widest uppercase text-cyan">Balance History</h3>
+          <h3 className="text-xs font-bold tracking-widest uppercase text-cyan font-headline">Balance History</h3>
           {isLoading && (
             <span className="text-[10px] text-cyan animate-pulse font-mono">Populating…</span>
           )}
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="font-mono text-xs text-dim">
+          <span className="font-mono text-xs text-text-secondary">
             {records.length.toLocaleString('en')} record{records.length !== 1 ? 's' : ''}
           </span>
           {/* Page size selector */}
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-dim">Per page:</span>
+            <span className="text-[11px] text-text-secondary">Per page:</span>
             <select
               value={pageSize}
               onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
-              className="bg-surface border border-border rounded px-1.5 py-0.5 text-xs text-text focus:outline-none focus:border-primary/50"
+              className="bg-card rounded px-1.5 py-0.5 text-xs text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
               aria-label="Rows per page"
             >
               {PAGE_SIZE_OPTIONS.map(n => (
@@ -103,25 +103,25 @@ export default function BalanceTable({ records, isLoading = false }) {
           {/* Table zoom */}
           <div className="flex items-center gap-1" title="Table text size">
             <button
-              className="w-6 h-6 rounded border border-border bg-surface text-dim text-sm font-bold
-                         flex items-center justify-center hover:border-cyan hover:text-cyan transition-colors"
+              className="w-6 h-6 rounded bg-card text-text-secondary text-sm font-bold
+                         flex items-center justify-center hover:text-cyan transition-colors"
               onClick={() => setZoomIdx(i => Math.max(0, i - 1))}
               aria-label="Zoom out table"
               disabled={zoomIdx === 0}
             >−</button>
-            <span className="font-mono text-[11px] text-dim w-9 text-center">
+            <span className="font-mono text-[11px] text-text-secondary w-9 text-center">
               {['S', 'M', 'L'][zoomIdx]}
             </span>
             <button
-              className="w-6 h-6 rounded border border-border bg-surface text-dim text-sm font-bold
-                         flex items-center justify-center hover:border-cyan hover:text-cyan transition-colors"
+              className="w-6 h-6 rounded bg-card text-text-secondary text-sm font-bold
+                         flex items-center justify-center hover:text-cyan transition-colors"
               onClick={() => setZoomIdx(i => Math.min(ZOOM_SIZES.length - 1, i + 1))}
               aria-label="Zoom in table"
               disabled={zoomIdx === ZOOM_SIZES.length - 1}
             >+</button>
             <button
-              className="w-6 h-6 rounded border border-border bg-surface text-[10px] text-dim font-bold
-                         flex items-center justify-center hover:border-cyan hover:text-cyan transition-colors"
+              className="w-6 h-6 rounded bg-card text-[10px] text-text-secondary font-bold
+                         flex items-center justify-center hover:text-cyan transition-colors"
               onClick={() => setZoomIdx(DEFAULT_ZOOM)}
               aria-label="Reset table zoom"
             >⊙</button>
@@ -130,7 +130,7 @@ export default function BalanceTable({ records, isLoading = false }) {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto border border-border rounded-lg">
+      <div className="overflow-x-auto rounded-xl">
         <table className={`w-full border-collapse ${textSize}`}>
           <thead className="sticky top-0 z-10">
             <tr>
@@ -140,10 +140,10 @@ export default function BalanceTable({ records, isLoading = false }) {
                   <th
                     key={col.key}
                     onClick={() => handleSort(col.key)}
-                    className={`bg-surface border-b border-border px-3 py-2 font-bold tracking-widest
+                    className={`bg-surface-high px-3 py-2 font-bold tracking-widest
                                 uppercase cursor-pointer select-none whitespace-nowrap transition-colors
                                 text-[calc(1em*0.79)] ${col.align === 'right' ? 'text-right' : 'text-left'}
-                                ${isSorted ? 'text-cyan' : 'text-dim hover:text-cyan'}`}
+                                ${isSorted ? 'text-cyan' : 'text-muted hover:text-cyan'}`}
                     aria-sort={isSorted ? (sortDir === 1 ? 'ascending' : 'descending') : 'none'}
                   >
                     {colLabel(col)}
@@ -163,11 +163,11 @@ export default function BalanceTable({ records, isLoading = false }) {
             ) : pageSlice.map((d, idx) => {
               const safeHash = isValidBlockHash(d.blockHash) ? d.blockHash : ''
               return (
-                <tr key={`${d.block}-${idx}`} className="hover:bg-surface/50 transition-colors">
-                  <td className="px-3 py-2 border-b border-border/40 font-semibold text-text whitespace-nowrap font-mono">
+                <tr key={`${d.block}-${idx}`} className="hover:bg-surface-bright transition-colors">
+                  <td className="px-3 py-2 font-semibold text-text whitespace-nowrap font-mono">
                     {d.block.toLocaleString('en')}
                   </td>
-                  <td className="px-3 py-2 border-b border-border/40 whitespace-nowrap">
+                  <td className="px-3 py-2 whitespace-nowrap">
                     {safeHash
                       ? (
                         <span
@@ -180,16 +180,16 @@ export default function BalanceTable({ records, isLoading = false }) {
                       : <span className="text-muted">—</span>
                     }
                   </td>
-                  <td className="px-3 py-2 border-b border-border/40 text-cyan font-mono text-right whitespace-nowrap">
+                  <td className="px-3 py-2 text-cyan font-mono text-right whitespace-nowrap">
                     {fmtENJ(d.free)}
                   </td>
-                  <td className="px-3 py-2 border-b border-border/40 text-[#ffc400] font-mono text-right whitespace-nowrap">
+                  <td className="px-3 py-2 text-[#ffc400] font-mono text-right whitespace-nowrap">
                     {fmtENJ(d.reserved)}
                   </td>
-                  <td className="px-3 py-2 border-b border-border/40 text-[#ff7a35] font-mono text-right whitespace-nowrap">
+                  <td className="px-3 py-2 text-[#ff7a35] font-mono text-right whitespace-nowrap">
                     {fmtENJ(d.miscFrozen)}
                   </td>
-                  <td className={`px-3 py-2 border-b border-border/40 font-mono whitespace-nowrap
+                  <td className={`px-3 py-2 font-mono whitespace-nowrap
                     ${d.newFormat ? 'text-center text-muted' : 'text-right text-[#ff2d78]'}`}>
                     {d.newFormat ? 'N/A' : fmtENJ(d.feeFrozen)}
                   </td>
@@ -203,7 +203,7 @@ export default function BalanceTable({ records, isLoading = false }) {
       {/* Pagination */}
       {records.length > pageSize && (
         <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
-          <span className="text-xs text-dim font-mono">
+          <span className="text-xs text-text-secondary font-mono">
             Page {safePage} of {totalPages}
             {' · '}
             Rows {((safePage - 1) * pageSize + 1).toLocaleString('en')}–{Math.min(safePage * pageSize, sorted.length).toLocaleString('en')}
@@ -212,15 +212,15 @@ export default function BalanceTable({ records, isLoading = false }) {
             <button
               onClick={() => setPage(1)}
               disabled={safePage === 1}
-              className="px-2 py-1 rounded border border-border bg-surface text-xs text-dim
-                         hover:text-cyan hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="px-2 py-1 rounded bg-card text-xs text-text-secondary
+                         hover:text-cyan disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               aria-label="First page"
             >«</button>
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={safePage === 1}
-              className="px-2 py-1 rounded border border-border bg-surface text-xs text-dim
-                         hover:text-cyan hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="px-2 py-1 rounded bg-card text-xs text-text-secondary
+                         hover:text-cyan disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               aria-label="Previous page"
             >
               <ChevronLeft size={12} />
@@ -243,8 +243,8 @@ export default function BalanceTable({ records, isLoading = false }) {
                   onClick={() => setPage(p)}
                   className={`w-7 h-7 rounded text-xs font-mono transition-colors
                     ${p === safePage
-                      ? 'bg-primary text-white border border-primary'
-                      : 'border border-border bg-surface text-dim hover:text-cyan hover:border-primary/40'}`}
+                      ? 'bg-primary text-white'
+                      : 'bg-card text-text-secondary hover:text-cyan'}`}
                   aria-label={`Page ${p}`}
                   aria-current={p === safePage ? 'page' : undefined}
                 >
@@ -255,8 +255,8 @@ export default function BalanceTable({ records, isLoading = false }) {
             <button
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               disabled={safePage === totalPages}
-              className="px-2 py-1 rounded border border-border bg-surface text-xs text-dim
-                         hover:text-cyan hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="px-2 py-1 rounded bg-card text-xs text-text-secondary
+                         hover:text-cyan disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               aria-label="Next page"
             >
               <ChevronRight size={12} />
@@ -264,8 +264,8 @@ export default function BalanceTable({ records, isLoading = false }) {
             <button
               onClick={() => setPage(totalPages)}
               disabled={safePage === totalPages}
-              className="px-2 py-1 rounded border border-border bg-surface text-xs text-dim
-                         hover:text-cyan hover:border-primary/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="px-2 py-1 rounded bg-card text-xs text-text-secondary
+                         hover:text-cyan disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               aria-label="Last page"
             >»</button>
           </div>

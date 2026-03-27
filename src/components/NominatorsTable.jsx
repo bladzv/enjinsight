@@ -39,7 +39,7 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
       )}
       <div className="sm:hidden space-y-2">
         {pageItems.map((n, i) => (
-          <article key={`m-${n.address || i}`} className="rounded-lg border border-border bg-surface/30 p-3">
+          <article key={`m-${n.address || i}`} className="rounded-xl bg-card p-3">
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted">#{page * pageSize + i + 1}</span>
               <span className="font-mono text-text-secondary text-xs truncate">{truncateAddress(n.address)}</span>
@@ -54,28 +54,28 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
                 }
               </button>
             </div>
-            <div className="mt-2 text-xs text-dim">
+            <div className="mt-2 text-xs text-text-secondary">
               <p>Display: <span className="text-text-secondary">{n.display || '—'}</span></p>
               <p>Bonded: <span className="font-mono text-text">{formatENJ(n.bonded, 2)}</span></p>
             </div>
           </article>
         ))}
       </div>
-      <div className="hidden sm:block scroll-x rounded-lg border border-border">
+      <div className="hidden sm:block scroll-x rounded-xl">
         <table className="w-full text-xs min-w-[480px]">
           <thead>
-            <tr className="bg-surface border-b border-border">
-              <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim w-8">#</th>
-              <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim">Address</th>
-              <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim">Display Name</th>
-              <th className="sticky top-0 bg-surface text-right px-3 py-2.5 font-semibold text-dim">Bonded</th>
+            <tr className="bg-surface-high">
+              <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-8">#</th>
+              <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Address</th>
+              <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Display Name</th>
+              <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Bonded</th>
             </tr>
           </thead>
           <tbody>
             {pageItems.map((n, i) => (
               <tr
                 key={n.address || i}
-                className="border-b border-border/50 hover:bg-surface/50 transition-colors"
+                className="hover:bg-surface-bright transition-colors"
               >
                 <td className="px-3 py-2.5 text-muted">{page * pageSize + i + 1}</td>
                 <td className="px-3 py-2.5">
@@ -109,13 +109,13 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
 
       {/* Pagination */}
       {pages > 1 && (
-        <div className="flex items-center justify-between mt-3 text-xs text-dim">
+        <div className="flex items-center justify-between mt-3 text-xs text-text-secondary">
           <div className="flex items-center gap-2">
             <span>{nominators.length} nominators</span>
             <select
               value={pageSize}
               onChange={e => { setPageSize(Number(e.target.value)); setPage(0) }}
-              className="bg-surface border border-border rounded px-1.5 py-0.5 text-xs text-text cursor-pointer"
+              className="bg-card rounded px-1.5 py-0.5 text-xs text-text cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
               aria-label="Rows per page"
             >
               {[5, 10, 20, 50].map(s => (

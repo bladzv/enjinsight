@@ -30,13 +30,13 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
   return (
     <div>
       {/* Pagination controls */}
-      <div className="flex items-center justify-between mb-2 text-xs text-dim">
+      <div className="flex items-center justify-between mb-2 text-xs text-text-secondary">
         <div className="flex items-center gap-1">
           <span>Per page:</span>
           <select
             value={pageSize}
             onChange={e => { setPageSize(Number(e.target.value)); setPage(0) }}
-            className="text-xs bg-surface border border-border rounded px-2 py-1"
+            className="text-xs bg-card rounded px-2 py-1 text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
           >
             {[5, 10, 20].map(n => <option key={n} value={n}>{n}</option>)}
           </select>
@@ -66,7 +66,7 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
 
       <div className="sm:hidden space-y-2">
         {pageItems.map((v, i) => (
-          <article key={`m-${v.address || i}`} className="rounded-lg border border-border bg-surface/30 p-3">
+          <article key={`m-${v.address || i}`} className="rounded-xl bg-card p-3">
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted">#{page * pageSize + i + 1}</span>
               <span className="font-mono text-text-secondary text-xs truncate">{truncateAddress(v.address)}</span>
@@ -91,13 +91,13 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
               </a>
             </div>
             <div className="mt-2 flex items-center justify-between gap-2">
-              <p className="text-xs text-dim truncate">{v.display || '—'}</p>
+              <p className="text-xs text-text-secondary truncate">{v.display || '—'}</p>
               {v.isActive
                 ? <span className="badge-active"><Shield size={10} />Active</span>
                 : <span className="badge-waiting"><Clock size={10} />Inactive</span>
               }
             </div>
-            <p className="mt-2 text-xs text-dim">
+            <p className="mt-2 text-xs text-text-secondary">
               Bonded: <span className="font-mono text-text">{formatENJ(v.bonded, 2)}</span>
             </p>
             {(v.fetchStatus === 'failed' || v.fetchStatus === 'error') && onRetry && (
@@ -112,22 +112,22 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
           </article>
         ))}
       </div>
-      <div className="hidden sm:block scroll-x rounded-lg border border-border">
+      <div className="hidden sm:block scroll-x rounded-xl">
         <table className="w-full text-xs min-w-[480px]">
           <thead>
-            <tr className="bg-surface border-b border-border">
-              <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim w-8">#</th>
-              <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim">Address</th>
-              <th className="sticky top-0 bg-surface text-left px-3 py-2.5 font-semibold text-dim">Display Name</th>
-              <th className="sticky top-0 bg-surface text-right px-3 py-2.5 font-semibold text-dim hidden md:table-cell">Bonded</th>
-              <th className="sticky top-0 bg-surface text-center px-3 py-2.5 font-semibold text-dim">Status</th>
+            <tr className="bg-surface-high">
+              <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-8">#</th>
+              <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Address</th>
+              <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Display Name</th>
+              <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold hidden md:table-cell">Bonded</th>
+              <th className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Status</th>
             </tr>
           </thead>
           <tbody>
             {pageItems.map((v, i) => (
               <tr
                 key={v.address || i}
-                className="border-b border-border/50 hover:bg-surface/50 transition-colors"
+                className="hover:bg-surface-bright transition-colors"
               >
                 <td className="px-3 py-2.5 text-muted">{page * pageSize + i + 1}</td>
                 <td className="px-3 py-2.5">
@@ -159,7 +159,7 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
                 <td className="px-3 py-2.5 text-text-secondary">
                   <div className="space-y-0.5">
                     <span>{v.display || <span className="text-muted italic">—</span>}</span>
-                    <p className="text-[11px] text-dim md:hidden">
+                    <p className="text-[11px] text-text-secondary md:hidden">
                       Bonded: <span className="font-mono text-text">{formatENJ(v.bonded, 2)}</span>
                     </p>
                   </div>
@@ -175,7 +175,7 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
                         : <span className="badge-waiting"><Clock size={10} />Inactive</span>
                       }
                       {v.fetchStatus === 'queued' && (
-                        <span className="text-xs px-2 py-0.5 rounded bg-border text-dim">Queued</span>
+                        <span className="text-xs px-2 py-0.5 rounded bg-surface-bright text-dim">Queued</span>
                       )}
                       {(v.fetchStatus === 'failed' || v.fetchStatus === 'error') && onRetry && (
                         <button

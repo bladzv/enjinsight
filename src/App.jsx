@@ -75,16 +75,12 @@ export default function App() {
   const validatorLatestEra = resolveLatestEra(validators)
 
   // Dynamically load Vercel Analytics React component if the package is installed.
-  // This lets the app run without the dependency during development; install
-  // `@vercel/analytics` (or the React integration) to enable page view tracking.
   const [AnalyticsComponent, setAnalyticsComponent] = useState(null)
   useEffect(() => {
     let mounted = true
     ;(async () => {
       try {
-        // use a variable for the path so Rollup doesn’t try to resolve it at build
         const path = '@vercel/analytics/react'
-        // Suppress Vite's dynamic-import analysis warning -- resolved at runtime if package installed
         const mod = await import(/* @vite-ignore */ path)
         if (mounted && mod && mod.Analytics) setAnalyticsComponent(() => mod.Analytics)
       } catch (err) {
@@ -93,8 +89,6 @@ export default function App() {
     })()
     return () => { mounted = false }
   }, [])
-
-  // Proxy configuration removed from UI; hooks retain a no-op `setProxy` for compatibility.
 
   async function handleRun(eraCount) {
     setLastEraCount(eraCount)
@@ -133,7 +127,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-dvh bg-ink bg-grid">
+    <div className="min-h-dvh bg-ink">
       <AppHeader status={status} view={view} onBack={handleBack} />
 
       {/* ── Era Block Explorer ────────────────────────────────────── */}
@@ -155,10 +149,10 @@ export default function App() {
 
       {/* ── Home / Landing ──────────────────────────────────────────── */}
       {view === 'home' && (
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 pb-16 sm:pb-20 relative">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 pb-16 sm:pb-20 relative">
           <LandingPage onNavigate={handleNavigate} />
-          <footer className="fixed inset-x-0 bottom-0 border-t border-border/40 bg-ink/95 backdrop-blur py-3 text-center text-xs text-muted z-50">
-            <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <footer className="fixed inset-x-0 bottom-0 bg-ink/95 backdrop-blur-xl py-3 text-center text-xs text-muted z-50">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6">
               EnjinSight | Read-only | No wallet required
             </div>
           </footer>
@@ -167,9 +161,9 @@ export default function App() {
 
       {/* ── Staking view ────────────────────────────────────────────── */}
       {view === 'staking' && (
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-20 space-y-4 sm:space-y-5">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-20 space-y-6">
 
-        {/* Mode selector tabs + scan controls (no gap between them) */}
+        {/* Mode selector tabs + scan controls */}
         <div className="space-y-0">
           <ModeSelector mode={mode} onModeChange={handleModeChange} disabled={isLoading} />
           <ControlPanel
@@ -181,19 +175,17 @@ export default function App() {
           />
         </div>
 
-        {/* Proxy setup removed from UI (use serverless proxy in production). */}
-
         {/* Scan progress */}
         {status !== 'idle' && phases.length > 0 && (
-          <section className="card w-full max-w-xl mx-auto p-3 sm:p-4" aria-live="polite" aria-label="Scan progress">
-            <div className="flex items-center justify-between gap-3 text-xs mb-1.5">
-              <p className="text-dim">{topLabel}</p>
+          <section className="bg-surface rounded-xl w-full max-w-xl mx-auto p-4" aria-live="polite" aria-label="Scan progress">
+            <div className="flex items-center justify-between gap-3 text-xs mb-2">
+              <p className="text-text-secondary">{topLabel}</p>
               <p className="font-mono text-text">
                 {activePhase?.completed ?? 0} / {activePhase?.total ?? 0} ({activePhasePct}%)
               </p>
             </div>
-            {/* Gradient progress bar — matches Era Block Explorer */}
-            <div className="h-2 rounded-full bg-surface overflow-hidden">
+            {/* Gradient progress bar */}
+            <div className="h-1.5 rounded-full bg-card overflow-hidden">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-primary-dim via-primary to-cyan transition-all duration-300"
                 style={{ width: `${activePhasePct}%` }}
@@ -206,14 +198,14 @@ export default function App() {
                   ? 'text-success'
                   : phase.status === 'in_progress'
                     ? 'text-cyan'
-                    : 'text-dim'
+                    : 'text-muted'
                 const statusLabel = phase.status === 'completed'
                   ? 'Done'
                   : phase.status === 'in_progress'
                     ? 'Running'
                     : 'Pending'
                 return (
-                  <div key={phase.key} className="w-full rounded-md border border-border bg-surface/40 px-2.5 py-1.5">
+                  <div key={phase.key} className="w-full rounded bg-card px-2.5 py-1.5">
                     <div className="flex items-center justify-between text-[11px] gap-3">
                       <p className={`font-medium ${statusClass}`}>Step {index}: {phase.label}</p>
                       <p className={`font-semibold ${statusClass}`}>{statusLabel}</p>
@@ -228,22 +220,21 @@ export default function App() {
         {/* ── Validator mode content ──────────────────────────────── */}
         {isValidatorMode && validators.length > 0 && (
           <section id="validators-panel" aria-labelledby="validators-heading">
-            <div className="flex items-center gap-2 mb-3">
-              <h2 id="validators-heading" className="text-base font-semibold text-text">
+            <div className="flex items-center gap-3 mb-4 border-l-4 border-primary pl-4">
+              <h2 id="validators-heading" className="text-lg font-bold font-headline text-text uppercase tracking-tight">
                 Validators
               </h2>
-              <span className="px-2 py-0.5 rounded-full text-xs bg-border text-dim font-semibold">
-                {validators.length}
+              <span className="text-xs text-muted font-mono">
+                {validators.length} total
               </span>
-              <span className="h-px flex-1 bg-border" />
               {isLoading && (
-                <span className="text-xs text-dim">
+                <span className="text-xs text-text-secondary ml-auto">
                   {validators.filter(v => v.fetchStatus === 'done').length} / {validators.length} loaded
                 </span>
               )}
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               {validators.map(v => (
                 <ValidatorCard
                   key={v.address}
@@ -267,22 +258,21 @@ export default function App() {
         {/* ── Pool mode content ───────────────────────────────────── */}
         {!isValidatorMode && pools.length > 0 && (
           <section id="pools-panel" aria-labelledby="pools-heading">
-            <div className="flex items-center gap-2 mb-3">
-              <h2 id="pools-heading" className="text-base font-semibold text-text">
+            <div className="flex items-center gap-3 mb-4 border-l-4 border-primary pl-4">
+              <h2 id="pools-heading" className="text-lg font-bold font-headline text-text uppercase tracking-tight">
                 Nomination Pools
               </h2>
-              <span className="px-2 py-0.5 rounded-full text-xs bg-border text-dim font-semibold">
-                {pools.length}
+              <span className="text-xs text-muted font-mono">
+                {pools.length} total
               </span>
-              <span className="h-px flex-1 bg-border" />
               {isLoading && (
-                <span className="text-xs text-dim">
+                <span className="text-xs text-text-secondary ml-auto">
                   {pools.filter(p => p.fetchStatus === 'done').length} / {pools.length} loaded
                 </span>
               )}
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               {pools.map(p => (
                 <PoolCard
                   key={p.poolId}
@@ -306,19 +296,19 @@ export default function App() {
         {/* ── Empty / error states ────────────────────────────────── */}
         {status === 'idle' && (
           <div className="text-center py-16 sm:py-24">
-            <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-primary/10 border border-primary/30
+            <div className="w-16 h-16 mx-auto mb-5 rounded-xl bg-card
                             flex items-center justify-center">
               <svg viewBox="0 0 32 32" className="w-8 h-8 fill-primary/60">
                 <circle cx="16" cy="16" r="4"/>
                 <circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" strokeWidth="1.5"/>
-                <line x1="16" y1="2"  x2="16" y2="7"  stroke="#00D4FF" strokeWidth="1.5" strokeLinecap="round"/>
-                <line x1="16" y1="25" x2="16" y2="30" stroke="#00D4FF" strokeWidth="1.5" strokeLinecap="round"/>
-                <line x1="2"  y1="16" x2="7"  y2="16" stroke="#00D4FF" strokeWidth="1.5" strokeLinecap="round"/>
-                <line x1="25" y1="16" x2="30" y2="16" stroke="#00D4FF" strokeWidth="1.5" strokeLinecap="round"/>
+                <line x1="16" y1="2"  x2="16" y2="7"  stroke="#00eefc" strokeWidth="1.5" strokeLinecap="round"/>
+                <line x1="16" y1="25" x2="16" y2="30" stroke="#00eefc" strokeWidth="1.5" strokeLinecap="round"/>
+                <line x1="2"  y1="16" x2="7"  y2="16" stroke="#00eefc" strokeWidth="1.5" strokeLinecap="round"/>
+                <line x1="25" y1="16" x2="30" y2="16" stroke="#00eefc" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
             </div>
-            <h2 className="text-lg font-semibold text-text mb-2">Ready to Scan</h2>
-            <p className="text-sm text-dim max-w-lg mx-auto mb-5">
+            <h2 className="text-lg font-semibold font-headline text-text mb-2">Ready to Scan</h2>
+            <p className="text-sm text-text-secondary max-w-lg mx-auto mb-5">
               Choose a mode, set how many recent eras to check, then run the scan to review missing rewards and risk severity.
             </p>
           </div>
@@ -329,7 +319,7 @@ export default function App() {
             <p className="text-sm text-danger mb-3">
               {isValidatorMode ? 'Failed to fetch validator list.' : 'Failed to fetch nomination pools.'}
             </p>
-            <p className="text-xs text-dim mb-4">
+            <p className="text-xs text-text-secondary mb-4">
               Verify network connectivity and retry the same era window.
             </p>
             <button onClick={() => handleRun(lastEraCount)} className="btn-primary">

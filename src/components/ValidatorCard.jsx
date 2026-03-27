@@ -34,10 +34,13 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
 
   return (
     <div
-      className={`card overflow-hidden transition-all duration-200
+      className={`bg-surface rounded-xl overflow-hidden transition-all duration-200
         ${hasMissed ? 'border-l-2 border-l-warning' : ''}
         ${hasError  ? 'border-l-2 border-l-danger'  : ''}
       `}
+      style={{ borderColor: !hasMissed && !hasError ? 'rgba(70,71,82,0.10)' : undefined,
+               borderWidth: !hasMissed && !hasError ? '1px' : undefined,
+               borderStyle: !hasMissed && !hasError ? 'solid' : undefined }}
     >
       {/* ── Collapsed header row ────────────────────────────────────── */}
       <div
@@ -47,38 +50,35 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
         onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setOpen(o => !o)}
         aria-expanded={open}
         aria-label={`${open ? 'Collapse' : 'Expand'} validator ${displayName}`}
-        className="flex items-center gap-2 sm:gap-3 px-4 py-3 cursor-pointer
-                   hover:bg-surface/40 transition-colors select-none min-h-[56px]"
+        className="flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-4 cursor-pointer
+                   hover:bg-card transition-colors select-none min-h-[56px]"
       >
-        {/* Status badge */}
-        {loading
-          ? <span className="badge-waiting flex-shrink-0"><Clock size={10} />Waiting</span>
-          : isActive
-            ? <span className="badge-active flex-shrink-0"><Shield size={10} />Active</span>
-            : <span className="badge-waiting flex-shrink-0"><Clock size={10} />Waiting</span>
-        }
-
-        {/* Name */}
-        <div className="flex-1 min-w-0">
-          {/* Line 1 — name */}
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="font-semibold text-sm text-text truncate" title={displayName}>{displayName}</span>
-            {hasMissed && (
-              <AlertTriangle size={13} className="text-warning flex-shrink-0" aria-label={`${missedEras.length} missed era(s)`} />
-            )}
-            {loading && (
-              <Loader2 size={12} className="text-dim animate-spin flex-shrink-0" />
-            )}
-          </div>
-          {/* Line 2 — commission + bonded (mobile only wraps here) */}
-          <div className="flex items-center gap-x-3 gap-y-1 mt-0.5 flex-wrap">
-            <span className="text-xs text-dim">
-              Commission: <span className="text-text-secondary">{commission}%</span>
-            </span>
-            <span className="text-xs text-dim">Bonded: <span className="font-mono text-text-secondary">{formatENJ(bondedTotal, 2)}</span></span>
-          </div>
+        {/* Pool ID box */}
+        <div className="w-10 h-10 rounded bg-card flex items-center justify-center text-primary font-bold font-mono text-xs flex-shrink-0">
+          {loading
+            ? <Loader2 size={14} className="animate-spin text-dim" />
+            : isActive
+              ? <Shield size={14} className="text-success" />
+              : <Clock size={14} className="text-dim" />
+          }
         </div>
 
+        {/* Name + meta */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-semibold font-headline text-sm text-text truncate" title={displayName}>{displayName}</span>
+            {hasMissed && (
+              <span className="sev-high flex-shrink-0">{missedEras.length} MISSED</span>
+            )}
+            {loading && !hasMissed && (
+              <span className="badge-waiting flex-shrink-0">Loading</span>
+            )}
+          </div>
+          <div className="flex items-center gap-x-3 gap-y-1 mt-0.5 flex-wrap text-xs text-text-secondary">
+            <span>Commission: {commission}%</span>
+            <span>Bonded: <span className="font-mono">{formatENJ(bondedTotal, 2)}</span></span>
+          </div>
+        </div>
 
         {/* Icon actions */}
         <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
@@ -99,7 +99,7 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
             <ExternalLink size={13} />
           </a>
           {fetchStatus === 'queued' && (
-            <span className="px-2 py-1 text-xs bg-border text-dim rounded">Queued</span>
+            <span className="px-2 py-1 text-xs bg-card text-muted rounded">Queued</span>
           )}
           {hasError && (
             <button
@@ -113,16 +113,16 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
         </div>
 
         {/* Expand toggle */}
-        <div className="text-dim flex-shrink-0">
+        <div className="text-muted flex-shrink-0">
           {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </div>
       </div>
 
       {/* ── Expanded body ───────────────────────────────────────────── */}
       {open && (
-        <div className="border-t border-border animate-fade-in">
+        <div className="animate-fade-in">
           {/* Tab bar */}
-          <div className="flex border-b border-border bg-surface/50">
+          <div className="flex bg-ink">
             <TabButton
               active={activeTab === 'era'}
               onClick={() => setActiveTab('era')}
@@ -141,7 +141,7 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
             />
           </div>
 
-          <div className="p-3 sm:p-4">
+          <div className="p-4 sm:p-5 bg-term/30">
             {activeTab === 'era' && (
               <>
                 {loading && !eraStat
@@ -186,8 +186,8 @@ function TabButton({ active, onClick, icon, label, badge, badgeVariant }) {
   return (
     <button
       onClick={onClick}
-      className={`flex items-center px-4 py-2.5 text-xs font-medium border-b-2 transition-colors w-full
-        ${active ? 'border-primary text-text' : 'border-transparent text-dim hover:text-text'}`}
+      className={`flex items-center px-5 py-2.5 text-[10px] font-bold uppercase tracking-widest transition-colors w-full
+        ${active ? 'border-t-2 border-primary text-primary bg-card' : 'text-text-secondary hover:bg-surface-high'}`}
       aria-selected={active}
     >
       <span className="flex items-center gap-1.5 min-w-0">
@@ -195,8 +195,8 @@ function TabButton({ active, onClick, icon, label, badge, badgeVariant }) {
         <span className="truncate" title={label}>{label}</span>
       </span>
       {badge && (
-        <span className={`ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-semibold flex-shrink-0
-          ${badgeVariant === 'warn' ? 'bg-warning/20 text-warning' : 'bg-border text-dim'}`}
+        <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0
+          ${badgeVariant === 'warn' ? 'bg-warning/15 text-warning' : 'bg-card text-muted'}`}
         >
           {badge}
         </span>
@@ -207,7 +207,7 @@ function TabButton({ active, onClick, icon, label, badge, badgeVariant }) {
 
 function LoadingPlaceholder({ label }) {
   return (
-    <div className="flex items-center justify-center gap-2 py-8 text-xs text-dim">
+    <div className="flex items-center justify-center gap-2 py-8 text-xs text-text-secondary">
       <Loader2 size={14} className="animate-spin" />
       {label}
     </div>

@@ -4,30 +4,48 @@ export default {
   theme: {
     extend: {
       colors: {
-        // ── WCAG contrast ratios (AA requires 4.5:1 for normal text) ──────────
-        // Computed via relative-luminance formula: (L1+0.05)/(L2+0.05)
-        ink:     '#08080E',
-        surface: '#0F0F1A',
-        card:    '#13131F',
-        border:  '#1E1E35',
-        rim:     '#2A2A45',
-        primary: '#7B3FE4',
-        'primary-dim': '#5A2DB0',
-        'primary-glow': '#8A4AEE', // darkened: white-on-glow 4.83:1 ✓ AA (was 3.65:1 ✗)
-        cyan:    '#00D4FF',
-        'cyan-dim': '#00A3CC',
-        success: '#22C55E',
-        warning: '#F59E0B',
-        danger:  '#EF4444',
-        dim:     '#8B8AB0',  // on card 6.09:1 ✓ AA | on surface 6.30:1 ✓ AA
-        muted:   '#7B7AB5',  // on card 4.63:1 ✓ AA (lightened; was 2.5:1 ✗)
-        text:    '#F0EEFF',  // on card 15.34:1 ✓ AAA | on surface 15.89:1 ✓ AAA
-        'text-secondary': '#A9A8CC', // on card 8.04:1 ✓ AAA | on surface 8.33:1 ✓ AAA
-        term:    '#050508',
+        // ── Kinetic Ledger design system ────────────────────────────────
+        // Surface hierarchy (layered depth, no-line rule)
+        ink:     '#0c0e17',           // base layer (background)
+        surface: '#11131d',           // section layer
+        card:    '#171924',           // component layer (surface-container)
+        border:  '#464752',           // ghost borders at 15% opacity
+        rim:     '#282b3a',           // surface-bright / interaction layer
+
+        // Primary palette
+        primary:       '#b6a0ff',
+        'primary-dim': '#8051ff',
+        'primary-glow':'#aa8fff',     // primary-fixed
+
+        // Signal accents
+        cyan:      '#00eefc',         // secondary / data viz
+        'cyan-dim':'#00deec',
+        success:   '#8eff71',         // tertiary
+        'success-dim': '#2be800',
+        warning:   '#F59E0B',
+        danger:    '#ff6e84',         // error
+        'danger-dim': '#d73357',
+
+        // Text hierarchy
+        text:             '#f0f0fd',  // on-surface — primary text
+        'text-secondary': '#aaaab7',  // on-surface-variant
+        dim:              '#aaaab7',  // secondary text
+        muted:            '#737580',  // outline
+
+        // Semantic surface tokens
+        'surface-high':    '#1c1f2b', // surface-container-high
+        'surface-highest': '#222532', // surface-container-highest
+        'surface-bright':  '#282b3a', // hover / interaction
+        term:              '#000000', // terminal background (surface-container-lowest)
+
+        // Legacy compatibility aliases
+        'on-primary': '#350090',
       },
       fontFamily: {
-        sans: ['Sora', 'system-ui', 'sans-serif'],
-        mono: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
+        sans:     ['Inter', 'system-ui', 'sans-serif'],
+        headline: ['"Space Grotesk"', 'system-ui', 'sans-serif'],
+        brand:   ['Poppins', 'Inter', 'system-ui', 'sans-serif'],
+        mono:     ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', '"Liberation Mono"', '"Courier New"', 'monospace'],
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
@@ -50,9 +68,16 @@ export default {
         },
       },
       boxShadow: {
-        'primary-glow': '0 0 20px rgba(123,63,228,0.35)',
-        'cyan-glow':    '0 0 20px rgba(0,212,255,0.25)',
-        'card':         '0 4px 24px rgba(0,0,0,0.4)',
+        'primary-glow': '0 0 20px rgba(182,160,255,0.25)',
+        'cyan-glow':    '0 0 20px rgba(0,238,252,0.15)',
+        'card':         '0 4px 24px rgba(0,0,0,0.3)',
+        'float':        '0 8px 48px rgba(0,0,0,0.3)',
+      },
+      borderRadius: {
+        DEFAULT: '0.375rem',     // md
+        sm:      '0.125rem',
+        lg:      '0.5rem',
+        xl:      '0.75rem',
       },
     },
   },

@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ENJIN MATRIXCHAIN | Staking Rewards Cadence</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-headline { font-family: 'Space Grotesk', sans-serif; }
+        .font-mono-custom { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: #0c0e17; }
+        ::-webkit-scrollbar-thumb { background: #282b3a; border-radius: 10px; }
+        .glass-panel { backdrop-filter: blur(12px); background: rgba(28, 31, 43, 0.8); }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "tertiary-fixed": "#2ff801",
+              "tertiary-dim": "#2be800",
+              "outline-variant": "#464752",
+              "primary-fixed": "#aa8fff",
+              "secondary-fixed": "#00eefc",
+              "secondary-fixed-dim": "#00deec",
+              "on-error": "#490013",
+              "tertiary-container": "#2ff801",
+              "on-tertiary-container": "#0b5800",
+              "on-secondary-fixed-variant": "#005e64",
+              "on-tertiary": "#0d6100",
+              "on-primary": "#350090",
+              "primary": "#b6a0ff",
+              "outline": "#737580",
+              "on-secondary-fixed": "#003f43",
+              "on-surface-variant": "#aaaab7",
+              "inverse-primary": "#6a30f0",
+              "secondary-container": "#006970",
+              "primary-container": "#aa8fff",
+              "on-secondary": "#005359",
+              "on-primary-fixed-variant": "#33008a",
+              "on-error-container": "#ffb2b9",
+              "inverse-on-surface": "#53545f",
+              "background": "#0c0e17",
+              "tertiary": "#8eff71",
+              "secondary": "#00eefc",
+              "surface-tint": "#b6a0ff",
+              "surface-bright": "#282b3a",
+              "error": "#ff6e84",
+              "surface-container-highest": "#222532",
+              "primary-fixed-dim": "#9d7eff",
+              "error-container": "#a70138",
+              "surface-variant": "#222532",
+              "on-background": "#f0f0fd",
+              "surface-container": "#171924",
+              "error-dim": "#d73357",
+              "on-surface": "#f0f0fd",
+              "inverse-surface": "#faf8ff",
+              "tertiary-fixed-dim": "#2be800",
+              "surface-dim": "#0c0e17",
+              "on-tertiary-fixed": "#064200",
+              "on-tertiary-fixed-variant": "#0d6200",
+              "primary-dim": "#8051ff",
+              "secondary-dim": "#00deec",
+              "on-secondary-container": "#e3fdff",
+              "on-primary-fixed": "#000000",
+              "on-primary-container": "#280071",
+              "surface-container-lowest": "#000000",
+              "surface-container-high": "#1c1f2b",
+              "surface-container-low": "#11131d",
+              "surface": "#0c0e17"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+</head>
+<body class="bg-background text-on-background selection:bg-primary/30 min-h-screen pb-48">
+<!-- TopNavBar -->
+<nav class="bg-[#0c0e17] flex justify-between items-center px-6 py-3 w-full fixed top-0 z-[100] font-['Space_Grotesk'] tracking-tight">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold text-[#b6a0ff] tracking-tighter uppercase">ENJIN MATRIXCHAIN</span>
+<div class="hidden md:flex gap-6 items-center">
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors" href="#">Dashboard</a>
+<a class="text-[#b6a0ff] border-b-2 border-[#b6a0ff] pb-1" href="#">Nomination Pools</a>
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors" href="#">Governance</a>
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors" href="#">Validators</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="bg-surface-container-low px-3 py-1.5 rounded flex items-center gap-2">
+<span class="material-symbols-outlined text-outline text-sm">search</span>
+<input class="bg-transparent border-none text-sm focus:ring-0 text-on-surface w-48" placeholder="Search chain..." type="text"/>
+</div>
+<button class="p-2 text-on-surface-variant hover:bg-[#282b3a] transition-all rounded">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<button class="flex items-center gap-2 bg-primary text-on-primary px-4 py-1.5 rounded font-bold text-sm hover:scale-95 duration-200">
+<span class="material-symbols-outlined text-sm">account_balance_wallet</span>
+                Connect
+            </button>
+</div>
+</nav>
+<main class="pt-20 px-6 max-w-7xl mx-auto space-y-10">
+<!-- Control Panel Section -->
+<section class="flex flex-col md:flex-row justify-between items-center gap-6 bg-surface-container-low p-6 rounded-xl">
+<div class="flex flex-wrap items-center gap-4 w-full md:w-auto">
+<div class="flex flex-col gap-1">
+<label class="text-[10px] uppercase font-bold text-outline tracking-widest">Scan Range (Eras)</label>
+<input class="bg-surface-container text-primary font-mono-custom border-none rounded px-3 py-2 w-24 focus:ring-1 focus:ring-primary" type="number" value="14"/>
+</div>
+<div class="flex gap-2 mt-4">
+<button class="bg-primary-dim hover:bg-primary text-on-primary px-5 py-2 rounded flex items-center gap-2 font-bold transition-all">
+<span class="material-symbols-outlined text-sm">play_arrow</span> RUN
+                    </button>
+<button class="bg-surface-bright hover:bg-error-container text-on-surface px-5 py-2 rounded flex items-center gap-2 font-bold transition-all">
+<span class="material-symbols-outlined text-sm">stop</span> STOP
+                    </button>
+<button class="bg-transparent hover:bg-surface-bright text-outline hover:text-on-surface px-4 py-2 rounded flex items-center gap-2 transition-all">
+<span class="material-symbols-outlined text-sm">refresh</span> RESET
+                    </button>
+</div>
+</div>
+<div class="bg-surface-container p-1 rounded-lg flex items-center">
+<button class="px-6 py-2 text-outline font-semibold uppercase text-xs hover:text-on-surface transition-colors">Validators</button>
+<button class="px-6 py-2 bg-surface-bright text-secondary font-bold uppercase text-xs rounded shadow-lg">Nomination Pools</button>
+</div>
+</section>
+<!-- Summary Stats Bento -->
+<section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+<!-- Total Scanned -->
+<div class="bg-surface-container p-6 rounded-xl flex flex-col justify-between group hover:bg-surface-bright transition-colors">
+<div class="flex justify-between items-start">
+<span class="text-outline text-xs uppercase font-bold tracking-widest">Total Scanned</span>
+<span class="material-symbols-outlined text-primary opacity-50 group-hover:opacity-100">travel_explore</span>
+</div>
+<div class="mt-4">
+<div class="text-4xl font-headline font-bold text-on-surface">2,482</div>
+<div class="text-[10px] text-tertiary mt-1 font-mono-custom">+12.4% from last epoch</div>
+</div>
+</div>
+<!-- Missed Rewards -->
+<div class="bg-surface-container p-6 rounded-xl flex flex-col justify-between group hover:bg-surface-bright transition-colors">
+<div class="flex justify-between items-start">
+<span class="text-outline text-xs uppercase font-bold tracking-widest">Missed Rewards %</span>
+<span class="material-symbols-outlined text-secondary opacity-50 group-hover:opacity-100">warning</span>
+</div>
+<div class="mt-4">
+<div class="text-4xl font-headline font-bold text-secondary">4.2%</div>
+<div class="w-full bg-surface-container-low h-1 rounded-full mt-2 overflow-hidden">
+<div class="bg-secondary h-full" style="width: 42%;"></div>
+</div>
+</div>
+</div>
+<!-- High Severity -->
+<div class="bg-surface-container p-6 rounded-xl flex flex-col justify-between group hover:bg-surface-bright transition-colors">
+<div class="flex justify-between items-start">
+<span class="text-outline text-xs uppercase font-bold tracking-widest">High Severity Pools</span>
+<span class="material-symbols-outlined text-error opacity-50 group-hover:opacity-100" style="font-variation-settings: 'FILL' 1;">emergency</span>
+</div>
+<div class="mt-4">
+<div class="text-4xl font-headline font-bold text-error">12</div>
+<div class="text-[10px] text-error-dim mt-1 uppercase font-bold">Action Required</div>
+</div>
+</div>
+<!-- Medium Severity -->
+<div class="bg-surface-container p-6 rounded-xl flex flex-col justify-between group hover:bg-surface-bright transition-colors">
+<div class="flex justify-between items-start">
+<span class="text-outline text-xs uppercase font-bold tracking-widest">Medium Severity Pools</span>
+<span class="material-symbols-outlined text-on-primary-fixed-variant opacity-50 group-hover:opacity-100">monitoring</span>
+</div>
+<div class="mt-4">
+<div class="text-4xl font-headline font-bold text-on-primary-fixed-variant">34</div>
+<div class="text-[10px] text-outline mt-1 uppercase">Under Observation</div>
+</div>
+</div>
+</section>
+<!-- Result List Section -->
+<section class="space-y-6">
+<div class="flex items-center justify-between border-l-4 border-primary pl-4">
+<h2 class="text-xl font-headline font-bold uppercase tracking-tight">Active Scan Results</h2>
+<div class="flex items-center gap-2 text-xs text-outline">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span> LIVE DATA STREAM
+                </div>
+</div>
+<!-- Pool Card (High Severity Expanded Example) -->
+<div class="bg-surface-container-low rounded-xl overflow-hidden border border-outline-variant/10">
+<!-- Card Header -->
+<div class="p-6 flex flex-wrap items-center justify-between gap-4 cursor-pointer hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded bg-surface-container flex items-center justify-center text-primary font-bold font-mono-custom">
+                            #21
+                        </div>
+<div>
+<div class="flex items-center gap-2">
+<h3 class="font-headline font-bold text-lg">Matrix_Core_Alpha</h3>
+<span class="bg-error/10 text-error px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tighter border border-error/20">HIGH SEVERITY</span>
+</div>
+<div class="text-xs text-outline font-mono-custom mt-0.5">{{DATA:TEXT:0x71C7...5f6a7}}</div>
+</div>
+</div>
+<div class="flex items-center gap-8">
+<div class="hidden md:block">
+<div class="text-[10px] uppercase text-outline font-bold">Total Staked</div>
+<div class="text-sm font-bold">14.2M ENJ</div>
+</div>
+<div class="hidden md:block">
+<div class="text-[10px] uppercase text-outline font-bold">Uptime</div>
+<div class="text-sm font-bold text-error">88.4%</div>
+</div>
+<span class="material-symbols-outlined text-outline">expand_less</span>
+</div>
+</div>
+<!-- Card Expanded Content -->
+<div class="p-6 border-t border-outline-variant/5 bg-surface-container-lowest/30 grid grid-cols-1 lg:grid-cols-12 gap-8">
+<!-- Voted Validators -->
+<div class="lg:col-span-4 space-y-4">
+<h4 class="text-[10px] uppercase font-bold text-primary tracking-widest flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">verified</span> Voted Validators
+                        </h4>
+<div class="space-y-2">
+<div class="flex items-center justify-between p-3 bg-surface-container rounded-lg border-l-2 border-secondary">
+<span class="text-sm font-semibold">Nexus_Prime</span>
+<span class="text-[10px] font-mono-custom text-outline">12.4% APR</span>
+</div>
+<div class="flex items-center justify-between p-3 bg-surface-container rounded-lg border-l-2 border-secondary">
+<span class="text-sm font-semibold">Aether_Node_02</span>
+<span class="text-[10px] font-mono-custom text-outline">11.8% APR</span>
+</div>
+<div class="flex items-center justify-between p-3 bg-surface-container rounded-lg border-l-2 border-outline-variant">
+<span class="text-sm font-semibold text-outline">Void_Walker_X</span>
+<span class="text-[10px] font-mono-custom text-error">OFFLINE</span>
+</div>
+</div>
+</div>
+<!-- Reward Events Table -->
+<div class="lg:col-span-8 space-y-4">
+<h4 class="text-[10px] uppercase font-bold text-primary tracking-widest flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">payments</span> Reward Events
+                        </h4>
+<div class="bg-surface-container rounded-lg overflow-hidden">
+<table class="w-full text-left text-sm">
+<thead class="bg-surface-container-high text-[10px] uppercase text-outline font-bold">
+<tr>
+<th class="px-4 py-3">Era</th>
+<th class="px-4 py-3">Reward Amount</th>
+<th class="px-4 py-3">Status</th>
+<th class="px-4 py-3 text-right">Hash</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/5">
+<tr class="hover:bg-surface-bright transition-colors">
+<td class="px-4 py-3 font-mono-custom">4,122</td>
+<td class="px-4 py-3 font-bold text-tertiary">1,240.52 ENJ</td>
+<td class="px-4 py-3"><span class="material-symbols-outlined text-tertiary text-lg">check_circle</span></td>
+<td class="px-4 py-3 text-right font-mono-custom text-xs text-outline">0xae...92</td>
+</tr>
+<tr class="hover:bg-surface-bright transition-colors">
+<td class="px-4 py-3 font-mono-custom">4,121</td>
+<td class="px-4 py-3 font-bold text-error">0.00 ENJ</td>
+<td class="px-4 py-3"><span class="material-symbols-outlined text-error text-lg">cancel</span></td>
+<td class="px-4 py-3 text-right font-mono-custom text-xs text-outline">0x00...00</td>
+</tr>
+<tr class="hover:bg-surface-bright transition-colors">
+<td class="px-4 py-3 font-mono-custom">4,120</td>
+<td class="px-4 py-3 font-bold text-tertiary">1,238.11 ENJ</td>
+<td class="px-4 py-3"><span class="material-symbols-outlined text-tertiary text-lg">check_circle</span></td>
+<td class="px-4 py-3 text-right font-mono-custom text-xs text-outline">0xbf...22</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+<!-- Pool Card (Collapsed Example) -->
+<div class="bg-surface-container-low rounded-xl overflow-hidden border border-outline-variant/10">
+<div class="p-6 flex flex-wrap items-center justify-between gap-4 cursor-pointer hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded bg-surface-container flex items-center justify-center text-primary font-bold font-mono-custom">
+                            #22
+                        </div>
+<div>
+<div class="flex items-center gap-2">
+<h3 class="font-headline font-bold text-lg">Quantum_Leap_Vault</h3>
+<span class="bg-secondary/10 text-secondary px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tighter border border-secondary/20">STABLE</span>
+</div>
+<div class="text-xs text-outline font-mono-custom mt-0.5">{{DATA:TEXT:0x3f2D...9a2e}}</div>
+</div>
+</div>
+<div class="flex items-center gap-8">
+<div class="hidden md:block">
+<div class="text-[10px] uppercase text-outline font-bold">Total Staked</div>
+<div class="text-sm font-bold">8.1M ENJ</div>
+</div>
+<div class="hidden md:block">
+<div class="text-[10px] uppercase text-outline font-bold">Uptime</div>
+<div class="text-sm font-bold text-tertiary">99.9%</div>
+</div>
+<span class="material-symbols-outlined text-outline">expand_more</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Terminal Drawer -->
+<footer class="fixed bottom-0 left-0 w-full z-50 bg-[#000000] flex flex-col h-48 border-t-0 shadow-[0_-4px_24px_rgba(182,160,255,0.06)] backdrop-blur-xl duration-200">
+<!-- Terminal Header/Tabs -->
+<div class="flex items-center bg-[#0c0e17] border-b border-outline-variant/10">
+<div class="flex items-center gap-2 text-[#b6a0ff] border-t-2 border-[#b6a0ff] bg-[#171924] px-6 py-2 h-full font-['System_Mono'] text-[10px] uppercase cursor-pointer">
+<span class="material-symbols-outlined text-sm">terminal</span> Terminal
+            </div>
+<div class="flex items-center gap-2 text-[#aaaab7] px-6 py-2 h-full hover:bg-[#1c1f2b] font-['System_Mono'] text-[10px] uppercase cursor-pointer">
+<span class="material-symbols-outlined text-sm">list_alt</span> Logs
+            </div>
+<div class="flex items-center gap-2 text-[#aaaab7] px-6 py-2 h-full hover:bg-[#1c1f2b] font-['System_Mono'] text-[10px] uppercase cursor-pointer">
+<span class="material-symbols-outlined text-sm">notification_important</span> Events
+            </div>
+<div class="flex items-center gap-2 text-[#aaaab7] px-6 py-2 h-full hover:bg-[#1c1f2b] font-['System_Mono'] text-[10px] uppercase cursor-pointer">
+<span class="material-symbols-outlined text-sm">monitoring</span> Metrics
+            </div>
+<div class="ml-auto px-4 flex items-center gap-4">
+<div class="text-[10px] text-outline uppercase">Speed: <span class="text-secondary">Normal</span></div>
+<span class="material-symbols-outlined text-outline text-sm cursor-pointer hover:text-on-surface">close_fullscreen</span>
+</div>
+</div>
+<!-- Terminal Content -->
+<div class="flex-1 overflow-y-auto p-4 font-mono-custom text-xs space-y-1 bg-[#000000] text-on-surface-variant selection:bg-primary/20">
+<div class="flex gap-4">
+<span class="text-outline shrink-0">[14:02:21]</span>
+<span class="text-primary">[INIT]</span>
+<span class="text-on-surface">Establishing secure connection to Enjin Matrixchain RPC...</span>
+</div>
+<div class="flex gap-4">
+<span class="text-outline shrink-0">[14:02:22]</span>
+<span class="text-tertiary">[AUTH]</span>
+<span class="text-on-surface">Handshake successful. Cadence node active at 0x93...f2.</span>
+</div>
+<div class="flex gap-4">
+<span class="text-outline shrink-0">[14:02:23]</span>
+<span class="text-secondary">[SCAN]</span>
+<span class="text-on-surface">Iterating through nomination pools... found 2,482 total records.</span>
+</div>
+<div class="flex gap-4">
+<span class="text-outline shrink-0">[14:02:24]</span>
+<span class="text-secondary">[DATA]</span>
+<span class="text-on-surface">Pool <span class="text-primary">#21</span> (Matrix_Core_Alpha) scanned. Severity: <span class="text-error font-bold">HIGH</span>. Missed events detected in Era 4121.</span>
+</div>
+<div class="flex gap-4">
+<span class="text-outline shrink-0">[14:02:25]</span>
+<span class="text-secondary">[DATA]</span>
+<span class="text-on-surface">Pool <span class="text-primary">#22</span> (Quantum_Leap_Vault) scanned. Severity: <span class="text-tertiary">LOW</span>. Operational parameters nominal.</span>
+</div>
+<div class="flex gap-4">
+<span class="text-outline shrink-0">[14:02:25]</span>
+<span class="text-secondary">[SCAN]</span>
+<span class="text-on-surface">Fetching voter details for 12 high severity pools... 15% complete.</span>
+</div>
+<div class="flex gap-4 animate-pulse">
+<span class="text-outline shrink-0">[14:02:26]</span>
+<span class="text-primary-dim">[SYNC]</span>
+<span class="text-on-surface">Waiting for next block inclusion... _</span>
+</div>
+</div>
+</footer>
+</body></html>

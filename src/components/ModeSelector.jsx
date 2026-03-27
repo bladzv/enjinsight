@@ -14,7 +14,7 @@ export default function ModeSelector({ mode, onModeChange, disabled }) {
     <div
       role="tablist"
       aria-label="Scan mode"
-      className="flex border-b border-border bg-card rounded-t-xl overflow-hidden"
+      className="flex bg-card rounded-t-xl overflow-hidden p-1"
     >
       {MODES.map(({ key, label, icon: Icon }) => {
         const isActive = mode === key
@@ -30,12 +30,12 @@ export default function ModeSelector({ mode, onModeChange, disabled }) {
             aria-selected={isActive}
             aria-controls={panelId}
             tabIndex={isActive ? 0 : -1}
-            className={`flex items-center justify-center gap-1.5 flex-1 px-4 py-3
-                        text-xs sm:text-sm font-medium border-b-2 transition-colors
+            className={`flex items-center justify-center gap-1.5 flex-1 px-6 py-2
+                        text-xs font-bold uppercase tracking-wider rounded transition-all
                         disabled:opacity-50 disabled:cursor-not-allowed
                         ${isActive
-                          ? 'border-primary text-text'
-                          : 'border-transparent text-dim hover:text-text'}`}
+                          ? 'bg-surface-bright text-cyan shadow-lg'
+                          : 'text-muted hover:text-text'}`}
           >
             <Icon size={14} />
             {label}
