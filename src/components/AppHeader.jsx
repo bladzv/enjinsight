@@ -1,85 +1,86 @@
-import { Activity, ChevronLeft, Github } from 'lucide-react'
+import { Activity, ChevronLeft, Github, Orbit, Radar } from 'lucide-react'
+
+const NAV_ITEMS = [
+  { key: 'home', label: 'Home' },
+  { key: 'era', label: 'Era Explorer' },
+  { key: 'staking', label: 'Staking Cadence' },
+  { key: 'balance', label: 'Balance Viewer' },
+  { key: 'reward-history', label: 'Reward History' },
+]
 
 const VIEW_LABELS = {
-  era:            'Era Block Explorer',
-  staking:        'Staking Rewards Cadence',
-  balance:        'Historical Balance Viewer',
+  era: 'Era Block Explorer',
+  staking: 'Staking Rewards Cadence',
+  balance: 'Historical Balance Viewer',
   'reward-history': 'Reward History Viewer',
 }
 
-export default function AppHeader({ status, view, onBack }) {
-  const viewLabel = VIEW_LABELS[view] ?? ''
+export default function AppHeader({ status, view, onBack, onNavigate }) {
+  const isLoading = status === 'loading'
+  const currentLabel = VIEW_LABELS[view] ?? 'Digital Observatory'
 
   return (
-    <header className="sticky top-0 z-30 bg-ink/95 backdrop-blur-xl">
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
+    <header className="sticky top-0 z-40 border-b border-white/5 bg-ink/80 backdrop-blur-2xl">
+      <div className="mx-auto flex max-w-[92rem] flex-col gap-3 px-4 py-4 sm:px-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-4">
+            <button
+              type="button"
+              onClick={() => onNavigate?.('home')}
+              className="group flex min-w-0 items-center gap-3 text-left"
+              aria-label="Go to home"
+            >
+              <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-card shadow-card ring-1 ring-white/5 transition-transform duration-200 group-hover:-translate-y-0.5">
+                <img src="/enjin-logo.png" alt="Enjin logo" className="h-5 w-5" />
+                {isLoading && (
+                  <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-cyan shadow-cyan-glow" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="font-brand text-xl font-bold tracking-tight text-primary sm:text-2xl">
+                  EnjinSight
+                </p>
+              </div>
+            </button>
 
-        {/* Left — brand */}
-        <div className="flex items-center gap-3 min-w-0">
-          {/* Logo mark */}
-          <div className="relative flex-shrink-0">
-            <div className="w-8 h-8 rounded bg-card flex items-center justify-center">
-                <img src="/enjin-logo.png" alt="Enjin logo" className="w-4 h-4" />
-            </div>
-            {status === 'loading' && (
-              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-cyan animate-pulse-slow" />
-            )}
+            
           </div>
 
-          {/* Title */}
-          <h1 className="text-base sm:text-lg font-bold font-brand text-primary tracking-tighter leading-tight truncate">
-            EnjinSight
-          </h1>
-
-          {/* Nav links — shown on non-home views as breadcrumb */}
-          {view && view !== 'home' && (
-            <div className="hidden md:flex items-center gap-1.5 ml-4">
-              <button
-                onClick={onBack}
-                className="text-text-secondary hover:text-primary transition-colors text-sm"
-              >
-                Dashboard
-              </button>
-              <span className="text-muted text-xs">/</span>
-              <span className="text-primary text-sm font-medium truncate">{viewLabel}</span>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <div className="hidden items-center gap-2 rounded-full bg-card px-3 py-2 text-[11px] uppercase tracking-[0.22em] text-text-secondary xl:flex">
+              <Orbit size={13} className="text-cyan" />
+              Enjin Matrixchain
             </div>
-          )}
+            <a
+              href="https://github.com/bladzv/enjinsight"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-icon flex items-center gap-2 px-4"
+              aria-label="Open source on GitHub"
+            >
+              <Github size={16} />
+              <span className="hidden md:inline-block text-sm font-semibold text-text-secondary">GitHub</span>
+            </a>
+          </div>
         </div>
 
-        {/* Right — status + GitHub link */}
-        <div className="flex items-center gap-3 flex-shrink-0">
-          {status === 'loading' && (
-            <span className="flex items-center gap-1.5 text-[11px] sm:text-xs text-cyan font-mono">
-              <Activity size={12} className="animate-pulse" />
-              <span className="hidden sm:inline">Scanning</span>
-            </span>
-          )}
-          <a
-            href="https://github.com/bladzv/enjinsight"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-2 text-text-secondary hover:bg-surface-bright transition-all rounded"
-            aria-label="Open source on GitHub"
-          >
-            <Github size={16} />
-          </a>
+        <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-thin">
+          {NAV_ITEMS.map(item => {
+            const isActive = view === item.key
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => onNavigate?.(item.key)}
+                aria-current={isActive ? 'page' : undefined}
+                className={`nav-link-pill whitespace-nowrap ${isActive ? 'nav-link-pill-active' : 'nav-link-pill-idle'}`}
+              >
+                {item.label}
+              </button>
+            )
+          })}
         </div>
-      </nav>
-
-      {/* Mobile breadcrumb + back (non-home views) */}
-      {view && view !== 'home' && (
-        <div className="md:hidden px-4 sm:px-6 pb-2">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1 text-xs text-text-secondary hover:text-primary transition-colors
-                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded flex-shrink-0 w-fit"
-            aria-label="Back to tool selection"
-          >
-            <ChevronLeft size={13} />
-            <span>{viewLabel}</span>
-          </button>
-        </div>
-      )}
+      </div>
     </header>
   )
 }

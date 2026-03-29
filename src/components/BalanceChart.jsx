@@ -274,16 +274,17 @@ export default function BalanceChart({ records }) {
   ]
 
   return (
-    <div className="bg-surface rounded-xl p-4 animate-fade-in">
+    <div className="animate-fade-in rounded-[1.5rem] bg-surface p-5 shadow-ambient">
       {/* Card header */}
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-2">
-          <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-          <h3 className="text-xs font-bold tracking-widest uppercase text-cyan font-headline">Balance Chart</h3>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="section-label">Visualization</p>
+          <h3 className="mt-2 font-headline text-2xl font-bold text-text">Aggregated Asset Flow</h3>
+          <p className="mt-2 text-sm text-text-secondary">Archive snapshots across the selected balance range.</p>
         </div>
         <div className="flex items-center gap-3">
           {isDecimated && (
-            <span className="text-xs text-text-secondary">
+            <span className="mini-chip">
               ~{CHART_MAX_PTS} sampled of {records.length.toLocaleString('en')}
             </span>
           )}
@@ -315,11 +316,11 @@ export default function BalanceChart({ records }) {
       </div>
 
       {/* Mode toggles */}
-      <div className="flex flex-wrap gap-1.5 mb-4" role="group" aria-label="Chart mode">
+      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Chart mode">
         {modeButtons.map(({ key, label, activeColour }) => (
           <button
             key={key}
-            className={`px-3 py-1 rounded-full border text-xs font-bold tracking-wide transition-all
+            className={`rounded-full border px-3 py-1.5 text-xs font-bold tracking-wide transition-all
                         ${mode === key
                           ? activeColour
                           : 'border-[rgba(70,71,82,0.10)] text-text-secondary hover:text-text bg-transparent'}`}
@@ -332,7 +333,7 @@ export default function BalanceChart({ records }) {
 
       {/* Canvas wrapper */}
       <div
-        className="relative bg-card rounded-xl p-4 transition-all duration-200"
+        className="relative rounded-[1.25rem] bg-card/90 p-4 transition-all duration-200"
         style={{ height: `${heightPx}px` }}
       >
         <canvas ref={canvasRef} />

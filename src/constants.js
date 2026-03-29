@@ -38,7 +38,7 @@ export const REWARD_SLASH_ROW      = 100  // max reward/slash events per request
 export const ERA_VALIDATORS_SAMPLE = 3    // validators to check for era block-range consensus
 
 // ── Defaults ───────────────────────────────────────────────────────────────
-export const DEFAULT_ERA_COUNT     = 14
+export const DEFAULT_ERA_COUNT     = 2
 export const MIN_ERA_COUNT         = 1
 export const MAX_ERA_COUNT         = 100
 export const CONSECUTIVE_MISS_THRESHOLD = 3   // eras before critical alert

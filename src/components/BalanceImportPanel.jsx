@@ -97,11 +97,11 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
   }
 
   return (
-    <div className={bare ? '' : 'bg-surface rounded-xl p-4 animate-fade-in'}>
+    <div className={bare ? '' : 'animate-fade-in rounded-[1.5rem] bg-surface p-5 shadow-ambient'}>
       {!bare && (
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-          <h3 className="text-xs font-bold tracking-widest uppercase text-cyan font-headline">Import Balance Data</h3>
+        <div className="mb-4">
+          <p className="section-label">Import</p>
+          <h3 className="mt-2 font-headline text-2xl font-bold text-text">Load exported balance data</h3>
         </div>
       )}
 
@@ -123,10 +123,11 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
         role="button"
         tabIndex={0}
         aria-label="Drop a file or click to browse"
-        className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all
+        className={`rounded-[1.5rem] p-12 text-center cursor-pointer transition-all
                     ${isDragOver
-                      ? 'border-cyan bg-cyan/10'
-                      : 'border-[rgba(70,71,82,0.10)] hover:border-primary hover:bg-card'}`}
+                      ? 'bg-cyan/10 shadow-cyan-glow'
+                      : 'bg-card hover:bg-surface-high'}`}
+        style={{ border: '1px dashed rgba(70, 71, 82, 0.18)' }}
         onClick={() => fileInputRef.current?.click()}
         onKeyDown={e => e.key === 'Enter' && fileInputRef.current?.click()}
         onDragOver={onDragOver}
@@ -163,7 +164,7 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
       {/* Decrypt block (shown when encrypted file detected) */}
       {encPending && (
         <div className="mt-4">
-          <div className="flex gap-2 px-4 py-3 rounded-lg bg-cyan/10 text-sm text-cyan mb-3">
+          <div className="mb-3 flex gap-2 rounded-[1rem] bg-cyan/10 px-4 py-3 text-sm text-cyan">
             🔒 This file is AES-256-GCM encrypted. Enter the password to decrypt.
           </div>
           <div className="flex gap-3 items-end">

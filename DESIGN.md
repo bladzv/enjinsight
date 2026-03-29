@@ -253,27 +253,87 @@ Each tool is a self-contained React feature using `useReducer` for predictable s
 
 ---
 
+## Design System
+
+EnjinSight uses the **Kinetic Ledger** design system — a "Digital Observatory" aesthetic that treats blockchain data as a living, architectural space.
+
+### Core Principles
+
+- **No-Line Rule** — major UI sections are separated by background-color shifts (tonal layering), not 1px borders. `surface` → `surface_container_low` → `surface_container` → `surface_bright` creates physical depth.
+- **Glass & Gradient** — floating elements (tooltips, modals) use glassmorphism: `backdrop-filter: blur(12px)` with 80% opacity fill.
+- **High-Contrast Editorial Typography** — Space Grotesk for display/headlines (brutalist authority), Inter for all body/UI copy (maximum readability), JetBrains Mono for addresses, hashes, and log entries.
+- **Ghost Border Fallback** — when a border is required for accessibility in data-dense tables, use `outline_variant` at 15% opacity only.
+
+### Color Tokens (Tailwind)
+
+| Token | Hex | Usage |
+|-------|-----|-------|
+| `primary` | `#b6a0ff` | High-signal actions, active states |
+| `primary-dim` | `#8051ff` | CTA gradient start |
+| `cyan` | `#00eefc` | Data visualization, secondary accents |
+| `success` | `#8eff71` | Success states, completed phases |
+| `danger` | `#ff6e84` | Critical failures, error states |
+| `surface` | `#0c0e17` | Application background (base layer) |
+| `card` | `#171924` | Standard cards, table backgrounds |
+| `text` | `#e8e9f0` | Primary text |
+| `text-secondary` | `#8a8b99` | Labels, secondary copy |
+
+### Component Patterns
+
+- **Phase Progress Cards** (`PhaseProgressCards.jsx`) — SVG ring-progress cards, one per scan phase. Idle = muted ring, in-progress = cyan ring with live %, completed = green ring with checkmark.
+- **Terminal Log** — `bg-black` panel, monospace timestamps in `text-secondary`, status messages in `primary`.
+- **Data Tables** — no horizontal dividers. Header row uses `surface_container_low`; row hover uses `surface_bright`. Cell padding 0.9rem.
+- **Charts** — 2px stroke, 10% opacity gradient fill below the line, `outline_variant` at 5% opacity for grid lines.
+
+### Design Mockups
+
+Reference HTML/screenshot mockups live in `docs/new_design/stitch/`:
+
+| Mockup | Path |
+|--------|------|
+| Landing page | `docs/new_design/stitch/landing_page/` |
+| Era Explorer (final) | `docs/new_design/stitch/era_explorer_final/` |
+| Balance Viewer (final) | `docs/new_design/stitch/balance_viewer_final/` |
+| Reward History (final) | `docs/new_design/stitch/reward_history_final/` |
+| Staking Cadence (final) | `docs/new_design/stitch/staking_cadence_final/` |
+| Staking + Nomination Pools | `docs/new_design/stitch/staking_cadence_nomination_pools/` |
+| Full design spec | `docs/new_design/stitch/enjinsight_obsidian/DESIGN.md` |
+
+---
+
 ## File Structure
 
 ```
 /
 ├── api/
 │   └── [...proxy].js        # Vercel serverless proxy
+├── docs/
+│   ├── SECURITY.md
+│   ├── new_design/stitch/   # Kinetic Ledger design mockups (HTML + screenshots)
+│   ├── reward-history-computation.md
+│   ├── technical_reference.md
+│   ├── ui_design_system.md
+│   └── vercel_deployment_guide.md
 ├── public/
 │   ├── relay-era-reference.csv
 │   ├── era-explorer.html    # Standalone era explorer (no React)
 │   └── ...
 ├── scripts/
 │   ├── staking-rewards-rpc.py
-│   ├── era-range-fetch.py
+│   ├── relay-era-range-fetch.py
 │   ├── staking-rewards-indexer.py
-│   └── relay-pool-bulk-extrinsics.py
+│   └── relay-pool-interactions.py
 ├── src/
 │   ├── App.jsx              # Root: view routing (home/staking/balance/era/reward-history)
 │   ├── constants.js         # API endpoints, network config, tuning constants
+│   ├── index.css            # Tailwind directives + design-system utility classes
 │   ├── components/          # UI components (one per tool + shared)
+│   │   ├── PhaseProgressCards.jsx   # NEW: SVG ring-progress cards for scan phases
+│   │   └── ...
 │   ├── hooks/               # Business logic hooks (one per tool)
 │   └── utils/               # Shared utilities (api, substrate, format, export)
+│       ├── chainInfo.js     # One-shot WS chain metadata query
+│       └── eraRpc.js        # Binary-search era start block via archive RPC
 ├── .github/
 │   ├── workflows/
 │   │   ├── ci.yml           # Build/lint/test on push
@@ -281,7 +341,7 @@ Each tool is a self-contained React feature using `useReducer` for predictable s
 │   └── custom-prompts.md
 ├── vercel.json              # Headers, function config
 ├── vite.config.js           # Build + dev proxy config
-└── tailwind.config.js
+└── tailwind.config.js       # Design-system tokens
 ```
 
 ---

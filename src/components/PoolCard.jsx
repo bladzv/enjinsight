@@ -40,7 +40,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry }) {
 
   return (
     <div
-      className={`bg-surface rounded-xl overflow-hidden transition-all duration-200
+      className={`overflow-hidden rounded-[1.5rem] bg-surface shadow-ambient transition-all duration-200
         ${hasMissed ? 'border-l-2 border-l-warning' : ''}
         ${hasError  ? 'border-l-2 border-l-danger'  : ''}
       `}
@@ -56,18 +56,17 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry }) {
         onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setOpen(o => !o)}
         aria-expanded={open}
         aria-label={`${open ? 'Collapse' : 'Expand'} pool ${displayName}`}
-        className="flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-4 cursor-pointer
-                   hover:bg-card transition-colors select-none min-h-[56px]"
+        className="flex min-h-[72px] cursor-pointer select-none items-center gap-3 px-5 py-5 transition-colors hover:bg-card sm:px-6"
       >
         {/* Pool ID box */}
-        <div className="w-12 h-12 rounded bg-card flex items-center justify-center text-primary font-bold font-mono flex-shrink-0">
+        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-card text-primary font-bold font-mono">
           #{poolId}
         </div>
 
         {/* Name + meta */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="font-semibold font-headline text-sm text-text truncate" title={displayName}>{displayName}</span>
+            <span className="font-headline text-base font-bold text-text truncate" title={displayName}>{displayName}</span>
             {hasMissed && (
               <span className="sev-high flex-shrink-0">{missedEras.length} MISSED</span>
             )}
@@ -119,7 +118,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry }) {
       {open && (
         <div className="animate-fade-in">
           {/* Tab bar */}
-          <div className="flex bg-ink">
+          <div className="flex bg-[#05070f] px-2 pt-2">
             <TabButton
               active={activeTab === 'rewards'}
               onClick={() => setActiveTab('rewards')}
@@ -144,7 +143,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry }) {
             />
           </div>
 
-          <div className="p-4 sm:p-5 bg-term/30">
+          <div className="bg-term/30 p-4 sm:p-5">
             {activeTab === 'rewards' && (
               <>
                 {loading && !eraRewards
@@ -186,7 +185,7 @@ function TabButton({ active, onClick, icon, label, badge, badgeVariant }) {
     <button
       onClick={onClick}
       className={`flex items-center px-5 py-2.5 text-[10px] font-bold uppercase tracking-widest transition-colors w-full
-        ${active ? 'border-t-2 border-primary text-primary bg-card' : 'text-text-secondary hover:bg-surface-high'}`}
+        ${active ? 'rounded-t-2xl bg-card text-primary' : 'rounded-t-2xl text-text-secondary hover:bg-surface-high'}`}
       aria-selected={active}
     >
       <span className="flex items-center gap-1.5 min-w-0">

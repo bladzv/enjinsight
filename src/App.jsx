@@ -16,6 +16,7 @@ import PoolCard            from './components/PoolCard.jsx'
 import TerminalLog         from './components/TerminalLog.jsx'
 import SummarySection      from './components/SummarySection.jsx'
 import PoolSummarySection  from './components/PoolSummarySection.jsx'
+import PhaseProgressCards  from './components/PhaseProgressCards.jsx'
 
 export default function App() {
   // Persist active view in URL hash so page refresh stays on current tool
@@ -66,13 +67,29 @@ export default function App() {
     : 0
 
   const allCompleted = phases.length > 0 && phases.every(p => p.status === 'completed')
+  const completedPhaseCount = phases.filter(p => p.status === 'completed').length
   const topLabel = allCompleted
     ? 'Scan successful!'
     : (status === 'stopped'
       ? 'Scan stopped'
       : (activePhase ? `Step ${phases.findIndex(p => p.key === activePhase.key)}: ${activePhase.label}` : 'Scanning'))
+  const progressMeta = activePhase && activePhase.total > 0
+    ? `${activePhase.completed ?? 0} / ${activePhase.total} (${activePhasePct}%)`
+    : `${completedPhaseCount} / ${phases.length} steps complete`
+  const progressSummary = allCompleted
+    ? 'All scan phases completed successfully.'
+    : status === 'stopped'
+      ? 'The scan was stopped before every phase completed.'
+      : null
 
   const validatorLatestEra = resolveLatestEra(validators)
+  const activeRecords = isValidatorMode ? validators : pools
+  const gapCount = activeRecords.filter(item => item.missedEras?.length > 0).length
+  const errorCount = activeRecords.filter(item => item.fetchStatus === 'error' || item.fetchStatus === 'failed').length
+  const cleanCount = activeRecords.filter(item =>
+    (isValidatorMode ? Array.isArray(item.eraStat) : Array.isArray(item.eraRewards)) &&
+    (item.missedEras?.length ?? 0) === 0
+  ).length
 
   // Dynamically load Vercel Analytics React component if the package is installed.
   const [AnalyticsComponent, setAnalyticsComponent] = useState(null)
@@ -127,44 +144,82 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-dvh bg-ink">
-      <AppHeader status={status} view={view} onBack={handleBack} />
+    <div className="relative min-h-dvh overflow-x-hidden bg-ink">
+      <div className="pointer-events-none fixed inset-0 z-0">
+        <div className="absolute left-[-10rem] top-[8rem] h-[24rem] w-[24rem] rounded-full bg-primary/10 blur-[120px]" />
+        <div className="absolute right-[-8rem] top-[20rem] h-[22rem] w-[22rem] rounded-full bg-cyan/10 blur-[120px]" />
+      </div>
+
+      <AppHeader status={status} view={view} onBack={handleBack} onNavigate={handleNavigate} />
 
       {/* ── Era Block Explorer ────────────────────────────────────── */}
       {view === 'era' && <EraBlockExplorer />}
 
       {/* ── Balance Viewer ──────────────────────────────────────────── */}
       {view === 'balance' && (
-        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-20 sm:pb-24">
+        <main className="relative z-10 mx-auto max-w-[92rem] px-4 py-6 sm:px-6 sm:py-8 pb-24 sm:pb-28">
           <BalanceExplorer />
         </main>
       )}
 
       {/* ── Reward History Viewer ─────────────────────────────────────────── */}
       {view === 'reward-history' && (
-        <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-20 sm:pb-24">
+        <main className="relative z-10 mx-auto max-w-[92rem] px-4 py-6 sm:px-6 sm:py-8 pb-24 sm:pb-28">
           <RewardHistoryViewer />
         </main>
       )}
 
       {/* ── Home / Landing ──────────────────────────────────────────── */}
       {view === 'home' && (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 pb-16 sm:pb-20 relative">
+        <main className="relative z-10 mx-auto max-w-[92rem] px-4 pb-16 sm:px-6 sm:pb-20">
           <LandingPage onNavigate={handleNavigate} />
-          <footer className="fixed inset-x-0 bottom-0 bg-ink/95 backdrop-blur-xl py-3 text-center text-xs text-muted z-50">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6">
-              EnjinSight | Read-only | No wallet required
-            </div>
-          </footer>
         </main>
       )}
 
       {/* ── Staking view ────────────────────────────────────────────── */}
       {view === 'staking' && (
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-20 space-y-6">
+      <main className="relative z-10 mx-auto max-w-[92rem] px-4 py-6 sm:px-6 sm:py-8 pb-32 space-y-6">
+
+        <section className="page-hero">
+          <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)] lg:items-end">
+            <div className="space-y-5">
+              <div className="hero-kicker">
+                <span className="hero-dot" />
+                STAKING DIAGNOSTICS
+              </div>
+              <div className="space-y-4">
+                <h1 className="hero-title text-balance">
+                  Staking rewards cadence with live operator context.
+                </h1>
+                <p className="hero-copy">
+                  Run the staking reward scan workflow to review missing rewards and risk severity.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="metric-card">
+                <p className="metric-label">Scanned Records</p>
+                <p className="metric-value text-cyan">{activeRecords.length}</p>
+              </div>
+              <div className="metric-card">
+                <p className="metric-label">Gaps Detected</p>
+                <p className={`metric-value ${gapCount > 0 ? 'text-danger' : 'text-success'}`}>{gapCount}</p>
+              </div>
+              <div className="metric-card">
+                <p className="metric-label">Clean Results</p>
+                <p className="metric-value text-success">{cleanCount}</p>
+              </div>
+              <div className="metric-card">
+                <p className="metric-label">Fetch Errors</p>
+                <p className={`metric-value ${errorCount > 0 ? 'text-warning' : 'text-text'}`}>{errorCount}</p>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* Mode selector tabs + scan controls */}
-        <div className="space-y-0">
+        <div className="space-y-4">
           <ModeSelector mode={mode} onModeChange={handleModeChange} disabled={isLoading} />
           <ControlPanel
             mode={mode}
@@ -177,53 +232,28 @@ export default function App() {
 
         {/* Scan progress */}
         {status !== 'idle' && phases.length > 0 && (
-          <section className="bg-surface rounded-xl w-full max-w-xl mx-auto p-4" aria-live="polite" aria-label="Scan progress">
-            <div className="flex items-center justify-between gap-3 text-xs mb-2">
-              <p className="text-text-secondary">{topLabel}</p>
-              <p className="font-mono text-text">
-                {activePhase?.completed ?? 0} / {activePhase?.total ?? 0} ({activePhasePct}%)
-              </p>
-            </div>
-            {/* Gradient progress bar */}
-            <div className="h-1.5 rounded-full bg-card overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-primary-dim via-primary to-cyan transition-all duration-300"
-                style={{ width: `${activePhasePct}%` }}
-              />
-            </div>
-            {/* Phase step list */}
-            <div className="mt-3 w-full space-y-1.5">
-              {phases.map((phase, index) => {
-                const statusClass = phase.status === 'completed'
-                  ? 'text-success'
-                  : phase.status === 'in_progress'
-                    ? 'text-cyan'
-                    : 'text-muted'
-                const statusLabel = phase.status === 'completed'
-                  ? 'Done'
-                  : phase.status === 'in_progress'
-                    ? 'Running'
-                    : 'Pending'
-                return (
-                  <div key={phase.key} className="w-full rounded bg-card px-2.5 py-1.5">
-                    <div className="flex items-center justify-between text-[11px] gap-3">
-                      <p className={`font-medium ${statusClass}`}>Step {index}: {phase.label}</p>
-                      <p className={`font-semibold ${statusClass}`}>{statusLabel}</p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </section>
+          <PhaseProgressCards
+            className="mx-auto w-full max-w-6xl"
+            ariaLabel="Scan progress"
+            eyebrow="Scan Progress"
+            indexLabel="Step"
+            title={topLabel}
+            summary={progressSummary}
+            meta={progressMeta}
+            phases={phases}
+          />
         )}
 
         {/* ── Validator mode content ──────────────────────────────── */}
         {isValidatorMode && validators.length > 0 && (
           <section id="validators-panel" aria-labelledby="validators-heading">
-            <div className="flex items-center gap-3 mb-4 border-l-4 border-primary pl-4">
-              <h2 id="validators-heading" className="text-lg font-bold font-headline text-text uppercase tracking-tight">
-                Validators
-              </h2>
+            <div className="mb-4 flex flex-wrap items-end gap-3">
+              <div>
+                <p className="section-label">Results</p>
+                <h2 id="validators-heading" className="section-title">
+                  Validators
+                </h2>
+              </div>
               <span className="text-xs text-muted font-mono">
                 {validators.length} total
               </span>
@@ -258,10 +288,13 @@ export default function App() {
         {/* ── Pool mode content ───────────────────────────────────── */}
         {!isValidatorMode && pools.length > 0 && (
           <section id="pools-panel" aria-labelledby="pools-heading">
-            <div className="flex items-center gap-3 mb-4 border-l-4 border-primary pl-4">
-              <h2 id="pools-heading" className="text-lg font-bold font-headline text-text uppercase tracking-tight">
-                Nomination Pools
-              </h2>
+            <div className="mb-4 flex flex-wrap items-end gap-3">
+              <div>
+                <p className="section-label">Results</p>
+                <h2 id="pools-heading" className="section-title">
+                  Nomination Pools
+                </h2>
+              </div>
               <span className="text-xs text-muted font-mono">
                 {pools.length} total
               </span>
@@ -294,8 +327,8 @@ export default function App() {
         )}
 
         {/* ── Empty / error states ────────────────────────────────── */}
-        {status === 'idle' && (
-          <div className="text-center py-16 sm:py-24">
+        {status === 'idle' && activeRecords.length > 0 && (
+          <div className="rounded-[1.5rem] bg-surface px-6 py-16 text-center shadow-ambient sm:py-24">
             <div className="w-16 h-16 mx-auto mb-5 rounded-xl bg-card
                             flex items-center justify-center">
               <svg viewBox="0 0 32 32" className="w-8 h-8 fill-primary/60">
@@ -315,7 +348,7 @@ export default function App() {
         )}
 
         {status === 'error' && (
-          <div className="text-center py-12">
+          <div className="rounded-[1.5rem] bg-surface px-6 py-12 text-center shadow-ambient">
             <p className="text-sm text-danger mb-3">
               {isValidatorMode ? 'Failed to fetch validator list.' : 'Failed to fetch nomination pools.'}
             </p>

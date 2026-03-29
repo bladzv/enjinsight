@@ -49,10 +49,10 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
   }
 
   return (
-    <div className="bg-surface rounded-xl p-4 animate-fade-in">
-      <div className="flex items-center gap-2 mb-4">
-        <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-        <h3 className="text-xs font-bold tracking-widest uppercase text-cyan font-headline">Export Data</h3>
+    <div className="animate-fade-in rounded-[1.5rem] bg-surface p-5 shadow-ambient">
+      <div className="mb-4">
+        <p className="section-label">Export</p>
+        <h3 className="mt-2 font-headline text-2xl font-bold text-text">Save balance dataset</h3>
       </div>
 
       {message && (
@@ -73,7 +73,7 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
         tabIndex={0}
         onClick={() => { setEncOn(v => { if (v) setPassword(''); return !v }) }}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEncOn(v => { if (v) setPassword(''); return !v }) } }}
-        className="flex items-center gap-3 mb-4 cursor-pointer select-none w-fit"
+        className="mb-4 flex w-fit cursor-pointer select-none items-center gap-3"
         aria-label="Toggle AES-256-GCM encryption"
       >
         <div

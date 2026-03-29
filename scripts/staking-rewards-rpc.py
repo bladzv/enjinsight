@@ -38,6 +38,7 @@ How it works:
 import argparse
 import ast
 import csv as csv_module
+import hashlib
 import http.client
 import json
 import os
@@ -56,6 +57,7 @@ except ImportError:
 
 try:
     from substrateinterface import SubstrateInterface
+    from substrateinterface.utils.ss58 import ss58_encode as _ss58_encode
 except ImportError:
     print("ERROR: 'substrate-interface' package not found.")
     print("Install it with: pip install substrate-interface")
@@ -99,6 +101,30 @@ def _ws_options(endpoint):
             sslopt['ca_certs'] = _SSL_CA_BUNDLE
         opts['sslopt'] = sslopt
     return opts
+
+# ── Pool account derivation ──────────────────────────────────────────────────
+
+def _compute_pool_bonded_account(pool_id):
+    # type: (int) -> str
+    """
+    Derive the pool-bonded stash SS58 address for a given pool_id.
+
+    The account is a ModuleId-derived address with layout:
+        b"modl" + b"py/nopo\x00" + b"\x00" (kind=Bonded) + pool_id as u32 LE
+    Hashed with blake2b-256, then SS58-encoded with the ENJ prefix.
+    """
+    buf = bytearray(17)
+    buf[0:4]  = b'modl'
+    buf[4:12] = b'py/nopo\x00'
+    buf[12]   = 0x00           # kind = 0 (Bonded)
+    pid = int(pool_id) & 0xFFFFFFFF
+    buf[13] = pid & 0xFF
+    buf[14] = (pid >> 8) & 0xFF
+    buf[15] = (pid >> 16) & 0xFF
+    buf[16] = (pid >> 24) & 0xFF
+    raw = hashlib.blake2b(bytes(buf), digest_size=32).digest()
+    return _ss58_encode(raw, ENJ_SS58_PREFIX)
+
 
 # ── Formatting ────────────────────────────────────────────────────────────────
 
@@ -645,6 +671,16 @@ def compute_rewards(api, address, start_era, end_era, extra_pool_ids=None):
                 print("  Pool {} / Era {}: pool has 0 total supply, skipping.".format(pool_id, era))
                 continue
 
+            # Fetch pool's bonded-stash active stake (actual ENJ bonded) for APY denominator.
+            # This mirrors the web app: use activeStake when available, fallback to total_points.
+            active_stake = 0
+            try:
+                bonded_address = _compute_pool_bonded_account(pool_id)
+                ledger = api.query("Staking", "Ledger", [bonded_address], block_hash=block_hash)
+                active_stake = int(ledger.value.get("active", 0)) if (ledger and ledger.value) else 0
+            except Exception:
+                active_stake = 0
+
             # Sum reward events in the blocks after the era boundary
             print("  Pool {} / Era {}: scanning events after block {:,}...".format(pool_id, era, era_end))
             reinvested = find_reinvested(api, pool_id, era, era_end)
@@ -657,16 +693,18 @@ def compute_rewards(api, address, start_era, end_era, extra_pool_ids=None):
             reward           = (member_points * reinvested) // total_points
             pool_accumulated += reward
 
-            # APY: ((supply_after / supply_before) ^ erasPerYear) - 1
-            # total_points is read at era start (before this era's reinvestment),
-            # so the per-era gain fraction is reinvested / total_points.
-            era_apy = (((total_points + reinvested) / total_points) ** ERAS_PER_YEAR - 1) * 100
+            # APY: (1 + reinvested / apy_denom) ^ erasPerYear - 1
+            # apy_denom = actual ENJ bonded (active_stake from Staking.Ledger) when available,
+            # otherwise fall back to sENJ pool supply (total_points).
+            apy_denom = active_stake if active_stake > 0 else total_points
+            era_apy = ((1 + reinvested / apy_denom) ** ERAS_PER_YEAR - 1) * 100
 
             results.append({
                 "era":                era,
                 "pool_id":            pool_id,
                 "member_points":      member_points,
                 "total_points":       total_points,
+                "active_stake":       active_stake,
                 "reinvested":         reinvested,
                 "reward":             reward,
                 "accumulated":        pool_accumulated,
@@ -994,7 +1032,7 @@ def _run():
     )
 
     if args.json:
-        print(json.dumps(rows, default=str, indent=2))
+        print(json.dumps({"address": address, "rows": rows}, default=str, indent=2))
     else:
         render(rows, address)
 

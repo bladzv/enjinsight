@@ -44,7 +44,7 @@ export default {
       fontFamily: {
         sans:     ['Inter', 'system-ui', 'sans-serif'],
         headline: ['"Space Grotesk"', 'system-ui', 'sans-serif'],
-        brand:   ['Poppins', 'Inter', 'system-ui', 'sans-serif'],
+        brand:    ['"Space Grotesk"', 'Inter', 'system-ui', 'sans-serif'],
         mono:     ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', '"Liberation Mono"', '"Courier New"', 'monospace'],
       },
       animation: {
@@ -72,6 +72,8 @@ export default {
         'cyan-glow':    '0 0 20px rgba(0,238,252,0.15)',
         'card':         '0 4px 24px rgba(0,0,0,0.3)',
         'float':        '0 8px 48px rgba(0,0,0,0.3)',
+        'ambient':      '0 24px 64px rgba(5, 8, 18, 0.45)',
+        'inset-soft':   'inset 0 1px 0 rgba(255,255,255,0.04)',
       },
       borderRadius: {
         DEFAULT: '0.375rem',     // md

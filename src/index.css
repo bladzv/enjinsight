@@ -3,21 +3,80 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --ink: #0c0e17;
+    --surface: #11131d;
+    --card: #171924;
+    --surface-high: #1c1f2b;
+    --surface-bright: #282b3a;
+    --border-ghost: rgba(70, 71, 82, 0.16);
+    --primary: #b6a0ff;
+    --primary-dim: #8051ff;
+    --cyan: #00eefc;
+    --success: #8eff71;
+    --danger: #ff6e84;
+    --text: #f0f0fd;
+    --text-secondary: #aaaab7;
+    --muted: #737580;
+  }
+
   *, *::before, *::after {
     box-sizing: border-box;
   }
 
   html {
     scroll-behavior: smooth;
+    background: var(--ink);
   }
 
   body {
-    @apply bg-ink text-text font-sans antialiased;
+    @apply text-text font-sans antialiased;
+    min-height: 100dvh;
+    background-color: var(--ink);
+    background-image:
+      radial-gradient(circle at top left, rgba(182, 160, 255, 0.16), transparent 28%),
+      radial-gradient(circle at top right, rgba(0, 238, 252, 0.10), transparent 24%),
+      linear-gradient(to right, rgba(70, 71, 82, 0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(70, 71, 82, 0.06) 1px, transparent 1px),
+      linear-gradient(180deg, #0b0d15 0%, #0c0e17 20%, #090b12 100%);
+    background-size: auto, auto, 44px 44px, 44px 44px, auto;
+    background-attachment: fixed;
+  }
+
+  body::before,
+  body::after {
+    content: '';
+    position: fixed;
+    inset: auto;
+    pointer-events: none;
+    z-index: -1;
+    filter: blur(80px);
+    opacity: 0.7;
+  }
+
+  body::before {
+    top: -14rem;
+    left: -10rem;
+    width: 30rem;
+    height: 30rem;
+    border-radius: 9999px;
+    background: rgba(128, 81, 255, 0.16);
+  }
+
+  body::after {
+    right: -10rem;
+    top: 18rem;
+    width: 24rem;
+    height: 24rem;
+    border-radius: 9999px;
+    background: rgba(0, 238, 252, 0.09);
+  }
+
+  #root {
     min-height: 100dvh;
   }
 
-  /* Prevent 300ms tap delay and double-tap zoom on interactive elements */
-  button, [role="button"], a, input, select, textarea {
+  button, [role='button'], a, input, select, textarea {
     touch-action: manipulation;
   }
 
@@ -36,129 +95,334 @@
     width: 4px;
     height: 4px;
   }
-  ::-webkit-scrollbar-track  { background: theme('colors.ink'); }
-  ::-webkit-scrollbar-thumb  { background: theme('colors.rim');  border-radius: 10px; }
-  ::-webkit-scrollbar-thumb:hover { background: theme('colors.primary-dim'); }
+
+  ::-webkit-scrollbar-track {
+    background: theme('colors.ink');
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: theme('colors.rim');
+    border-radius: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: theme('colors.primary-dim');
+  }
 }
 
 @layer components {
-  /* ── Glass card (no-line rule: defined by bg shift, minimal ghost border) ── */
   .card {
-    @apply bg-card rounded-xl shadow-card;
+    @apply rounded-xl bg-card shadow-card;
     border: 1px solid rgba(70, 71, 82, 0.10);
   }
 
-  /* ── Primary button (gradient accent) ── */
+  .observatory-panel {
+    @apply rounded-[1.25rem] bg-surface shadow-ambient;
+    border: 1px solid rgba(70, 71, 82, 0.12);
+  }
+
+  .observatory-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent 24%);
+  }
+
+  .glass-panel {
+    backdrop-filter: blur(12px);
+    background: rgba(28, 31, 43, 0.8);
+  }
+
+  .page-hero {
+    @apply relative overflow-hidden rounded-[1.75rem] px-6 py-8 sm:px-8 sm:py-10 lg:px-10 lg:py-12;
+    background:
+      radial-gradient(circle at top right, rgba(0, 238, 252, 0.12), transparent 30%),
+      radial-gradient(circle at bottom left, rgba(182, 160, 255, 0.16), transparent 38%),
+      linear-gradient(145deg, rgba(17, 19, 29, 0.98), rgba(12, 14, 23, 0.96));
+    border: 1px solid rgba(70, 71, 82, 0.14);
+    box-shadow: 0 24px 64px rgba(5, 8, 18, 0.42);
+  }
+
+  .page-hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background-image:
+      linear-gradient(to right, rgba(70, 71, 82, 0.08) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(70, 71, 82, 0.08) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: linear-gradient(180deg, rgba(0,0,0,0.7), transparent 100%);
+  }
+
+  .hero-kicker {
+    @apply inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.24em];
+    background: rgba(28, 31, 43, 0.9);
+    color: theme('colors.cyan');
+    border: 1px solid rgba(0, 238, 252, 0.14);
+  }
+
+  .hero-dot {
+    @apply h-2 w-2 rounded-full bg-success;
+    box-shadow: 0 0 14px rgba(142, 255, 113, 0.55);
+  }
+
+  /* Scale helper: enlarge element by 60% (scale 1.6) */
+  .enlarge-60 {
+    transform: scale(1.6);
+    /* scale from the right so the enlarged element expands leftwards
+       (prevents overflow on the right edge of its container) */
+    transform-origin: right center;
+    display: inline-block;
+    /* add a small right gap so it doesn't touch container padding/margin */
+    margin-right: 0.5rem;
+  }
+
+  .hero-title {
+    @apply font-headline font-bold tracking-tight text-text;
+    font-size: clamp(2.6rem, 5vw, 5.4rem);
+    line-height: 0.95;
+  }
+
+  .hero-copy {
+    @apply max-w-2xl text-sm leading-7 text-text-secondary sm:text-base;
+  }
+
+  .section-label {
+    @apply text-[10px] font-bold uppercase tracking-[0.24em] text-text-secondary;
+  }
+
+  .section-title {
+    @apply font-headline text-2xl font-bold tracking-tight text-text sm:text-3xl;
+  }
+
+  .section-subtitle {
+    @apply text-sm leading-6 text-text-secondary;
+  }
+
+  .metric-card {
+    @apply relative overflow-hidden rounded-2xl bg-card px-5 py-5 transition-all duration-200;
+    border: 1px solid rgba(70, 71, 82, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+
+  .metric-card:hover {
+    background: rgba(28, 31, 43, 0.98);
+    transform: translateY(-1px);
+  }
+
+  .metric-value {
+    @apply mt-3 font-headline font-bold leading-none text-text;
+    font-size: 34.5px; /* 15% larger than 30px (text-3xl) */
+    line-height: 1;
+  }
+
+  .metric-label {
+    @apply font-bold uppercase tracking-[0.24em] text-text-secondary;
+    font-size: 11.5px; /* 15% larger than 10px */
+  }
+
+  .editorial-divider {
+    width: 1px;
+    align-self: stretch;
+    background: linear-gradient(180deg, transparent, rgba(70,71,82,0.2), transparent);
+  }
+
+  .tool-tab {
+    @apply flex items-center justify-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-colors;
+  }
+
+  .tool-tab-active {
+    @apply bg-primary text-on-primary shadow-primary-glow;
+  }
+
+  .data-panel {
+    @apply rounded-[1.25rem] bg-surface px-4 py-4 sm:px-5 sm:py-5;
+    border: 1px solid rgba(70, 71, 82, 0.10);
+  }
+
+  .inset-panel {
+    @apply rounded-[1rem] bg-term/60 px-4 py-4;
+    border: 1px solid rgba(70, 71, 82, 0.08);
+  }
+
+  .mini-chip {
+    @apply inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em];
+    background: rgba(23, 25, 36, 0.9);
+    color: theme('colors.text-secondary');
+  }
+
+  .nav-link-pill {
+    @apply inline-flex items-center gap-2 rounded-full px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] transition-colors;
+  }
+
+  .nav-link-pill-active {
+    @apply bg-primary/15 text-primary;
+    box-shadow: inset 0 0 0 1px rgba(182,160,255,0.14);
+  }
+
+  .nav-link-pill-idle {
+    @apply text-text-secondary hover:bg-card hover:text-text;
+  }
+
+  .heartbeat-svg {
+    position: relative;
+    display: inline-block;
+    width: 128px;
+    height: 32px;
+    overflow: hidden;
+    vertical-align: middle;
+  }
+
+  .heartbeat-svg-compact {
+    filter: drop-shadow(0 0 8px rgba(0, 238, 252, 0.14));
+  }
+
+  .heartbeat-monitor {
+    position: relative;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    border-radius: 1rem;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.025), transparent 72%),
+      rgba(5, 7, 15, 0.94);
+  }
+
+  .heartbeat-line-live {
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .heartbeat-line-live {
+    opacity: 0;
+    stroke-dasharray: 1000;
+    stroke-dashoffset: 1000;
+    animation: heartbeat-burst 2s linear 1 both;
+    filter: drop-shadow(0 0 9px rgba(0, 238, 252, 0.40));
+  }
+
+  @keyframes heartbeat-burst {
+    0% {
+      stroke-dashoffset: 1000;
+      opacity: 0;
+    }
+    8% {
+      opacity: 1;
+    }
+    100% {
+      stroke-dashoffset: 0;
+      opacity: 0;
+    }
+  }
+
+  .hero-dot {
+    @apply h-2 w-2 rounded-full bg-success;
+    box-shadow: 0 0 14px rgba(142, 255, 113, 0.55);
+  }
+
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded
-           text-white font-semibold text-sm tracking-wide
-           transition-all duration-200
-           disabled:opacity-40 disabled:cursor-not-allowed
-           focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
-           focus-visible:ring-offset-ink;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-semibold tracking-wide text-white transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
     background: linear-gradient(135deg, theme('colors.primary-dim'), theme('colors.primary'));
+    box-shadow: 0 14px 34px rgba(128, 81, 255, 0.20);
   }
+
   .btn-primary:hover:not(:disabled) {
-    filter: brightness(1.15);
-    transform: scale(0.98);
+    filter: brightness(1.08);
+    transform: translateY(-1px);
   }
 
-  /* ── Stop button (danger) ── */
-  .btn-stop {
-    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded
-           bg-danger hover:bg-danger/90 active:bg-danger/80
-           text-white font-semibold text-sm tracking-wide
-           transition-all duration-150
-           disabled:opacity-40 disabled:cursor-not-allowed
-           focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2
-           focus-visible:ring-offset-ink;
-  }
-
-  /* ── Danger button (alias for btn-stop) ── */
+  .btn-stop,
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded
-           bg-danger hover:bg-danger/90 active:bg-danger/80
-           text-white font-semibold text-sm tracking-wide
-           transition-all duration-150
-           disabled:opacity-40 disabled:cursor-not-allowed
-           focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2
-           focus-visible:ring-offset-ink;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-semibold tracking-wide text-white transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
+    background: linear-gradient(135deg, rgba(215, 51, 87, 0.95), rgba(255, 110, 132, 0.95));
+    box-shadow: 0 14px 30px rgba(215, 51, 87, 0.18);
   }
 
-  /* ── Secondary button ── */
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded
-           bg-surface-bright hover:bg-rim active:bg-rim/80
-           text-dim hover:text-text font-semibold text-sm tracking-wide
-           transition-all duration-150
-           disabled:opacity-40 disabled:cursor-not-allowed
-           focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2
-           focus-visible:ring-offset-ink;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-semibold tracking-wide text-text transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
+    background: rgba(34, 37, 50, 0.9);
+    border: 1px solid rgba(70, 71, 82, 0.16);
   }
 
-  /* ── Ghost button ── */
+  .btn-secondary:hover:not(:disabled) {
+    background: rgba(40, 43, 58, 0.95);
+  }
+
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded
-           text-dim hover:text-text hover:bg-surface-bright
-           text-xs font-medium transition-all duration-150
-           focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1
-           focus-visible:ring-offset-ink;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-dim transition-all duration-150 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-ink;
   }
 
-  /* ── Icon button — minimum 44x44 tap target ── */
+  .btn-ghost:hover {
+    @apply bg-surface-bright text-text;
+  }
+
   .btn-icon {
-    @apply inline-flex items-center justify-center
-           min-w-[44px] min-h-[44px] rounded
-           text-dim hover:text-text hover:bg-surface-bright
-           transition-all duration-150
-           focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1
-           focus-visible:ring-offset-ink;
+    @apply inline-flex min-h-[42px] min-w-[42px] items-center justify-center rounded-lg text-dim transition-all duration-150 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-ink;
   }
 
-  /* ── Status badges ── */
-  .badge-active  { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tighter bg-success/10 text-success border border-success/20; }
-  .badge-waiting { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tighter bg-muted/20 text-dim; }
-  .badge-error   { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tighter bg-danger/10 text-danger border border-danger/20; }
+  .btn-icon:hover {
+    @apply bg-surface-bright text-text;
+  }
 
-  /* ── Terminal log line colours ── */
+  .badge-active {
+    @apply inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-tighter text-success;
+  }
+
+  .badge-waiting {
+    @apply inline-flex items-center gap-1 rounded-full bg-muted/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-tighter text-dim;
+  }
+
+  .badge-error {
+    @apply inline-flex items-center gap-1 rounded-full border border-danger/20 bg-danger/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-tighter text-danger;
+  }
+
   .log-info { @apply text-cyan; }
   .log-ok   { @apply text-success; }
   .log-warn { @apply text-warning; }
   .log-err  { @apply text-danger; }
   .log-done { @apply text-primary; }
   .log-ts   { @apply text-muted; }
+  .log-retry { @apply font-semibold text-yellow-400; }
 
-  /* Highlight retry log lines for visibility */
-  .log-retry {
-    @apply font-semibold text-yellow-400;
+  .sev-low {
+    @apply inline-flex items-center gap-1 rounded-full border border-warning/20 bg-warning/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-tighter text-warning;
   }
 
-  /* ── Severity chips ── */
-  .sev-low    { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tighter bg-warning/10 text-warning border border-warning/20; }
-  .sev-medium { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tighter bg-orange-500/10 text-orange-400 border border-orange-500/20; }
-  .sev-high   { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tighter bg-danger/10 text-danger border border-danger/20; }
+  .sev-medium {
+    @apply inline-flex items-center gap-1 rounded-full border border-orange-500/20 bg-orange-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-tighter text-orange-400;
+  }
 
-  /* ── Glass panel (for floating elements) ── */
-  .glass-panel {
-    backdrop-filter: blur(12px);
-    background: rgba(28, 31, 43, 0.8);
+  .sev-high {
+    @apply inline-flex items-center gap-1 rounded-full border border-danger/20 bg-danger/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-tighter text-danger;
   }
 }
 
 @layer utilities {
-  .scrollbar-thin { scrollbar-width: thin; }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
 
-  /* Horizontal scroll container */
-  .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .scroll-x {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 
-  /* Line clamp for addresses */
   .addr {
     @apply font-mono text-xs text-text-secondary;
     word-break: break-all;
   }
 
-  /* Animated gradient border */
   .glow-border {
     border-image: linear-gradient(135deg, #b6a0ff, #00eefc) 1;
+  }
+
+  .text-balance {
+    text-wrap: balance;
   }
 }
