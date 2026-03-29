@@ -22,6 +22,7 @@ export default function PoolSummarySection({ pools, eraCount }) {
     .filter(p => !hasNoNominatedValidators(p))
     .map(p => ({ p, groups: findConsecutiveGroups(p.missedEras) }))
     .filter(({ groups }) => groups.length > 0)
+  const cleanPreview = clean.slice(0, 4)
 
   // Gap table pagination
   const gapPages     = Math.max(1, Math.ceil(withGaps.length / gapPageSize))
@@ -33,8 +34,9 @@ export default function PoolSummarySection({ pools, eraCount }) {
 
   return (
     <section aria-labelledby="pool-summary-heading" className="space-y-6 animate-fade-in">
-      <div className="flex items-center gap-3 border-l-4 border-primary pl-4">
-        <h2 id="pool-summary-heading" className="text-lg font-bold font-headline text-text uppercase tracking-tight">Pool Summary</h2>
+      <div>
+        <p className="section-label">Summary</p>
+        <h2 id="pool-summary-heading" className="section-title mt-2">Pool Overview</h2>
       </div>
 
       {/* ── Overview stat chips (bento grid) ────────────────────────── */}
@@ -86,7 +88,7 @@ export default function PoolSummarySection({ pools, eraCount }) {
 
       {/* ── Reward gap table (paginated) ──────────────────────────── */}
       {withGaps.length > 0 ? (
-        <div className="bg-surface rounded-xl overflow-hidden">
+        <div className="overflow-hidden rounded-[1.5rem] bg-surface shadow-ambient">
           <div className="px-5 py-3 bg-card flex items-center gap-2">
             <XCircle size={14} className="text-warning" />
             <h3 className="text-sm font-semibold font-headline text-text">Pools with Missing Rewards</h3>
@@ -231,7 +233,7 @@ export default function PoolSummarySection({ pools, eraCount }) {
           )}
         </div>
       ) : (
-        <div className="bg-surface rounded-xl px-5 py-5 flex items-center gap-3">
+        <div className="flex items-center gap-3 rounded-[1.5rem] bg-surface px-5 py-5 shadow-ambient">
           <CheckCircle2 size={18} className="text-success flex-shrink-0" />
           <p className="text-sm text-text">
             All pools received rewards for every era in the last <span className="font-semibold">{eraCount}</span> eras.
@@ -249,34 +251,80 @@ export default function PoolSummarySection({ pools, eraCount }) {
 
       {/* ── Clean pools (collapsed) ──────────────────────────────── */}
       {clean.length > 0 && (
-        <div className="bg-surface rounded-xl overflow-hidden">
+        <div className="overflow-hidden rounded-[1.5rem] bg-surface shadow-ambient ring-1 ring-success/10">
           <button
             onClick={() => setShowClean(s => !s)}
-            className="w-full flex items-center gap-2 px-5 py-3 hover:bg-card transition-colors text-left"
+            className="w-full px-5 py-5 text-left transition-colors hover:bg-card/50 sm:px-6"
             aria-expanded={showClean}
           >
-            <CheckCircle2 size={14} className="text-success" />
-            <span className="text-sm font-semibold text-text">
-              Perfect Record ({clean.length} pool{clean.length !== 1 ? 's' : ''})
-            </span>
-            <span className="ml-auto text-muted">
-              {showClean ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </span>
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-success/10 text-success">
+                  <CheckCircle2 size={20} />
+                </div>
+                <div className="space-y-2">
+                  <p className="section-label text-success">Pool Review</p>
+                  <div>
+                    <h3 className="font-headline text-2xl font-bold text-text">Perfect Record</h3>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
+                      Pools in this group received rewards in every era across the current scan window.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <span className="ml-auto self-start text-muted lg:self-center">
+                {showClean ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </span>
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              <span className="mini-chip">Window: {eraCount} eras</span>
+              {cleanPreview.map(p => (
+                <span key={p.poolId} className="mini-chip" title={poolLabel(p)}>
+                  <CheckCircle2 size={11} className="text-success" />
+                  #{p.poolId} {trimPoolLabel(poolLabel(p))}
+                </span>
+              ))}
+              {clean.length > cleanPreview.length && (
+                <span className="mini-chip">+{clean.length - cleanPreview.length} more</span>
+              )}
+            </div>
           </button>
           {showClean && (
-            <div className="px-5 py-3 grid grid-cols-1 sm:grid-cols-2 gap-2 animate-fade-in">
+            <div className="grid grid-cols-1 gap-3 px-5 py-5 animate-fade-in sm:grid-cols-2 xl:grid-cols-3 sm:px-6">
               {clean.map(p => (
-                <div key={p.poolId} className="flex items-center gap-2 text-xs text-text-secondary">
-                  <CheckCircle2 size={12} className="text-success flex-shrink-0" />
-                  <span className="truncate">{poolLabel(p)}</span>
+                <div key={p.poolId} className="rounded-[1.25rem] bg-card px-4 py-4 transition-colors hover:bg-surface-high">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-success/10 font-mono text-sm font-bold text-success">
+                      #{p.poolId}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-text" title={poolLabel(p)}>
+                        {poolLabel(p)}
+                      </p>
+                      <p className="mt-1 text-[11px] text-text-secondary">
+                        {p.memberCount != null ? `${p.memberCount} members` : 'Members unavailable'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <span className="mini-chip">
+                      Validators: {Array.isArray(p.nominatedValidators) ? p.nominatedValidators.length : '—'}
+                    </span>
+                    {p.state && <span className="mini-chip">{p.state}</span>}
+                  </div>
+
                   <a
                     href={poolExplorerUrl(p.poolId)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="ml-auto text-text-secondary hover:text-cyan flex-shrink-0"
+                    className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-text-secondary transition-colors hover:text-cyan"
                     aria-label="Open on Subscan"
                   >
-                    <ExternalLink size={10} />
+                    Open on Subscan
+                    <ExternalLink size={12} />
                   </a>
                 </div>
               ))}
@@ -300,11 +348,9 @@ function hasNoNominatedValidators(pool) {
 
 function StatChip({ value, label, colour }) {
   return (
-    <div className="bg-card p-6 rounded-xl flex flex-col justify-between group hover:bg-surface-bright transition-colors">
-      <span className="text-muted text-[10px] uppercase font-bold tracking-widest">{label}</span>
-      <div className="mt-3">
-        <div className={`text-3xl sm:text-4xl font-headline font-bold ${colour} leading-none`}>{value}</div>
-      </div>
+    <div className="metric-card">
+      <span className="metric-label">{label}</span>
+      <div className={`metric-value text-4xl ${colour}`}>{value}</div>
     </div>
   )
 }

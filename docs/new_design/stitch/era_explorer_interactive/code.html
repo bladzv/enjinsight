@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>EnjinSight | Era Block Explorer</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-surface-variant": "#aaaab7",
+                        "secondary-fixed-dim": "#00deec",
+                        "surface-variant": "#222532",
+                        "tertiary-fixed-dim": "#2be800",
+                        "secondary": "#00eefc",
+                        "on-tertiary": "#0d6100",
+                        "on-surface": "#f0f0fd",
+                        "on-background": "#f0f0fd",
+                        "tertiary-dim": "#2be800",
+                        "on-primary": "#350090",
+                        "on-tertiary-fixed": "#064200",
+                        "on-secondary-container": "#e3fdff",
+                        "outline": "#737580",
+                        "on-primary-fixed-variant": "#33008a",
+                        "error": "#ff6e84",
+                        "on-secondary-fixed": "#003f43",
+                        "tertiary-container": "#2ff801",
+                        "on-primary-container": "#280071",
+                        "on-primary-fixed": "#000000",
+                        "surface-container-low": "#11131d",
+                        "primary-dim": "#8051ff",
+                        "background": "#0c0e17",
+                        "primary-container": "#aa8fff",
+                        "inverse-primary": "#6a30f0",
+                        "inverse-on-surface": "#53545f",
+                        "on-secondary-fixed-variant": "#005e64",
+                        "surface-container-lowest": "#000000",
+                        "primary-fixed": "#aa8fff",
+                        "surface-container-highest": "#222532",
+                        "surface": "#0c0e17",
+                        "surface-dim": "#0c0e17",
+                        "tertiary": "#8eff71",
+                        "primary-fixed-dim": "#9d7eff",
+                        "primary": "#b6a0ff",
+                        "surface-tint": "#b6a0ff",
+                        "surface-bright": "#282b3a",
+                        "inverse-surface": "#faf8ff",
+                        "on-tertiary-container": "#0b5800",
+                        "on-secondary": "#005359",
+                        "secondary-dim": "#00deec",
+                        "on-tertiary-fixed-variant": "#0d6200",
+                        "tertiary-fixed": "#2ff801",
+                        "error-container": "#a70138",
+                        "outline-variant": "#464752",
+                        "surface-container": "#171924",
+                        "secondary-container": "#006970",
+                        "error-dim": "#d73357",
+                        "surface-container-high": "#1c1f2b",
+                        "secondary-fixed": "#00eefc",
+                        "on-error-container": "#ffb2b9",
+                        "on-error": "#490013"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .ekg-line {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: dash 10s linear infinite;
+        }
+        @keyframes dash {
+            to { stroke-dashoffset: 0; }
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #000000;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #464752;
+        }
+        #terminal-panel {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #terminal-panel.collapsed {
+            transform: translateY(calc(100% - 44px));
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body overflow-x-hidden">
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 right-0 z-50 bg-[#11131d] border-none shadow-none">
+<div class="flex justify-between items-center w-full px-8 py-4 max-w-[1920px] mx-auto">
+<div class="flex items-center gap-8">
+<span class="text-2xl font-bold tracking-tighter text-[#b6a0ff] font-['Space_Grotesk']">EnjinSight</span>
+<nav class="hidden md:flex gap-6">
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors font-['Inter'] text-sm hover:underline underline-offset-8 transition-all duration-200" href="#">Home</a>
+<a class="text-[#b6a0ff] border-b-2 border-[#b6a0ff] pb-1 font-bold font-['Inter'] text-sm hover:underline underline-offset-8 transition-all duration-200" href="#">Era Explorer</a>
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors font-['Inter'] text-sm hover:underline underline-offset-8 transition-all duration-200" href="#">Staking Cadence</a>
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors font-['Inter'] text-sm hover:underline underline-offset-8 transition-all duration-200" href="#">Balance Viewer</a>
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors font-['Inter'] text-sm hover:underline underline-offset-8 transition-all duration-200" href="#">Reward History</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<span class="hidden lg:block text-[#b6a0ff] font-['Space_Grotesk'] text-sm font-medium uppercase tracking-wider">Enjin Matrixchain</span>
+<button class="material-symbols-outlined text-[#aaaab7] hover:bg-[#282b3a] p-2 rounded-full transition-all duration-200 scale-95 active:scale-90 hover:text-primary transition-colors hover:bg-surface-bright">settings</button>
+<button class="material-symbols-outlined text-[#aaaab7] hover:bg-[#282b3a] p-2 rounded-full transition-all duration-200 scale-95 active:scale-90 hover:text-primary transition-colors hover:bg-surface-bright">account_circle</button>
+</div>
+</div>
+</header>
+<main class="pt-24 pb-32 min-h-screen">
+<div class="max-w-6xl mx-auto px-8 space-y-12">
+<!-- Section 1: Live Status -->
+<section class="space-y-8">
+<div class="flex items-end justify-between">
+<div class="space-y-1">
+<span class="text-secondary font-mono text-sm tracking-widest uppercase font-bold">Network Core</span>
+<h1 class="text-5xl font-headline font-bold tracking-tight">Active Matrix State</h1>
+</div>
+<div class="text-right">
+<span class="text-on-surface-variant text-xs uppercase tracking-tighter block">System Heartbeat</span>
+<div class="w-32 h-8 relative overflow-hidden">
+<svg class="absolute inset-0 w-full h-full" viewbox="0 0 100 40">
+<path class="ekg-line" d="M0 20 L20 20 L25 10 L30 30 L35 20 L100 20" fill="none" stroke="#00eefc" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Era Card -->
+<div class="bg-surface-container-low p-8 rounded-lg relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl">schedule</span>
+</div>
+<p class="text-on-surface-variant text-xs font-bold uppercase tracking-[0.2em] mb-4">Current Era</p>
+<div class="flex items-baseline gap-2">
+<span class="text-6xl font-headline font-bold text-primary">1,402</span>
+</div>
+</div>
+<!-- Session Card -->
+<div class="bg-surface-container-low p-8 rounded-lg relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl">layers</span>
+</div>
+<p class="text-on-surface-variant text-xs font-bold uppercase tracking-[0.2em] mb-4">Session Index</p>
+<div class="flex items-baseline gap-2">
+<span class="text-6xl font-headline font-bold text-secondary">8,412</span>
+</div>
+</div>
+<!-- Block Card -->
+<div class="bg-surface-container-low p-8 rounded-lg relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl">database</span>
+</div>
+<p class="text-on-surface-variant text-xs font-bold uppercase tracking-[0.2em] mb-4">Best Block</p>
+<div class="flex items-baseline gap-2">
+<span class="text-6xl font-headline font-bold text-tertiary">18,293,104</span>
+</div>
+</div>
+</div>
+<!-- Progress Bar Section -->
+<div class="bg-surface-container p-10 rounded-xl border-l-4 border-primary">
+<div class="flex justify-between items-end mb-6">
+<div class="space-y-2">
+<h3 class="text-2xl font-headline font-bold">Blocks until era end</h3>
+<p class="text-on-surface-variant text-sm">Target conclusion: ~42 minutes (600 blocks remaining)</p>
+</div>
+<div class="text-right">
+<span class="text-4xl font-headline font-bold text-primary">78.4%</span>
+<span class="text-on-surface-variant text-xs block uppercase">Completion Rate</span>
+</div>
+</div>
+<div class="h-4 w-full bg-surface-container-lowest rounded-full overflow-hidden p-[2px]">
+<div class="h-full bg-gradient-to-r from-primary-dim to-primary rounded-full" style="width: 78.4%"></div>
+</div>
+</div>
+</section>
+<!-- Section 2: Historical Lookup -->
+<section class="grid grid-cols-1 lg:grid-cols-12 gap-10">
+<!-- Search Panel -->
+<div class="lg:col-span-4 space-y-6">
+<div class="bg-surface-container-low p-8 rounded-lg">
+<h2 class="text-xl font-headline font-bold mb-6 flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">search</span>
+                            Historical Lookup
+                        </h2>
+<form class="space-y-6">
+<div class="space-y-2">
+<label class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Era Number</label>
+<input class="w-full bg-surface-container border-none focus:ring-1 focus:ring-primary rounded p-3 text-on-surface font-mono placeholder:text-outline/40 transition-all duration-200 focus:ring-2 focus:ring-primary/50" placeholder="e.g. 1399" type="text"/>
+</div>
+<button class="w-full py-4 bg-primary text-on-primary font-bold rounded hover:brightness-110 active:scale-[0.98] transition-all shadow-lg shadow-primary/20">FETCH ERA DATA</button>
+</form>
+</div>
+<div class="bg-surface-container-lowest/50 p-6 rounded-lg border border-outline-variant/10">
+<div class="flex items-start gap-4">
+<span class="material-symbols-outlined text-secondary">info</span>
+<div>
+<h4 class="text-xs font-bold uppercase mb-1">CSV Load Status</h4>
+<div class="flex items-center gap-2">
+<div class="flex-1 h-1.5 bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-secondary w-full"></div>
+</div>
+<span class="text-[10px] font-mono text-secondary">READY</span>
+</div>
+<p class="text-[10px] text-on-surface-variant mt-2 leading-relaxed">Local reference cache synchronized with 1,400 past era records.</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Results Panel -->
+<div class="lg:col-span-8">
+<div class="bg-surface-container p-1 rounded-lg">
+<div class="overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead class="bg-surface-container-low">
+<tr>
+<th class="p-6 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Metric</th>
+<th class="p-6 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Blockchain Value</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/5">
+<tr class="hover:bg-surface-bright transition-colors group">
+<td class="p-6 font-medium">Era Lifespan</td>
+<td class="p-6 font-mono text-sm text-primary">18,124,000 — 18,126,400</td>
+</tr>
+<tr class="hover:bg-surface-bright transition-colors">
+<td class="p-6 font-medium">Genesis Hash</td>
+<td class="p-6 font-mono text-sm text-secondary truncate max-w-[300px]">0x7b2f8a1c9e4d5b6a7f8c9d0e1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c</td>
+</tr>
+<tr class="hover:bg-surface-bright transition-colors">
+<td class="p-6 font-medium">Temporal Range</td>
+<td class="p-6">
+<div class="flex flex-col gap-1">
+<span class="text-xs text-on-surface-variant font-mono">START: 2023-11-12 14:00:00 UTC</span>
+<span class="text-xs text-on-surface-variant font-mono">END: 2023-11-12 20:00:00 UTC</span>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-surface-bright transition-colors">
+<td class="p-6 font-medium">Total Issuance</td>
+<td class="p-6 font-mono text-sm text-tertiary">1,000,293,481.02 ENJ</td>
+</tr>
+<tr class="hover:bg-surface-bright transition-colors">
+<td class="p-6 font-medium">Validator Count</td>
+<td class="p-6 font-mono text-sm">240 Active Nodes</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</section>
+<!-- Visualization / Graphic Section -->
+<section class="h-64 rounded-xl overflow-hidden relative group">
+<img alt="Network Visualization" class="w-full h-full object-cover opacity-30 grayscale group-hover:grayscale-0 group-hover:scale-105 transition-all duration-700" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCA427Zb6ZRHIwPK_XqlrY5t49RQx2F8K3phm7w2Tuvkzw4_4ZD7Wvtz6YoH-w2r-iym5aSrSE0Q2AhPYeC_dWB7isa4Zom5TZ2tvrV8wgBDIyK6N4A-glzogZJcVqaNxX3mKAJq3iuaKNqFYRLvi0OixIe5ZQtSjz7ZkMwowDBlcJU1Df7lv4Gpn6jCRBvwfzTG5uV53pAAavlmfPGExGu4mIXlADpgkUbyXRhnI0xEjKYWWnTpJfk_G7uJeGBXuFa41podoxLOu_v"/>
+<div class="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent flex items-center justify-center p-12">
+<div class="text-center max-w-2xl">
+<h2 class="text-3xl font-headline font-bold mb-4">Decentralized Clarity</h2>
+<p class="text-on-surface-variant leading-relaxed">Providing real-time insights into the Matrixchain Era progression without the need for connected wallets or high-latency RPC calls.</p>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Bottom Terminal Panel -->
+<aside class="fixed bottom-0 left-0 right-0 z-40 bg-[#000000] border-t border-outline-variant/20 h-64 flex flex-col inset-shadow-sm" id="terminal-panel">
+<!-- Panel Header -->
+<div class="px-6 py-2 border-b border-outline-variant/10 flex items-center justify-between cursor-pointer group" onclick="document.getElementById('terminal-panel').classList.toggle('collapsed')">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-tertiary shadow-[0_0_8px_#8eff71]"></div>
+<div>
+<h3 class="font-mono text-xs uppercase tracking-widest text-[#b6a0ff] flex items-center gap-2">
+                        Live Terminal
+                        <span class="material-symbols-outlined text-xs opacity-50 group-hover:opacity-100 transition-opacity">keyboard_arrow_down</span>
+</h3>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<nav class="flex items-center gap-1">
+<button class="flex items-center gap-2 px-3 py-1 bg-[#171924] text-[#b6a0ff] border-b-2 border-[#8051ff] font-mono text-[10px] uppercase tracking-widest transition-all duration-150 ease-in-out hover:bg-surface-bright hover:brightness-125 transition-all">
+<span class="material-symbols-outlined text-[14px]">terminal</span>
+                        Terminal
+                    </button>
+<button class="flex items-center gap-2 px-3 py-1 text-[#464752] hover:text-[#aaaab7] hover:bg-[#11131d] font-mono text-[10px] uppercase tracking-widest transition-all duration-150 ease-in-out hover:bg-surface-bright hover:brightness-125 transition-all">
+<span class="material-symbols-outlined text-[14px]">list_alt</span>
+                        Logs
+                    </button>
+<button class="flex items-center gap-2 px-3 py-1 text-[#464752] hover:text-[#aaaab7] hover:bg-[#11131d] font-mono text-[10px] uppercase tracking-widest transition-all duration-150 ease-in-out hover:bg-surface-bright hover:brightness-125 transition-all">
+<span class="material-symbols-outlined text-[14px]">hub</span>
+                        Events
+                    </button>
+<button class="flex items-center gap-2 px-3 py-1 text-[#464752] hover:text-[#aaaab7] hover:bg-[#11131d] font-mono text-[10px] uppercase tracking-widest transition-all duration-150 ease-in-out hover:bg-surface-bright hover:brightness-125 transition-all">
+<span class="material-symbols-outlined text-[14px]">monitoring</span>
+                        Metrics
+                    </button>
+</nav>
+<div class="h-4 w-px bg-outline-variant/20 mx-2"></div>
+<button class="px-3 py-1 bg-surface-variant text-on-surface text-[10px] font-mono uppercase tracking-widest hover:bg-surface-bright transition-all hover:brightness-125 transition-all">Clear Logs</button>
+<button class="flex items-center gap-1 text-[#aaaab7] text-[10px] font-mono uppercase tracking-widest hover:text-secondary py-1 px-3 hover:bg-surface-bright hover:brightness-125 transition-all">
+<span class="material-symbols-outlined text-[14px]">help</span>
+                    Docs
+                </button>
+</div>
+</div>
+<!-- Panel Content -->
+<div class="flex-1 overflow-y-auto custom-scrollbar p-6 font-mono text-[11px] leading-relaxed grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<div class="space-y-1 opacity-90">
+<p class="text-tertiary">[14:22:01] Block #18,293,102 sealed</p>
+<p class="text-on-surface-variant">[14:22:04] Relaying Era 1,402 metrics...</p>
+<p class="text-primary">[14:22:07] Validation trace: success</p>
+<p class="text-secondary">[14:22:12] New peer connected: 0x8a..2f</p>
+</div>
+<div class="space-y-1 opacity-90">
+<p class="text-tertiary">[14:22:18] Block #18,293,103 sealed</p>
+<p class="text-on-surface-variant">[14:22:21] Consensus finalized: Round 4</p>
+<p class="text-error">[14:22:25] Skip missed heartbeat 0x112</p>
+<p class="text-tertiary">[14:22:28] Block #18,293,104 sealed</p>
+</div>
+<div class="hidden lg:block space-y-1 opacity-90">
+<p class="text-on-surface-variant">[14:22:30] Syncing state trie... 99.8%</p>
+<p class="text-primary">[14:22:32] Epoch 1,402 transition ready</p>
+<p class="text-secondary">[14:22:35] VRF output verified</p>
+<p class="text-tertiary">[14:22:38] Block #18,293,105 sealed</p>
+</div>
+</div>
+</aside>
+<!-- Footer -->
+<footer class="flex justify-between items-center w-full px-8 py-6 bg-[#0c0e17] border-t border-[#464752]/15">
+<div class="flex items-center gap-4">
+<span class="font-['Inter'] text-sm font-medium text-[#aaaab7]">EnjinSight — Read-only, No wallet required</span>
+</div>
+<div class="flex gap-8">
+<a class="font-['Inter'] text-sm font-medium text-[#aaaab7] hover:text-[#00eefc] underline underline-offset-4 opacity-80 hover:opacity-100 transition-all hover:text-primary transition-colors" href="#">Documentation</a>
+<a class="font-['Inter'] text-sm font-medium text-[#aaaab7] hover:text-[#00eefc] underline underline-offset-4 opacity-80 hover:opacity-100 transition-all hover:text-primary transition-colors" href="#">GitHub</a>
+<a class="font-['Inter'] text-sm font-medium text-[#aaaab7] hover:text-[#00eefc] underline underline-offset-4 opacity-80 hover:opacity-100 transition-all hover:text-primary transition-colors" href="#">Support</a>
+</div>
+</footer>
+</body></html>

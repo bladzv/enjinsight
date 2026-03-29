@@ -35,7 +35,8 @@ const LOG_CAP        = 500
 
 // Staking.ActiveEra storage key: twox128("Staking") + twox128("ActiveEra")
 // Used to query the current era index at any block hash.
-const STAKING_ACTIVE_ERA_KEY = '0x5f3e4907f716ac89b6347d15ececedca686dcf6300e60d5d7bce8b49c965bc6d'
+// Verified against live Enjin relay chain (returns null with the Polkadot default).
+const STAKING_ACTIVE_ERA_KEY = '0x5f3e4907f716ac89b6347d15ececedca487df464e44a534ba6b0cbb32407b587'
 
 // Decode Staking.ActiveEra from raw storage bytes.
 // Handles both:
@@ -122,9 +123,9 @@ function reducer(state, action) {
       return { ...state, logs: next.length > LOG_CAP ? next.slice(-LOG_CAP) : next }
     }
     case 'DONE':
-      return { ...state, status: RH_STATUS.DONE, results: action.results, progress: null }
+      return { ...state, status: RH_STATUS.DONE, results: action.results, progress: action.progress ?? state.progress }
     case 'STOP':
-      return { ...state, status: RH_STATUS.STOPPED, progress: null }
+      return { ...state, status: RH_STATUS.STOPPED, progress: action.progress ?? state.progress }
     case 'ERROR':
       return { ...state, status: RH_STATUS.ERROR, errorMsg: action.msg, progress: null }
     case 'RESET':
@@ -447,8 +448,10 @@ export function useRewardHistory() {
   }
 
   // Mirrors staking-rewards-rpc.py find_era_start_block()
-  async function findEraStartBlock(rpc, era, chainHead, signal) {
-    let lo = 1
+  // loHint: supply a known lower block bound (e.g. previous era's start block) to
+  // drastically shrink the search space and speed up convergence.
+  async function findEraStartBlock(rpc, era, chainHead, signal, loHint = 1) {
+    let lo = loHint > 1 ? loHint : 1
     let hi = chainHead
     let result = null
 
@@ -539,6 +542,19 @@ export function useRewardHistory() {
       dispatch({ type: 'LOG', payload: { id: Date.now() + Math.random(), ts: nowHHMMSS(), level, message } })
     }
 
+    // Helpers to produce consistent phase-numbered log messages that match the
+    // progress `phasesArr` order (so the log drawer and progress bar remain in sync).
+    const phaseInfo = (key) => {
+      const idx = phasesArr.findIndex(p => p.key === key)
+      const label = (phasesArr[idx] && phasesArr[idx].label) || key
+      return { idx, label }
+    }
+    const logPhase = (key, level = 'INFO', suffix = '') => {
+      const { idx, label } = phaseInfo(key)
+      const suf = suffix ? ` ${suffix}` : ''
+      logFn(level, `─── Phase ${idx}: ${label}${suf} ───`)
+    }
+
     let rpc = null
     let eventApiHandle = null
 
@@ -546,7 +562,7 @@ export function useRewardHistory() {
       resolvedEndpoint = validateWsEndpoint(endpoint || ARCHIVE_WSS)
 
       // ── Phase 0: Load CSV ────────────────────────────────────────────
-      logFn('INFO', '─── Phase 0: Loading era reference CSV ───')
+      logPhase('csv', 'INFO')
       const { cache: eraCache, path: csvPath } = await loadEraCSV()
       const csvEras  = Object.keys(eraCache).map(Number)
       logFn('OK', `Era CSV: ${csvEras.length} era(s) loaded.`)
@@ -557,7 +573,7 @@ export function useRewardHistory() {
       if (signal.aborted) { dispatch({ type: 'STOP' }); return }
 
       // ── Phase 0.5: Fetch pool names from Subscan ──────────────────────
-      logFn('INFO', '─── Phase 0.5: Fetching pool names from Subscan ───')
+      logPhase('poolnames', 'INFO')
       const poolNameMap = new Map()  // poolId (number) -> name (string)
       try {
         const poolList = await enqueueRequest(() =>
@@ -579,7 +595,7 @@ export function useRewardHistory() {
       if (signal.aborted) { dispatch({ type: 'STOP' }); return }
 
       // ── Phase 1: Connect to archive ──────────────────────────────────
-      logFn('INFO', `─── Phase 1: Connecting to archive node (${resolvedEndpoint}) ───`)
+      logPhase('connect', 'INFO', `(${resolvedEndpoint})`)
       rpc = new ArchiveRPC(resolvedEndpoint)
       await rpc.connect()
       logFn('OK', 'Archive node connected.')
@@ -642,6 +658,11 @@ export function useRewardHistory() {
           if (toPosInt(getEraRow(eraCache, era)?.startBlock) == null) missingStarts.push(era)
         }
         if (missingStarts.length > 0) {
+          logFn('WARN',
+            `Era reference CSV is missing ${missingStarts.length} era(s) (${missingStarts[0]}–${missingStarts[missingStarts.length - 1]}). ` +
+            `Resolving block boundaries via archive RPC — this may take extra time. ` +
+            `Update relay-era-reference.csv to avoid this.`
+          )
           logFn('INFO', `Finding exact start block for ${missingStarts.length} era(s) via RPC binary search…`)
         }
 
@@ -652,7 +673,11 @@ export function useRewardHistory() {
             continue
           }
 
-          const found = await findEraStartBlock(rpc, era, chainHead, signal)
+          // Seed lo from the previous era's known start block so the binary
+          // search converges ~6× faster than starting from block 1.
+          const prevRow = era > 1 ? getEraRow(eraCache, era - 1) : null
+          const loHint  = toPosInt(prevRow?.startBlock) ?? 1
+          const found = await findEraStartBlock(rpc, era, chainHead, signal, loHint)
           if (found == null) {
             logFn('WARN', `Era ${era}: start block not found on chain.`)
             continue
@@ -712,7 +737,7 @@ export function useRewardHistory() {
       // ── Phase 2: Enumerate all bonded pools from chain, then discover membership ──────────
       // Mirrors Python: query NominationPools.BondedPools via RPC to get all pool IDs,
       // then check MultiTokens.TokenAccounts for the user's sENJ balance.
-      logFn('INFO', '─── Phase 2: Enumerating bonded pools from chain ───')
+      logPhase('pools', 'INFO')
       const bondedPoolIds = await enumerateBondedPools(rpc, logFn, signal)
       if (signal.aborted) { dispatch({ type: 'STOP' }); return }
 
@@ -753,7 +778,7 @@ export function useRewardHistory() {
       if (includeHistory) {
         patchPhase('history', { status: 'in_progress' })
         syncProgress()
-        logFn('INFO', '─── Phase 2.5: Fetching past pool interactions from Subscan ───')
+        logPhase('history', 'INFO')
         try {
           const histPoolIds = await enqueueRequest(() =>
             fetchHistoricalPoolIds(address, signal, (pg, cnt) => {
@@ -790,7 +815,7 @@ export function useRewardHistory() {
       syncProgress()
 
       // ── Phase 3: Query era balances via archive RPC ───────────────────
-      logFn('INFO', `─── Phase 3: Querying balances for ${eraRange} era(s) × ${memberPools.length} pool(s) ───`)
+      logPhase('balances', 'INFO', `for ${eraRange} era(s) × ${memberPools.length} pool(s)`)
 
       const eraPoolData = []
       let balCompleted = 0
@@ -911,7 +936,7 @@ export function useRewardHistory() {
       eventApiHandle = await openRpcEventApi(resolvedEndpoint)
 
       // ── Phase 4: Scan reward events around era boundaries ──────────────
-      logFn('INFO', `─── Phase 4: Scanning reward events for ${eraPoolData.length} era+pool pair(s) ───`)
+      logPhase('rewards', 'INFO', `for ${eraPoolData.length} era+pool pair(s)`)
       const results = []
       const accumulatedByPool = {}
 

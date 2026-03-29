@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>EnjinSight | Reward History Viewer</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-surface-variant": "#aaaab7",
+              "secondary-fixed-dim": "#00deec",
+              "surface-variant": "#222532",
+              "tertiary-fixed-dim": "#2be800",
+              "secondary": "#00eefc",
+              "on-tertiary": "#0d6100",
+              "on-surface": "#f0f0fd",
+              "on-background": "#f0f0fd",
+              "tertiary-dim": "#2be800",
+              "on-primary": "#350090",
+              "on-tertiary-fixed": "#064200",
+              "on-secondary-container": "#e3fdff",
+              "outline": "#737580",
+              "on-primary-fixed-variant": "#33008a",
+              "error": "#ff6e84",
+              "on-secondary-fixed": "#003f43",
+              "tertiary-container": "#2ff801",
+              "on-primary-container": "#280071",
+              "on-primary-fixed": "#000000",
+              "surface-container-low": "#11131d",
+              "primary-dim": "#8051ff",
+              "background": "#0c0e17",
+              "primary-container": "#aa8fff",
+              "inverse-primary": "#6a30f0",
+              "inverse-on-surface": "#53545f",
+              "on-secondary-fixed-variant": "#005e64",
+              "surface-container-lowest": "#000000",
+              "primary-fixed": "#aa8fff",
+              "surface-container-highest": "#222532",
+              "surface": "#0c0e17",
+              "surface-dim": "#0c0e17",
+              "tertiary": "#8eff71",
+              "primary-fixed-dim": "#9d7eff",
+              "primary": "#b6a0ff",
+              "surface-tint": "#b6a0ff",
+              "surface-bright": "#282b3a",
+              "inverse-surface": "#faf8ff",
+              "on-tertiary-container": "#0b5800",
+              "on-secondary": "#005359",
+              "secondary-dim": "#00deec",
+              "on-tertiary-fixed-variant": "#0d6200",
+              "tertiary-fixed": "#2ff801",
+              "error-container": "#a70138",
+              "outline-variant": "#464752",
+              "surface-container": "#171924",
+              "secondary-container": "#006970",
+              "error-dim": "#d73357",
+              "surface-container-high": "#1c1f2b",
+              "secondary-fixed": "#00eefc",
+              "on-error-container": "#ffb2b9",
+              "on-error": "#490013"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, .font-headline { font-family: 'Space Grotesk', sans-serif; }
+        .glass-panel {
+            background: rgba(28, 31, 43, 0.8);
+            backdrop-filter: blur(12px);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface selection:bg-primary selection:text-on-primary">
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 right-0 z-50 bg-[#11131d] border-none shadow-none">
+<div class="flex justify-between items-center w-full px-8 py-4 max-w-[1920px] mx-auto">
+<div class="flex items-center gap-8">
+<span class="text-2xl font-bold tracking-tighter text-[#b6a0ff] font-['Space_Grotesk']">EnjinSight</span>
+<nav class="hidden md:flex gap-6">
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors font-['Inter'] text-sm" href="#">Home</a>
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors font-['Inter'] text-sm" href="#">Era Explorer</a>
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors font-['Inter'] text-sm" href="#">Staking Cadence</a>
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors font-['Inter'] text-sm" href="#">Balance Viewer</a>
+<a class="text-[#b6a0ff] border-b-2 border-[#b6a0ff] pb-1 font-bold font-['Inter'] text-sm" href="#">Reward History</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<span class="hidden lg:block text-[#b6a0ff] font-['Space_Grotesk'] text-sm font-medium">Enjin Matrixchain</span>
+<button class="material-symbols-outlined text-[#aaaab7] hover:bg-[#282b3a] p-2 rounded-full transition-all duration-200 scale-95 active:scale-90" data-icon="settings">settings</button>
+<button class="material-symbols-outlined text-[#aaaab7] hover:bg-[#282b3a] p-2 rounded-full transition-all duration-200 scale-95 active:scale-90" data-icon="account_circle">account_circle</button>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="max-w-[1920px] mx-auto px-8 pt-32 pb-48">
+<!-- Page Header -->
+<header class="mb-12">
+<h1 class="text-4xl font-bold tracking-tight mb-2">Reward History <span class="text-primary">Viewer</span></h1>
+<p class="text-on-surface-variant max-w-2xl font-body">Perform high-fidelity rewards calculation for nomination pools across custom era ranges with granular reinvestment tracking.</p>
+</header>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+<!-- Query Form Card -->
+<section class="lg:col-span-4 bg-surface-container-low p-8 rounded-xl flex flex-col gap-6">
+<div>
+<label class="block text-xs font-bold uppercase tracking-widest text-primary mb-3">SS58 Address</label>
+<input class="w-full bg-surface-container border-none focus:ring-1 focus:ring-primary text-on-surface rounded-lg px-4 py-3 font-mono text-sm" placeholder="e.g. 0x... or Enjin address" type="text"/>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<label class="block text-xs font-bold uppercase tracking-widest text-primary mb-3">Start Era</label>
+<input class="w-full bg-surface-container border-none focus:ring-1 focus:ring-primary text-on-surface rounded-lg px-4 py-3 font-mono text-sm" type="number" value="1200"/>
+</div>
+<div>
+<label class="block text-xs font-bold uppercase tracking-widest text-primary mb-3">End Era</label>
+<input class="w-full bg-surface-container border-none focus:ring-1 focus:ring-primary text-on-surface rounded-lg px-4 py-3 font-mono text-sm" type="number" value="1350"/>
+</div>
+</div>
+<div>
+<div class="flex justify-between items-center mb-4">
+<label class="text-xs font-bold uppercase tracking-widest text-primary">History Mode</label>
+<div class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</div>
+</div>
+<p class="text-[10px] text-on-surface-variant leading-relaxed">Toggle deep indexing to include pools previously exited within the selected era range.</p>
+</div>
+<div class="mt-4 flex gap-3">
+<button class="flex-1 bg-primary text-on-primary py-4 rounded-lg font-bold tracking-tight hover:brightness-110 active:scale-95 transition-all">Execute Query</button>
+<button class="px-4 bg-surface-variant text-on-surface rounded-lg hover:bg-surface-bright transition-all flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="file_download">file_download</span>
+</button>
+</div>
+</section>
+<!-- Summary Panel Bento -->
+<section class="lg:col-span-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+<div class="bg-surface-container p-6 rounded-xl border-l-2 border-primary">
+<span class="text-[10px] uppercase font-bold tracking-tighter text-on-surface-variant block mb-1">Total Rewards</span>
+<div class="text-2xl font-headline font-bold text-on-surface">14,282.41 <span class="text-xs font-body text-primary-dim uppercase tracking-wide">ENJ</span></div>
+</div>
+<div class="bg-surface-container p-6 rounded-xl border-l-2 border-secondary">
+<span class="text-[10px] uppercase font-bold tracking-tighter text-on-surface-variant block mb-1">Average APY</span>
+<div class="text-2xl font-headline font-bold text-on-surface">24.18%</div>
+</div>
+<div class="bg-surface-container p-6 rounded-xl border-l-2 border-tertiary">
+<span class="text-[10px] uppercase font-bold tracking-tighter text-on-surface-variant block mb-1">Era Range</span>
+<div class="text-2xl font-headline font-bold text-on-surface">150 Eras</div>
+</div>
+<div class="bg-surface-container p-6 rounded-xl border-l-2 border-primary">
+<span class="text-[10px] uppercase font-bold tracking-tighter text-on-surface-variant block mb-1">Number of Pools</span>
+<div class="text-2xl font-headline font-bold text-on-surface">3 Active</div>
+</div>
+<!-- Visualization Area -->
+<div class="col-span-2 md:col-span-4 bg-surface-container-low p-8 rounded-xl mt-4 min-h-[320px] flex flex-col">
+<div class="flex justify-between items-center mb-8">
+<div>
+<h3 class="font-headline font-bold text-lg">Reward Growth</h3>
+<p class="text-xs text-on-surface-variant">Cumulative ENJ rewards per pool over selected eras</p>
+</div>
+<div class="flex gap-4">
+<div class="flex items-center gap-2 cursor-pointer hover:opacity-70 transition-opacity">
+<span class="w-3 h-3 rounded-full bg-primary"></span>
+<span class="text-[10px] uppercase font-bold text-on-surface-variant">Pool #21</span>
+</div>
+<div class="flex items-center gap-2 cursor-pointer hover:opacity-70 transition-opacity">
+<span class="w-3 h-3 rounded-full bg-secondary"></span>
+<span class="text-[10px] uppercase font-bold text-on-surface-variant">Pool #44</span>
+</div>
+</div>
+</div>
+<!-- Chart Placeholder -->
+<div class="flex-1 w-full relative">
+<svg class="w-full h-full" viewbox="0 0 1000 300">
+<defs>
+<lineargradient id="gradient-pool21" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#b6a0ff" stop-opacity="0.3"></stop>
+<stop offset="100%" stop-color="#b6a0ff" stop-opacity="0"></stop>
+</lineargradient>
+<lineargradient id="gradient-pool44" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#00eefc" stop-opacity="0.3"></stop>
+<stop offset="100%" stop-color="#00eefc" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<g stroke="#464752" stroke-dasharray="4 4" stroke-opacity="0.2">
+<line x1="0" x2="1000" y1="0" y2="0"></line>
+<line x1="0" x2="1000" y1="75" y2="75"></line>
+<line x1="0" x2="1000" y1="150" y2="150"></line>
+<line x1="0" x2="1000" y1="225" y2="225"></line>
+<line x1="0" x2="1000" y1="300" y2="300"></line>
+<line x1="250" x2="250" y1="0" y2="300"></line>
+<line x1="500" x2="500" y1="0" y2="300"></line>
+<line x1="750" x2="750" y1="0" y2="300"></line>
+</g>
+<path d="M0 280 C 200 270, 400 180, 600 140 S 800 60, 1000 40 V 300 H 0 Z" fill="url(#gradient-pool21)"></path>
+<path d="M0 290 C 200 285, 400 240, 600 210 S 800 160, 1000 140 V 300 H 0 Z" fill="url(#gradient-pool44)"></path>
+<path d="M0 280 C 200 270, 400 180, 600 140 S 800 60, 1000 40" fill="none" stroke="#b6a0ff" stroke-linecap="round" stroke-width="3"></path>
+<path d="M0 290 C 200 285, 400 240, 600 210 S 800 160, 1000 140" fill="none" stroke="#00eefc" stroke-linecap="round" stroke-width="3"></path>
+<circle cx="1000" cy="40" fill="#b6a0ff" r="5"></circle>
+<circle cx="1000" cy="140" fill="#00eefc" r="5"></circle>
+<line opacity="0.5" stroke="#b6a0ff" stroke-width="1" x1="750" x2="750" y1="0" y2="300"></line>
+</svg>
+<div class="absolute top-12 left-[70%] transform -translate-x-1/2 bg-surface-container-high border border-outline-variant/30 p-3 rounded-lg shadow-2xl z-10 pointer-events-none min-w-[140px]">
+<div class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-2">Era 1345</div>
+<div class="space-y-1.5">
+<div class="flex justify-between items-center gap-4">
+<div class="flex items-center gap-1.5">
+<div class="w-2 h-2 rounded-full bg-primary"></div>
+<span class="text-[10px] text-on-surface">Pool #21</span>
+</div>
+<span class="text-[11px] font-mono font-bold">12,442.1 ENJ</span>
+</div>
+<div class="flex justify-between items-center gap-4">
+<div class="flex items-center gap-1.5">
+<div class="w-2 h-2 rounded-full bg-secondary"></div>
+<span class="text-[10px] text-on-surface">Pool #44</span>
+</div>
+<span class="text-[11px] font-mono font-bold">5,210.8 ENJ</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Result Table Section -->
+<section class="lg:col-span-12 mb-12">
+<div class="flex justify-between items-end mb-6">
+<div>
+<h3 class="font-headline font-bold text-2xl">Ledger Data</h3>
+<p class="text-xs text-on-surface-variant">Deep-dive into per-era nomination performance</p>
+</div>
+<div class="flex gap-2">
+<button class="bg-surface-container hover:bg-surface-bright px-4 py-2 rounded-lg text-xs font-bold tracking-wide transition-all flex items-center gap-2 border border-outline-variant/10">
+<span class="material-symbols-outlined text-sm" data-icon="file_upload">file_upload</span> Import JSON
+                        </button>
+<button class="bg-surface-container hover:bg-surface-bright px-4 py-2 rounded-lg text-xs font-bold tracking-wide transition-all flex items-center gap-2 border border-outline-variant/10">
+<span class="material-symbols-outlined text-sm" data-icon="csv">csv</span> Export CSV
+                        </button>
+</div>
+</div>
+<div class="overflow-x-auto rounded-xl bg-surface-container-low">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container">
+<th class="px-6 py-4 text-[10px] uppercase font-bold tracking-[0.2em] text-primary">Era</th>
+<th class="px-6 py-4 text-[10px] uppercase font-bold tracking-[0.2em] text-primary">Pool Label</th>
+<th class="px-6 py-4 text-[10px] uppercase font-bold tracking-[0.2em] text-primary">Member sENJ</th>
+<th class="px-6 py-4 text-[10px] uppercase font-bold tracking-[0.2em] text-primary">Pool Supply</th>
+<th class="px-6 py-4 text-[10px] uppercase font-bold tracking-[0.2em] text-primary">Reinvested</th>
+<th class="px-6 py-4 text-[10px] uppercase font-bold tracking-[0.2em] text-primary">Reward ENJ</th>
+<th class="px-6 py-4 text-[10px] uppercase font-bold tracking-[0.2em] text-primary">APY %</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/5">
+<tr class="hover:bg-surface-container transition-colors group">
+<td class="px-6 py-5 font-mono text-sm">1350</td>
+<td class="px-6 py-5">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">21</div>
+<span class="text-sm font-medium">Matrix_Core_Alpha</span>
+</div>
+</td>
+<td class="px-6 py-5 font-mono text-sm text-on-surface-variant">42,001.00</td>
+<td class="px-6 py-5 font-mono text-sm text-on-surface-variant">5.2M</td>
+<td class="px-6 py-5 font-mono text-sm text-tertiary">+12.44</td>
+<td class="px-6 py-5 font-mono text-sm font-bold">142.18</td>
+<td class="px-6 py-5">
+<span class="px-2 py-1 bg-secondary-container/20 text-secondary text-[10px] font-bold rounded">24.2%</span>
+</td>
+</tr>
+<tr class="hover:bg-surface-container transition-colors group">
+<td class="px-6 py-5 font-mono text-sm">1350</td>
+<td class="px-6 py-5">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded bg-secondary/20 flex items-center justify-center text-[10px] font-bold text-secondary">44</div>
+<span class="text-sm font-medium">Efinity_Legacy</span>
+</div>
+</td>
+<td class="px-6 py-5 font-mono text-sm text-on-surface-variant">10,500.22</td>
+<td class="px-6 py-5 font-mono text-sm text-on-surface-variant">1.8M</td>
+<td class="px-6 py-5 font-mono text-sm text-tertiary">+4.10</td>
+<td class="px-6 py-5 font-mono text-sm font-bold">38.45</td>
+<td class="px-6 py-5">
+<span class="px-2 py-1 bg-secondary-container/20 text-secondary text-[10px] font-bold rounded">22.9%</span>
+</td>
+</tr>
+<tr class="hover:bg-surface-container transition-colors group">
+<td class="px-6 py-5 font-mono text-sm">1349</td>
+<td class="px-6 py-5">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">21</div>
+<span class="text-sm font-medium">Matrix_Core_Alpha</span>
+</div>
+</td>
+<td class="px-6 py-5 font-mono text-sm text-on-surface-variant">41,988.56</td>
+<td class="px-6 py-5 font-mono text-sm text-on-surface-variant">5.1M</td>
+<td class="px-6 py-5 font-mono text-sm text-tertiary">+12.41</td>
+<td class="px-6 py-5 font-mono text-sm font-bold">141.95</td>
+<td class="px-6 py-5">
+<span class="px-2 py-1 bg-secondary-container/20 text-secondary text-[10px] font-bold rounded">24.1%</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</div>
+</main>
+<!-- Bottom Horizontal Terminal Panel (Standardized) -->
+<aside class="fixed bottom-0 left-0 right-0 z-40 bg-[#000000] border-t border-outline-variant/15 transition-all duration-300" id="terminalPanel" style="height: 180px;">
+<div class="flex flex-col h-full">
+<!-- Terminal Header / Drag Handle area -->
+<div class="flex items-center justify-between px-6 py-2 bg-[#11131d] border-b border-outline-variant/10">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></div>
+<span class="font-mono text-[10px] uppercase tracking-[0.2em] text-[#b6a0ff]">Live Terminal</span>
+<span class="font-mono text-[10px] text-[#464752] ml-4">Node: Synced</span>
+</div>
+<div class="flex items-center gap-4">
+<nav class="flex gap-4">
+<a class="bg-[#171924] text-[#b6a0ff] border-l-4 border-[#8051ff] px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest flex items-center gap-1.5 transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined text-xs" data-icon="terminal">terminal</span> Terminal
+                        </a>
+<a class="text-[#464752] hover:text-[#aaaab7] px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest flex items-center gap-1.5 transition-all duration-150 ease-in-out hover:bg-[#11131d]" href="#">
+<span class="material-symbols-outlined text-xs" data-icon="list_alt">list_alt</span> Logs
+                        </a>
+<a class="text-[#464752] hover:text-[#aaaab7] px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest flex items-center gap-1.5 transition-all duration-150 ease-in-out hover:bg-[#11131d]" href="#">
+<span class="material-symbols-outlined text-xs" data-icon="hub">hub</span> Events
+                        </a>
+<a class="text-[#464752] hover:text-[#aaaab7] px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest flex items-center gap-1.5 transition-all duration-150 ease-in-out hover:bg-[#11131d]" href="#">
+<span class="material-symbols-outlined text-xs" data-icon="monitoring">monitoring</span> Metrics
+                        </a>
+</nav>
+<div class="h-4 w-px bg-outline-variant/20"></div>
+<button class="text-[#464752] hover:text-[#aaaab7] transition-all" onclick="document.getElementById('terminalPanel').style.height = document.getElementById('terminalPanel').style.height === '32px' ? '180px' : '32px'">
+<span class="material-symbols-outlined text-sm">keyboard_arrow_down</span>
+</button>
+</div>
+</div>
+<!-- Terminal Content Area -->
+<div class="flex-1 flex px-6 py-4 overflow-hidden gap-6">
+<div class="flex-1 bg-surface-container-lowest p-3 rounded font-mono text-[10px] leading-relaxed text-on-surface-variant overflow-y-auto inset-shadow-sm">
+<div class="mb-1"><span class="text-primary">[INFO]</span> Initializing query...</div>
+<div class="mb-1"><span class="text-primary">[PHASE 1]</span> Fetching address metadata...</div>
+<div class="mb-1"><span class="text-primary">[PHASE 2]</span> Discovering pool memberships...</div>
+<div class="mb-1"><span class="text-secondary">[DATA]</span> Found 3 nomination pools.</div>
+<div class="mb-1"><span class="text-primary">[PHASE 3]</span> Calculating era distributions...</div>
+<div class="animate-pulse text-[#464752]">_</div>
+</div>
+<div class="w-48 flex flex-col gap-2">
+<button class="w-full py-2 bg-[#171924] text-[#b6a0ff] font-mono text-[10px] uppercase tracking-widest hover:bg-[#282b3a] transition-all border-l-4 border-[#8051ff]">Clear Logs</button>
+<a class="flex items-center gap-2 text-[#464752] hover:text-[#aaaab7] font-mono text-[10px] uppercase tracking-widest mt-auto mb-2 transition-all" href="#">
+<span class="material-symbols-outlined text-xs" data-icon="help">help</span> Docs
+                    </a>
+</div>
+</div>
+</div>
+</aside>
+<!-- Footer -->
+<footer class="bg-[#0c0e17] border-t border-[#464752]/15 relative z-50">
+<div class="flex justify-between items-center w-full px-8 py-6 max-w-[1920px] mx-auto">
+<div class="flex flex-col gap-1">
+<p class="text-[#aaaab7] font-['Inter'] text-sm font-medium">EnjinSight — Read-only, No wallet required</p>
+</div>
+<div class="flex gap-8">
+<a class="text-[#aaaab7] hover:text-[#00eefc] underline underline-offset-4 transition-all duration-200 opacity-80 hover:opacity-100 font-['Inter'] text-sm font-medium" href="#">Documentation</a>
+<a class="text-[#aaaab7] hover:text-[#00eefc] underline underline-offset-4 transition-all duration-200 opacity-80 hover:opacity-100 font-['Inter'] text-sm font-medium" href="#">GitHub</a>
+<a class="text-[#aaaab7] hover:text-[#00eefc] underline underline-offset-4 transition-all duration-200 opacity-80 hover:opacity-100 font-['Inter'] text-sm font-medium" href="#">Support</a>
+</div>
+</div>
+</footer>
+</body></html>

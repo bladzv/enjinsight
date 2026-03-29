@@ -10,86 +10,25 @@ import { AlertTriangle, ChevronDown, ChevronUp, Search, Globe, Clock, Copy, Chec
 import { useEraExplorer, ERA_STATUS } from '../hooks/useEraExplorer.js'
 import TerminalLog from './TerminalLog.jsx'
 
-// ── EKG canvas factory ────────────────────────────────────────────────────────
-function createEKGInstance(canvas) {
-  const BASELINE_F = 0.60, MAX_AMP_F = 0.42, SCROLL_PPS = 60
-  const GLOW_COLOR = '#00eefc', GLOW_DIM = 'rgba(0,238,252,0.55)'
-  const BEAT = [
-    0, 0, 0,
-    0.06, 0.12, 0.10, 0.06, 0,
-    0, -0.12,
-    0.55, 1.0, 0.96, 0.60, 0.12,
-    -0.28, -0.30, -0.20, -0.08, 0, 0,
-    0, 0.12, 0.22, 0.20, 0.14, 0.07, 0, 0, 0,
-    0, 0, 0, 0, 0, 0,
-  ]
-  const BEAT_PX = 90
-  let ctx = canvas.getContext('2d'), W = 0, H = 0
-  let pixBuf = [], writeHead = 0, lastTime = 0
-  let beatQueue = [], sampleIdx = 0, inBeat = false
-  let rafId = null
+const HEARTBEAT_PATH = 'M0 20 L20 20 L25 10 L30 30 L35 20 L100 20'
 
-  function resize() {
-    const r = canvas.getBoundingClientRect()
-    W = Math.max(1, Math.floor(r.width  * devicePixelRatio))
-    H = Math.max(1, Math.floor(r.height * devicePixelRatio))
-    canvas.width = W; canvas.height = H
-    pixBuf = new Array(W).fill(null).map(() => ({ y: Math.round(H * BASELINE_F), bright: false }))
-    writeHead = 0
-  }
-  function writeSample(amp, bright) {
-    const baseY = Math.round(H * BASELINE_F)
-    const y = Math.max(2, Math.min(H - 2, baseY - amp * H * MAX_AMP_F))
-    pixBuf[writeHead] = { y, bright }; writeHead = (writeHead + 1) % W
-  }
-  function frame(ts) {
-    rafId = requestAnimationFrame(frame)
-    if (!ctx || W <= 0 || H <= 0) return
-    const dt = lastTime ? Math.min((ts - lastTime) / 1000, 0.1) : 0; lastTime = ts
-    const newSamples = Math.round(dt * SCROLL_PPS * devicePixelRatio)
-    for (let s = 0; s < newSamples; s++) {
-      if (!inBeat && beatQueue.length > 0) { beatQueue.shift(); inBeat = true; sampleIdx = 0 }
-      if (inBeat) {
-        const amp = BEAT[Math.min(Math.floor((sampleIdx / BEAT_PX) * (BEAT.length - 1)), BEAT.length - 1)]
-        writeSample(amp, Math.abs(amp) > 0.08); sampleIdx++
-        if (sampleIdx >= BEAT_PX) { inBeat = false; sampleIdx = 0 }
-      } else { writeSample(0, false) }
-    }
-    ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, W, H)
-    ctx.save(); ctx.strokeStyle = 'rgba(0,238,252,0.05)'; ctx.lineWidth = 0.5 * devicePixelRatio
-    for (let i = 1; i < 5; i++) { const gx=Math.round(W*i/5); ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,H); ctx.stroke() }
-    const baseY=Math.round(H*BASELINE_F); ctx.beginPath(); ctx.moveTo(0,baseY); ctx.lineTo(W,baseY); ctx.stroke()
-    ctx.restore()
-    ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round'; ctx.lineWidth=1.5*devicePixelRatio
-    let px=null,py=null
-    for(let col=0;col<W;col++){
-      const p=pixBuf[(writeHead-W+col+W*4)%W]; if(!p)continue
-      if(px!==null){ ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(col,p.y); ctx.strokeStyle=p.bright?GLOW_COLOR:'rgba(0,238,252,0.45)'; ctx.shadowColor=p.bright?GLOW_DIM:'transparent'; ctx.shadowBlur=p.bright?6*devicePixelRatio:0; ctx.stroke() }
-      px=col; py=p.y
-    }
-    ctx.restore()
-  }
-  const ro = new ResizeObserver(resize)
-  ro.observe(canvas); resize(); rafId = requestAnimationFrame(frame)
-  return {
-    beat(blockNum) { beatQueue.push(blockNum); if (beatQueue.length > 3) beatQueue.shift() },
-    destroy() { cancelAnimationFrame(rafId); ro.disconnect() },
-  }
+function HeartbeatLine({ strokeColor, pulseKey, compact = false }) {
+  const wrapperClass = compact ? 'heartbeat-svg heartbeat-svg-compact' : 'heartbeat-monitor'
+
+  return (
+    <div className={wrapperClass} aria-hidden>
+      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 40" preserveAspectRatio="none">
+        {pulseKey > 0 && (
+          <path key={pulseKey} className="heartbeat-line-live" d={HEARTBEAT_PATH} fill="none" stroke={strokeColor} />
+        )}
+      </svg>
+    </div>
+  )
 }
 
 // ── EraEKG sub-component ─────────────────────────────────────────────────────
-function EraEKG({ block }) {
-  const canvasRef = useRef(null); const ekgRef = useRef(null)
-  useEffect(() => {
-    if (!canvasRef.current) return
-    const ekg = createEKGInstance(canvasRef.current); ekgRef.current = ekg
-    return () => { ekgRef.current?.destroy(); ekgRef.current = null }
-  }, [])
-  const prevBlock = useRef(null)
-  useEffect(() => {
-    if (block != null && block !== prevBlock.current) { prevBlock.current = block; ekgRef.current?.beat(block) }
-  }, [block])
-  return <canvas ref={canvasRef} className="block w-full h-full rounded" aria-label="Block activity monitor" />
+function EraEKG({ strokeColor, pulseKey }) {
+  return <HeartbeatLine strokeColor={strokeColor} pulseKey={pulseKey} />
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -135,10 +74,10 @@ function unixToUtcStr(unix) {
 
 function StatCard({ label, value, accent = false, sub = null }) {
   return (
-    <div className="bg-card p-4 rounded-xl text-center overflow-hidden group hover:bg-surface-bright transition-colors">
-      <p className="text-[10px] font-bold tracking-widest uppercase text-muted mb-2">{label}</p>
-      <p className={`text-xl font-bold font-headline leading-tight break-all ${accent ? 'text-cyan' : 'text-text'}`}>{value}</p>
-      {sub && <p className="text-[10px] text-muted mt-1 font-mono leading-tight truncate" title={sub}>{sub}</p>}
+    <div className="metric-card text-left">
+      <p className="metric-label">{label}</p>
+      <p className={`metric-value text-3xl break-all ${accent ? 'text-cyan' : 'text-text'}`}>{value}</p>
+      {sub && <p className="mt-2 truncate font-mono text-[10px] leading-tight text-muted" title={sub}>{sub}</p>}
     </div>
   )
 }
@@ -155,6 +94,8 @@ export default function EraBlockExplorer() {
   const [showDebug, setShowDebug]   = useState(false)
   const [localTime, setLocalTime]   = useState(false)   // toggle for lookup dates
   const [hashCopied, setHashCopied] = useState(false)
+  const [pulseKey, setPulseKey]     = useState(0)
+  const lastSeenBlock = useRef(null)
 
   const eraEnd   = eraStart != null ? eraStart + ERA_LEN - 1 : null
   const remaining = eraEnd != null && block != null ? Math.max(0, eraEnd - block) : null
@@ -163,6 +104,27 @@ export default function EraBlockExplorer() {
     : 0
 
   const statusCfg = STATUS_CONFIG[status] ?? STATUS_CONFIG[ERA_STATUS.IDLE]
+
+  // stroke color for the EKG line depending on status
+  const strokeColor = status === ERA_STATUS.LIVE
+    ? 'var(--cyan)'
+    : status === ERA_STATUS.DISCONNECTED
+      ? 'var(--danger)'
+      : (status === ERA_STATUS.CONNECTING || status === ERA_STATUS.DISCOVERING)
+        ? 'var(--primary-dim)'
+        : 'rgba(255,255,255,0.06)'
+
+  useEffect(() => {
+    if (block == null) return
+    if (lastSeenBlock.current == null) {
+      lastSeenBlock.current = block
+      return
+    }
+    if (block !== lastSeenBlock.current) {
+      lastSeenBlock.current = block
+      setPulseKey(k => k + 1)
+    }
+  }, [block])
 
   // Derive human-readable start/end labels for active era
   const eraStartLabel = eraStart != null ? eraStart.toLocaleString() : '—'
@@ -182,69 +144,100 @@ export default function EraBlockExplorer() {
   }, [eraInput, eraInputErr, lookupEra])
 
   return (
-    <main className="px-4 py-6 max-w-4xl mx-auto space-y-6 pb-24">
+    <main className="relative z-10 mx-auto max-w-[92rem] space-y-6 px-4 py-6 pb-32 sm:px-6 sm:py-8">
 
-      {/* ── Status bar ── */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusCfg.dot}`} />
-        <span className="text-sm text-text-secondary">{statusCfg.label}</span>
-        {/* Relaychain badge */}
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded
-                         bg-cyan/10 text-[10px] font-bold
-                         tracking-widest uppercase text-cyan ml-1">
-          Relaychain
-        </span>
-      </div>
+      <section className="page-hero">
+        <div className="relative z-10 space-y-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+              <div className="space-y-4">
+              <div className="hero-kicker">
+                <div className="inline-flex items-center gap-3">
+                  <span className={`h-2 w-2 rounded-full ${statusCfg.dot}`} />
+                  <span>{statusCfg.label}</span>
+                </div>
+              </div>
+              <div className="space-y-4">
+                    <h1 className="hero-title text-balance">Active Blockchain State</h1>
+                <p className="hero-copy">
+                  Live relaychain heartbeat, current era telemetry, and archival lookup for any completed era from the same explorer surface.
+                </p>
+              </div>
+            </div>
 
-      {/* ── Stats + EKG ── */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="flex-1 grid grid-cols-3 gap-3">
-          <StatCard label="Active Era"     value={fmt(era)}           accent />
-          <StatCard label="Era Starts"     value={eraStartLabel} />
-          <StatCard label="Era Ends"       value={eraEndLabel}  />
-          <StatCard label="Session"        value={fmt(session)} />
-          <StatCard label="Current Block"  value={fmt(block)}         accent />
-          <StatCard label="Blocks Left"    value={fmt(remaining)} />
-        </div>
-        <div className="sm:w-64 flex flex-col gap-3">
-          <div className="bg-card flex-1 p-3 flex flex-col rounded-xl" style={{ minHeight: '80px' }}>
-            <p className="text-[10px] font-bold tracking-widest uppercase text-muted mb-1">Block Activity</p>
-            <div className="flex-1">
-              <EraEKG block={block} />
+            <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[360px]">
+              <div className="metric-card">
+                <p className="metric-label">Relaychain</p>
+                <p className="metric-value text-primary">Live</p>
+              </div>
+              <div className="metric-card">
+                <p className="metric-label">Cached Eras</p>
+                <p className="metric-value text-cyan">{fmt(csvCount)}</p>
+              </div>
             </div>
           </div>
-          {/* Era progress */}
-          <div className="bg-card p-4 flex flex-col justify-center rounded-xl">
-            <div className="flex justify-between text-xs mb-2">
-              <span className="text-text-secondary">Era progress</span>
-              <span className="font-mono text-text">{pct}%</span>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_320px]">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <StatCard label="Active Era" value={fmt(era)} accent />
+              <StatCard label="Session" value={fmt(session)} />
+              <StatCard label="Current Block" value={fmt(block)} accent />
+              <StatCard label="Era Starts" value={eraStartLabel} />
+              <StatCard label="Era Ends" value={eraEndLabel} />
+              <StatCard label="Blocks Left" value={fmt(remaining)} />
             </div>
-            <div className="h-1.5 rounded-full bg-surface overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-primary-dim via-primary to-cyan transition-[width] duration-700"
-                style={{ width: `${pct}%` }}
-              />
+
+            <div className="flex flex-col gap-4">
+              <div className="rounded-[1.25rem] bg-card/90 p-4 shadow-ambient" style={{ minHeight: '130px' }}>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="metric-label">System Heartbeat</p>
+                    <p className="mt-2 text-sm text-text-secondary">Block activity monitor</p>
+                  </div>
+                  <span className="mini-chip">Relaychain</span>
+                </div>
+                <div className="h-16">
+                  <EraEKG pulseKey={pulseKey} strokeColor={strokeColor} />
+                </div>
+              </div>
+
+              <div className="rounded-[1.25rem] bg-card/90 p-5 shadow-ambient">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="metric-label">Era Progress</p>
+                    <p className="mt-2 text-sm text-text-secondary">Target completion within the active era window</p>
+                  </div>
+                  <span className="font-mono text-lg text-text">{pct}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-surface overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-primary-dim via-primary to-cyan transition-[width] duration-700"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* ── Past Era Lookup ── */}
-      <div className="bg-surface rounded-xl p-5 space-y-4">
+      <div className="data-panel space-y-4">
         {/* Header: label + CSV count + timezone toggle */}
         <div className="flex items-center gap-2 flex-wrap">
-          <h2 className="text-sm font-semibold font-headline text-text">Past Era Lookup</h2>
+          <div>
+              <h2 className="font-headline text-2xl font-bold text-text">Past Era Lookup</h2>
+            </div>
           {csvCount > 0 && (
-            <span className="text-[10px] text-muted font-mono bg-card px-2 py-0.5 rounded">
+            <span className="mini-chip">
               {csvCount} eras cached
             </span>
           )}
-          <div className="ml-auto flex items-center gap-1.5">
+              <div className="ml-auto flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => setLocalTime(v => !v)}
               title={localTime ? 'Showing local timezone — click for UTC' : 'Showing UTC — click for local timezone'}
-              className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors
+              className={`enlarge-60 flex items-center gap-1 px-3 py-1.5 rounded-full text-[11px] font-medium transition-colors
                 ${localTime
                   ? 'bg-cyan/10 text-cyan'
                   : 'bg-card text-text-secondary hover:text-text'}`}
@@ -265,13 +258,13 @@ export default function EraBlockExplorer() {
               value={eraInput}
               onChange={e => { setEraInput(e.target.value); resetLookup() }}
               placeholder="Era number"
-              className={`w-36 bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary
+              className={`w-40 bg-card rounded-2xl px-4 py-3 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary
                 ${eraInputErr ? 'ring-1 ring-danger' : ''}`}
               aria-label="Era number to look up"
             />
             <button
               type="submit"
-              className="btn-primary gap-1.5 px-4 py-2 text-sm"
+              className="btn-primary gap-1.5 px-5 py-3 text-sm"
               disabled={lookupLoading || !eraInput || !!eraInputErr}
               aria-label="Look up era"
             >
@@ -294,26 +287,26 @@ export default function EraBlockExplorer() {
         )}
 
         {lookup && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 animate-fade-in">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 animate-fade-in">
             {/* Era number */}
-            <div className="bg-card p-3 text-center col-span-2 sm:col-span-1 rounded-xl">
-              <p className="text-[10px] font-bold tracking-widest uppercase text-muted mb-1">Era</p>
-              <p className="text-lg font-bold font-headline text-cyan">{lookup.era}</p>
+            <div className="metric-card col-span-2 sm:col-span-1 text-center">
+              <p className="metric-label">Era</p>
+              <p className="metric-value text-2xl text-cyan">{lookup.era}</p>
             </div>
             {/* Start Block */}
-            <div className="bg-card p-3 text-center rounded-xl">
-              <p className="text-[10px] font-bold tracking-widest uppercase text-muted mb-1">Start Block</p>
-              <p className="text-base font-mono text-text">{lookup.startBlock.toLocaleString()}</p>
+            <div className="metric-card text-center">
+              <p className="metric-label">Start Block</p>
+              <p className="mt-3 text-base font-mono text-text">{lookup.startBlock.toLocaleString()}</p>
             </div>
             {/* End Block */}
-            <div className="bg-card p-3 text-center rounded-xl">
-              <p className="text-[10px] font-bold tracking-widest uppercase text-muted mb-1">End Block</p>
-              <p className="text-base font-mono text-text">{lookup.endBlock.toLocaleString()}</p>
+            <div className="metric-card text-center">
+              <p className="metric-label">End Block</p>
+              <p className="mt-3 text-base font-mono text-text">{lookup.endBlock.toLocaleString()}</p>
             </div>
             {/* Source */}
-            <div className="bg-card p-3 text-center rounded-xl">
-              <p className="text-[10px] font-bold tracking-widest uppercase text-muted mb-1">Source</p>
-              <p className="text-xs text-muted">{lookup.source}</p>
+            <div className="metric-card text-center">
+              <p className="metric-label">Source</p>
+              <p className="mt-3 text-xs text-muted">{lookup.source}</p>
             </div>
 
             {/* Start date — human-readable */}
@@ -323,7 +316,7 @@ export default function EraBlockExplorer() {
                 ? (fmtDateLocal(raw) ?? raw)
                 : (fmtDateUtc(raw) ?? raw)
               return (
-                <div className="bg-card p-3 col-span-2 rounded-xl">
+                <div className="metric-card col-span-2">
                   <div className="flex items-center gap-1.5 mb-1">
                     <p className="text-[10px] font-bold tracking-widest uppercase text-muted">Start</p>
                     <span className="text-[9px] text-muted uppercase">({localTime ? 'Local' : 'UTC'})</span>
@@ -340,7 +333,7 @@ export default function EraBlockExplorer() {
                 ? (fmtDateLocal(raw) ?? raw)
                 : (fmtDateUtc(raw) ?? raw)
               return (
-                <div className="bg-card p-3 col-span-2 rounded-xl">
+                <div className="metric-card col-span-2">
                   <div className="flex items-center gap-1.5 mb-1">
                     <p className="text-[10px] font-bold tracking-widest uppercase text-muted">End</p>
                     <span className="text-[9px] text-muted uppercase">({localTime ? 'Local' : 'UTC'})</span>
@@ -351,7 +344,7 @@ export default function EraBlockExplorer() {
             })()}
 
             {lookup.startBlockHash && (
-              <div className="bg-card p-3 col-span-2 sm:col-span-4 rounded-xl">
+              <div className="metric-card col-span-2 sm:col-span-4">
                 <div className="flex items-center gap-2 mb-1">
                   <p className="text-[10px] font-bold tracking-widest uppercase text-muted">Start Block Hash</p>
                   <button
@@ -378,10 +371,10 @@ export default function EraBlockExplorer() {
       </div>
 
       {/* ── Debug panel ── */}
-      <div className="bg-term rounded-xl overflow-hidden">
+      <div className="overflow-hidden rounded-[1.5rem] border border-white/6 bg-term">
         <button
           onClick={() => setShowDebug(v => !v)}
-          className="w-full flex items-center gap-2 px-4 py-2.5 bg-ink hover:bg-surface-high transition-colors text-left"
+          className="w-full flex items-center gap-2 px-4 py-3 bg-[#05070f] hover:bg-surface-high transition-colors text-left"
           aria-expanded={showDebug}
           aria-label={showDebug ? 'Collapse debug panel' : 'Expand debug panel'}
         >

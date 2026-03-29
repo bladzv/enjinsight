@@ -12,8 +12,8 @@
  */
 import { WS_CONNECT_TIMEOUT_MS, WS_CALL_TIMEOUT_MS } from '../constants.js'
 
-// twox128("Staking") + twox128("ActiveEra")
-const STAKING_ACTIVE_ERA_KEY = '0x5f3e4907f716ac89b6347d15ececedca686dcf6300e60d5d7bce8b49c965bc6d'
+// twox128("Staking") + twox128("ActiveEra") — verified on Enjin relay chain
+const STAKING_ACTIVE_ERA_KEY = '0x5f3e4907f716ac89b6347d15ececedca487df464e44a534ba6b0cbb32407b587'
 // twox128("Timestamp") + twox128("Now")
 const TIMESTAMP_NOW_KEY = '0xf0c365c3cf59d671eb72da0e7a4113c49f1f0515f462cdcf84e0f1d6045dfcbb'
 

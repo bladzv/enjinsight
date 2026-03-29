@@ -164,7 +164,7 @@ export function parseImport(text, ext) {
       const epM = c.match(/^# endpoint:\s*(.+)/)
       const adM = c.match(/^# address:\s*(.+)/)
       if (epM) endpoint = epM[1].trim().slice(0, 256)
-      if (adM) address  = adM[1].trim().slice(0, 64)
+      if (adM) address  = adM[1].trim()
     })
 
     const headers = dataLines[0].replace(/"/g, '').split(',')

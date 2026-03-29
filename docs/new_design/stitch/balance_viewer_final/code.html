@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>EnjinSight | Historical Balance Viewer</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-surface-variant": "#aaaab7",
+              "secondary-fixed-dim": "#00deec",
+              "surface-variant": "#222532",
+              "tertiary-fixed-dim": "#2be800",
+              "secondary": "#00eefc",
+              "on-tertiary": "#0d6100",
+              "on-surface": "#f0f0fd",
+              "on-background": "#f0f0fd",
+              "tertiary-dim": "#2be800",
+              "on-primary": "#350090",
+              "on-tertiary-fixed": "#064200",
+              "on-secondary-container": "#e3fdff",
+              "outline": "#737580",
+              "on-primary-fixed-variant": "#33008a",
+              "error": "#ff6e84",
+              "on-secondary-fixed": "#003f43",
+              "tertiary-container": "#2ff801",
+              "on-primary-container": "#280071",
+              "on-primary-fixed": "#000000",
+              "surface-container-low": "#11131d",
+              "primary-dim": "#8051ff",
+              "background": "#0c0e17",
+              "primary-container": "#aa8fff",
+              "inverse-primary": "#6a30f0",
+              "inverse-on-surface": "#53545f",
+              "on-secondary-fixed-variant": "#005e64",
+              "surface-container-lowest": "#000000",
+              "primary-fixed": "#aa8fff",
+              "surface-container-highest": "#222532",
+              "surface": "#0c0e17",
+              "surface-dim": "#0c0e17",
+              "tertiary": "#8eff71",
+              "primary-fixed-dim": "#9d7eff",
+              "primary": "#b6a0ff",
+              "surface-tint": "#b6a0ff",
+              "surface-bright": "#282b3a",
+              "inverse-surface": "#faf8ff",
+              "on-tertiary-container": "#0b5800",
+              "on-secondary": "#005359",
+              "secondary-dim": "#00deec",
+              "on-tertiary-fixed-variant": "#0d6200",
+              "tertiary-fixed": "#2ff801",
+              "error-container": "#a70138",
+              "outline-variant": "#464752",
+              "surface-container": "#171924",
+              "secondary-container": "#006970",
+              "error-dim": "#d73357",
+              "surface-container-high": "#1c1f2b",
+              "secondary-fixed": "#00eefc",
+              "on-error-container": "#ffb2b9",
+              "on-error": "#490013"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, .brand-font { font-family: 'Space Grotesk', sans-serif; }
+        .glass-panel {
+            background: rgba(28, 31, 43, 0.8);
+            backdrop-filter: blur(12px);
+        }
+        /* Custom scrollbar for terminal */
+        .terminal-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        .terminal-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .terminal-scroll::-webkit-scrollbar-thumb {
+            background: #464752;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface selection:bg-primary selection:text-on-primary min-h-screen flex flex-col">
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 right-0 z-50 bg-[#11131d] border-none shadow-none">
+<div class="flex justify-between items-center w-full px-8 py-4 max-w-[1920px] mx-auto">
+<div class="flex items-center gap-8">
+<span class="text-2xl font-bold tracking-tighter text-[#b6a0ff] font-['Space_Grotesk']">EnjinSight</span>
+<nav class="hidden md:flex gap-6">
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors font-['Inter'] text-sm" href="#">Home</a>
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors font-['Inter'] text-sm" href="#">Era Explorer</a>
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors font-['Inter'] text-sm" href="#">Staking Cadence</a>
+<a class="text-[#b6a0ff] border-b-2 border-[#b6a0ff] pb-1 font-bold font-['Inter'] text-sm" href="#">Balance Viewer</a>
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors font-['Inter'] text-sm" href="#">Reward History</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<span class="hidden lg:block text-[#b6a0ff] font-['Space_Grotesk'] text-sm font-medium uppercase tracking-wider">Enjin Matrixchain</span>
+<button class="material-symbols-outlined text-[#aaaab7] hover:bg-[#282b3a] p-2 rounded-full transition-all duration-200 scale-95 active:scale-90">settings</button>
+<button class="material-symbols-outlined text-[#aaaab7] hover:bg-[#282b3a] p-2 rounded-full transition-all duration-200 scale-95 active:scale-90">account_circle</button>
+</div>
+</div>
+</header>
+<main class="flex-grow max-w-[1920px] mx-auto w-full px-8 pt-24 pb-32 space-y-10">
+<!-- Header & Query Form Section -->
+<header class="space-y-6">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+<div class="space-y-1">
+<h1 class="text-4xl font-bold tracking-tight text-on-surface">Balance Archive</h1>
+<p class="text-on-surface-variant text-lg">Retrieve deep-state historical snapshots of any wallet on the Enjin ecosystem.</p>
+</div>
+<div class="flex gap-2">
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container rounded text-sm text-on-surface-variant hover:bg-surface-bright transition-all">
+<span class="material-symbols-outlined text-sm">download</span> JSON
+                </button>
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container rounded text-sm text-on-surface-variant hover:bg-surface-bright transition-all">
+<span class="material-symbols-outlined text-sm">description</span> CSV
+                </button>
+</div>
+</div>
+<!-- Query Box -->
+<div class="p-6 bg-surface-container-low rounded-xl shadow-2xl border border-outline-variant/10">
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
+<div class="space-y-2">
+<label class="text-xs font-bold uppercase tracking-widest text-primary">Network</label>
+<select class="w-full bg-surface-container-highest border-none rounded-lg text-sm p-3 focus:ring-2 focus:ring-primary text-on-surface">
+<option>Matrixchain Mainnet</option>
+<option>Relaychain</option>
+<option>Canary Net</option>
+</select>
+</div>
+<div class="md:col-span-1 space-y-2">
+<label class="text-xs font-bold uppercase tracking-widest text-primary">SS58 Address</label>
+<div class="relative">
+<input class="w-full bg-surface-container-highest border-none rounded-lg text-sm p-3 pl-10 focus:ring-2 focus:ring-primary text-on-surface font-mono" placeholder="e.g. 0x... or En..." type="text"/>
+<span class="material-symbols-outlined absolute left-3 top-3 text-on-surface-variant text-sm">account_balance_wallet</span>
+</div>
+</div>
+<div class="space-y-2">
+<label class="text-xs font-bold uppercase tracking-widest text-primary">Range Type</label>
+<div class="flex bg-surface-container-highest p-1 rounded-lg">
+<button class="flex-1 py-2 text-xs font-medium rounded bg-surface-bright text-primary shadow-sm">Block Range</button>
+<button class="flex-1 py-2 text-xs font-medium text-on-surface-variant hover:text-on-surface">Date Range</button>
+</div>
+</div>
+<button class="bg-primary text-on-primary font-bold py-3 px-6 rounded-lg hover:bg-primary-dim transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/10">
+<span class="material-symbols-outlined">analytics</span>
+                    Get Current Snapshot
+                </button>
+</div>
+<div class="mt-8 flex flex-wrap items-center justify-between gap-4">
+<div class="flex items-center gap-3">
+<span class="text-xs font-bold text-on-surface-variant uppercase tracking-tighter">Presets</span>
+<div class="flex gap-2">
+<button class="px-3 py-1.5 text-xs rounded bg-surface-container-high border border-outline-variant/20 hover:border-primary/40 transition-all">1w</button>
+<button class="px-3 py-1.5 text-xs rounded bg-surface-container-high border border-outline-variant/20 hover:border-primary/40 transition-all">1m</button>
+<button class="px-3 py-1.5 text-xs rounded bg-primary-container/20 text-primary border border-primary/30">3m</button>
+<button class="px-3 py-1.5 text-xs rounded bg-surface-container-high border border-outline-variant/20 hover:border-primary/40 transition-all">6m</button>
+<button class="px-3 py-1.5 text-xs rounded bg-surface-container-high border border-outline-variant/20 hover:border-primary/40 transition-all">1y</button>
+</div>
+</div>
+<div class="flex-grow max-w-md">
+<div class="flex items-center justify-between mb-1">
+<span class="text-[10px] uppercase font-bold text-tertiary">Indexing Block: 14,209,122</span>
+<span class="text-[10px] uppercase font-bold text-on-surface-variant">88% Complete</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-tertiary w-[88%] shadow-[0_0_12px_rgba(142,255,113,0.3)]"></div>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Analytics Canvas -->
+<section class="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+<!-- Left: Chart & Breakdown -->
+<div class="lg:col-span-8 space-y-8">
+<div class="bg-surface-container rounded-xl p-8 border border-outline-variant/10 shadow-lg">
+<div class="flex items-center justify-between mb-8">
+<div>
+<h3 class="text-xl font-bold text-on-surface">Aggregated Asset Flow</h3>
+<p class="text-on-surface-variant text-sm">Stacked visualization of native ENJ liquidity states</p>
+</div>
+<div class="flex gap-4">
+<div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-[#6c33f2]"></span><span class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">Free</span></div>
+<div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-[#00eefc]"></span><span class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">Reserved</span></div>
+<div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-[#464752]"></span><span class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">Frozen</span></div>
+</div>
+</div>
+<!-- Chart Placeholder -->
+<div class="relative h-[400px] w-full bg-surface-container-lowest/40 rounded-lg flex items-end justify-between px-6 pb-4 overflow-hidden group">
+<svg class="w-full h-full p-4" preserveaspectratio="none" viewbox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
+<g stroke="#464752" stroke-dasharray="4" stroke-width="0.5">
+<line x1="0" x2="800" y1="320" y2="320"></line>
+<line x1="0" x2="800" y1="240" y2="240"></line>
+<line x1="0" x2="800" y1="160" y2="160"></line>
+<line x1="0" x2="800" y1="80" y2="80"></line>
+</g>
+<defs>
+<lineargradient id="grad-free" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" style="stop-color:#6c33f2;stop-opacity:0.6"></stop>
+<stop offset="100%" style="stop-color:#6c33f2;stop-opacity:0.1"></stop>
+</lineargradient>
+<lineargradient id="grad-reserved" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" style="stop-color:#00eefc;stop-opacity:0.5"></stop>
+<stop offset="100%" style="stop-color:#00eefc;stop-opacity:0.05"></stop>
+</lineargradient>
+</defs>
+<path d="M0,400 L0,380 Q100,375 200,385 T400,370 T600,380 T800,365 L800,400 Z" fill="#222532"></path>
+<path d="M0,380 Q100,375 200,385 T400,370 T600,380 T800,365 L800,280 Q700,290 600,260 T400,300 T200,270 T0,310 Z" fill="url(#grad-reserved)"></path>
+<path d="M0,310 T200,270 T400,300 T600,260 T800,280" fill="none" stroke="#00eefc" stroke-width="1.5"></path>
+<path d="M0,310 T200,270 T400,300 T600,260 T800,280 L800,120 Q700,140 600,90 T400,150 T200,110 T0,160 Z" fill="url(#grad-free)"></path>
+<path d="M0,160 T200,110 T400,150 T600,90 T800,120" fill="none" stroke="#6c33f2" stroke-width="2"></path>
+<g class="chart-hover-element opacity-0 hover:opacity-100 transition-opacity duration-300">
+<line stroke="#b6a0ff" stroke-dasharray="2" stroke-width="1" x1="400" x2="400" y1="0" y2="400"></line>
+<circle cx="400" cy="150" fill="#6c33f2" r="4" stroke="#f0f0fd" stroke-width="1"></circle>
+<circle cx="400" cy="300" fill="#00eefc" r="4" stroke="#f0f0fd" stroke-width="1"></circle>
+<rect fill="#171924" height="60" rx="4" stroke="#464752" stroke-width="0.5" width="120" x="410" y="120"></rect>
+<text fill="#aaaab7" font-family="Inter" font-size="10" x="420" y="140">Nov 24, 14:00</text>
+<text fill="#f0f0fd" font-family="Inter" font-size="12" font-weight="bold" x="420" y="155">Free: 1,240 ENJ</text>
+<text fill="#00eefc" font-family="Inter" font-size="10" x="420" y="170">Reserved: 100 ENJ</text>
+</g>
+</svg>
+</div>
+</div>
+<!-- Raw Data Table -->
+<div class="bg-surface-container rounded-xl overflow-hidden border border-outline-variant/10">
+<div class="p-6 flex items-center justify-between border-b border-outline-variant/10">
+<h3 class="text-lg font-bold">Block-by-Block Log</h3>
+<div class="flex items-center gap-2">
+<span class="text-xs text-on-surface-variant mr-2">Displaying 1-15 of 2,400</span>
+<div class="flex gap-1">
+<button class="p-1 rounded bg-surface-container-high hover:bg-surface-bright"><span class="material-symbols-outlined text-sm">chevron_left</span></button>
+<button class="p-1 rounded bg-surface-container-high hover:bg-surface-bright"><span class="material-symbols-outlined text-sm">chevron_right</span></button>
+</div>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low">
+<th class="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-primary">Block</th>
+<th class="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-primary">Time (UTC)</th>
+<th class="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-primary">Free</th>
+<th class="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-primary">Reserved</th>
+<th class="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-primary">Frozen</th>
+<th class="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-primary">Nonce</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/10">
+<tr class="hover:bg-surface-bright transition-colors group">
+<td class="px-6 py-4 font-mono text-sm text-secondary">14,209,122</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">2023-11-24 14:02:00</td>
+<td class="px-6 py-4 text-sm font-medium">1,240.42 ENJ</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">100.00 ENJ</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">0.00 ENJ</td>
+<td class="px-6 py-4 text-sm font-mono text-on-surface-variant">42</td>
+</tr>
+<tr class="hover:bg-surface-bright transition-colors group">
+<td class="px-6 py-4 font-mono text-sm text-secondary">14,209,121</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">2023-11-24 14:01:48</td>
+<td class="px-6 py-4 text-sm font-medium">1,240.42 ENJ</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">100.00 ENJ</td>
+<td class="px-6 py-4 text-sm text-on-surface-variant">0.00 ENJ</td>
+<td class="px-6 py-4 text-sm font-mono text-on-surface-variant">42</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Right: Secondary Tools -->
+<aside class="lg:col-span-4 space-y-8">
+<div class="bg-surface-container rounded-xl p-6 border border-outline-variant/10 shadow-lg space-y-6">
+<h3 class="text-lg font-bold border-b border-outline-variant/10 pb-4">Data Management</h3>
+<div class="space-y-4">
+<div class="space-y-2">
+<label class="text-xs font-bold text-on-surface-variant uppercase tracking-widest">Encryption Password</label>
+<div class="relative">
+<input class="w-full bg-surface-container-highest border-none rounded-lg text-sm p-3 focus:ring-2 focus:ring-secondary text-on-surface" placeholder="Optional security layer" type="password"/>
+<span class="material-symbols-outlined absolute right-3 top-3 text-on-surface-variant text-sm">lock</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<button class="flex items-center justify-center gap-2 px-4 py-3 bg-surface-bright rounded text-sm font-bold text-on-surface hover:bg-primary/10 hover:text-primary transition-all">
+<span class="material-symbols-outlined text-sm">upload</span> Import
+                        </button>
+<button class="flex items-center justify-center gap-2 px-4 py-3 bg-surface-bright rounded text-sm font-bold text-on-surface hover:bg-secondary/10 hover:text-secondary transition-all">
+<span class="material-symbols-outlined text-sm">download</span> Export
+                        </button>
+</div>
+</div>
+</div>
+<div class="bg-primary-container/5 rounded-xl p-6 border border-primary/20 shadow-lg">
+<div class="flex items-center gap-3 mb-6">
+<div class="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">insights</span>
+</div>
+<h3 class="text-lg font-bold">Smart Insights</h3>
+</div>
+<div class="space-y-4">
+<div class="p-3 bg-surface-container-lowest/30 rounded border-l-4 border-secondary">
+<p class="text-xs font-bold uppercase text-secondary mb-1">Max Free Balance</p>
+<p class="text-xl font-headline font-bold">14,290.00 ENJ</p>
+<p class="text-[10px] text-on-surface-variant mt-1">Recorded at Block #13,800,211</p>
+</div>
+<div class="p-3 bg-surface-container-lowest/30 rounded border-l-4 border-primary">
+<p class="text-xs font-bold uppercase text-primary mb-1">BALANCE Utilization</p>
+<p class="text-xl font-headline font-bold">82.4%</p>
+<p class="text-[10px] text-on-surface-variant mt-1">Calculated from Reserved/Free ratio</p>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-low rounded-xl p-6 border border-outline-variant/10">
+<div class="flex items-center justify-between mb-4">
+<span class="text-xs font-bold text-on-surface-variant uppercase tracking-widest">Network Health</span>
+<span class="flex items-center gap-1.5 text-[10px] text-tertiary font-bold uppercase">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span> Operational
+                    </span>
+</div>
+<div class="space-y-3">
+<div class="flex justify-between items-center text-sm">
+<span class="text-on-surface-variant">Finalized Block</span>
+<span class="font-mono text-secondary">14,209,122</span>
+</div>
+</div>
+</div>
+</aside>
+</section>
+</main>
+<!-- Bottom Horizontal Collapsible Terminal -->
+<aside class="fixed bottom-0 left-0 right-0 z-50 flex flex-col bg-[#000000] border-t border-[#464752]/20 shadow-2xl transition-all duration-300 overflow-hidden" id="terminal-panel" style="height: 240px;">
+<!-- Terminal Handle/Header -->
+<div class="p-4 border-b border-[#464752]/20 flex items-center justify-between bg-[#000000] cursor-pointer" onclick="toggleTerminal()">
+<div class="flex items-center gap-6 px-4">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></div>
+<div>
+<p class="font-mono text-xs font-bold uppercase tracking-widest text-[#b6a0ff]">Live Terminal</p>
+<p class="font-mono text-[10px] text-[#aaaab7] uppercase">Node: Synced</p>
+</div>
+</div>
+<div class="hidden md:flex gap-4 ml-4">
+<button class="flex items-center gap-2 px-3 py-1.5 bg-[#171924] text-[#b6a0ff] border-l-4 border-[#8051ff] font-mono text-xs uppercase tracking-widest transition-all duration-150 ease-in-out">
+<span class="material-symbols-outlined text-sm">terminal</span> Terminal
+                </button>
+<button class="flex items-center gap-2 px-3 py-1.5 text-[#464752] hover:text-[#aaaab7] hover:bg-[#11131d] font-mono text-xs uppercase tracking-widest transition-all duration-150 ease-in-out">
+<span class="material-symbols-outlined text-sm">list_alt</span> Logs
+                </button>
+<button class="flex items-center gap-2 px-3 py-1.5 text-[#464752] hover:text-[#aaaab7] hover:bg-[#11131d] font-mono text-xs uppercase tracking-widest transition-all duration-150 ease-in-out">
+<span class="material-symbols-outlined text-sm">hub</span> Events
+                </button>
+<button class="flex items-center gap-2 px-3 py-1.5 text-[#464752] hover:text-[#aaaab7] hover:bg-[#11131d] font-mono text-xs uppercase tracking-widest transition-all duration-150 ease-in-out">
+<span class="material-symbols-outlined text-sm">monitoring</span> Metrics
+                </button>
+</div>
+</div>
+<div class="flex items-center gap-4 px-4">
+<button class="bg-[#171924] text-[#b6a0ff] text-xs px-4 py-1.5 font-bold rounded uppercase hover:bg-[#282b3a] transition-all font-mono tracking-widest">Clear Logs</button>
+<span class="material-symbols-outlined text-on-surface-variant" id="terminal-toggle-icon">keyboard_arrow_down</span>
+</div>
+</div>
+<!-- Terminal Content -->
+<div class="flex-grow flex font-mono text-xs uppercase tracking-widest overflow-hidden bg-[#000000]">
+<div class="flex-grow p-6 space-y-2 overflow-y-auto terminal-scroll">
+<div class="flex gap-4 text-secondary">
+<span class="opacity-40 font-mono">[14:02:00]</span>
+<span class="font-mono">Syncing block #14,209,122... success</span>
+</div>
+<div class="flex gap-4 text-on-surface-variant">
+<span class="opacity-40 font-mono">[14:01:48]</span>
+<span class="font-mono">Database query executed in 12ms</span>
+</div>
+<div class="flex gap-4 text-primary">
+<span class="opacity-40 font-mono">[14:01:36]</span>
+<span class="font-mono">State updated: address En...1yZ (Free: +0.42 ENJ)</span>
+</div>
+<div class="flex gap-4 text-on-surface-variant">
+<span class="opacity-40 font-mono">[14:01:24]</span>
+<span class="font-mono">Subscribing to new heads...</span>
+</div>
+<div class="flex gap-4 text-tertiary">
+<span class="opacity-40 font-mono">[14:01:12]</span>
+<span class="font-mono">Peer count: 64 nodes active</span>
+</div>
+<div class="flex gap-4 text-on-surface-variant">
+<span class="opacity-40 font-mono">[14:01:00]</span>
+<span class="font-mono">Heartbeat pulse received</span>
+</div>
+</div>
+<div class="w-64 border-l border-[#464752]/20 p-6 space-y-6 hidden lg:block bg-[#0c0e17]">
+<div class="space-y-2">
+<p class="text-[10px] font-bold text-[#464752] uppercase tracking-widest">Memory Usage</p>
+<div class="h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[40%]"></div>
+</div>
+</div>
+<div class="space-y-2">
+<p class="text-[10px] font-bold text-[#464752] uppercase tracking-widest">CPU Load</p>
+<div class="h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-secondary w-[15%]"></div>
+</div>
+</div>
+<div class="pt-4 mt-4 border-t border-[#464752]/10">
+<button class="flex items-center gap-2 text-[#464752] hover:text-[#aaaab7] font-mono text-[10px] uppercase tracking-widest transition-colors">
+<span class="material-symbols-outlined text-sm">help</span> Docs
+                </button>
+</div>
+</div>
+</div>
+</aside>
+<script>
+    let terminalCollapsed = false;
+    function toggleTerminal() {
+        const panel = document.getElementById('terminal-panel');
+        const icon = document.getElementById('terminal-toggle-icon');
+        if (terminalCollapsed) {
+            panel.style.height = '240px';
+            icon.innerText = 'keyboard_arrow_down';
+        } else {
+            panel.style.height = '64px';
+            icon.innerText = 'keyboard_arrow_up';
+        }
+        terminalCollapsed = !terminalCollapsed;
+    }
+</script>
+<!-- Footer -->
+<footer class="flex justify-between items-center w-full px-8 py-6 bg-[#0c0e17] border-t border-[#464752]/15 mb-16">
+<div class="flex items-center gap-8">
+<p class="font-['Inter'] text-sm font-medium text-[#aaaab7]">EnjinSight — Read-only, No wallet required</p>
+</div>
+<div class="flex items-center gap-6">
+<a class="font-['Inter'] text-sm font-medium text-[#aaaab7] hover:text-[#00eefc] underline underline-offset-4 opacity-80 hover:opacity-100 transition-all" href="#">Documentation</a>
+<a class="font-['Inter'] text-sm font-medium text-[#aaaab7] hover:text-[#00eefc] underline underline-offset-4 opacity-80 hover:opacity-100 transition-all" href="#">GitHub</a>
+<a class="font-['Inter'] text-sm font-medium text-[#aaaab7] hover:text-[#00eefc] underline underline-offset-4 opacity-80 hover:opacity-100 transition-all" href="#">Support</a>
+</div>
+</footer>
+</body></html>

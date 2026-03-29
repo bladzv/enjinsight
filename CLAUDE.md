@@ -49,13 +49,18 @@ Set `SUBSCAN_API_KEY=<key>` in `.env` for Subscan API access during development.
 | `src/utils/balanceExport.js` | Serialize/deserialize records (JSON/CSV/XML) + AES-256-GCM encryption |
 | `src/utils/eraAnalysis.js` | Missed-era detection, severity classification |
 | `src/utils/format.js` | Address truncation, ENJ formatting, timestamp helpers |
+| `src/utils/chainInfo.js` | One-shot WS query to fetch era/block/timestamp chain metadata |
+| `src/utils/eraRpc.js` | Binary-search for era start blocks via archive-node RPC |
 | `src/hooks/useEraExplorer.js` | Era Explorer WS state machine |
 | `src/hooks/useBalanceExplorer.js` | Balance Viewer WS + query logic |
 | `src/hooks/useRewardHistory.js` | Reward History computation hook |
 | `src/hooks/useValidatorChecker.js` | Validator cadence scan logic |
 | `src/hooks/usePoolChecker.js` | Pool cadence scan logic |
+| `src/components/PhaseProgressCards.jsx` | SVG ring-progress cards displayed during multi-phase scans |
 | `api/[...proxy].js` | Vercel serverless proxy (injects API key, enforces allowlist) |
 | `public/relay-era-reference.csv` | 1007+ era boundary records (era, blocks, hashes, timestamps) |
+| `docs/new_design/stitch/enjinsight_obsidian/DESIGN.md` | Kinetic Ledger design system specification |
+| `tailwind.config.js` | Design-system tokens (colors, typography, shadows, border radii) |
 
 ---
 

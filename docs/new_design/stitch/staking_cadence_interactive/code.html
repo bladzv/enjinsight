@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>EnjinSight | Staking Rewards Cadence</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-surface-variant": "#aaaab7",
+                        "secondary-fixed-dim": "#00deec",
+                        "surface-variant": "#222532",
+                        "tertiary-fixed-dim": "#2be800",
+                        "secondary": "#00eefc",
+                        "on-tertiary": "#0d6100",
+                        "on-surface": "#f0f0fd",
+                        "on-background": "#f0f0fd",
+                        "tertiary-dim": "#2be800",
+                        "on-primary": "#350090",
+                        "on-tertiary-fixed": "#064200",
+                        "on-secondary-container": "#e3fdff",
+                        "outline": "#737580",
+                        "on-primary-fixed-variant": "#33008a",
+                        "error": "#ff6e84",
+                        "on-secondary-fixed": "#003f43",
+                        "tertiary-container": "#2ff801",
+                        "on-primary-container": "#280071",
+                        "on-primary-fixed": "#000000",
+                        "surface-container-low": "#11131d",
+                        "primary-dim": "#8051ff",
+                        "background": "#0c0e17",
+                        "primary-container": "#aa8fff",
+                        "inverse-primary": "#6a30f0",
+                        "inverse-on-surface": "#53545f",
+                        "on-secondary-fixed-variant": "#005e64",
+                        "surface-container-lowest": "#000000",
+                        "primary-fixed": "#aa8fff",
+                        "surface-container-highest": "#222532",
+                        "surface": "#0c0e17",
+                        "surface-dim": "#0c0e17",
+                        "tertiary": "#8eff71",
+                        "primary-fixed-dim": "#9d7eff",
+                        "primary": "#b6a0ff",
+                        "surface-tint": "#b6a0ff",
+                        "surface-bright": "#282b3a",
+                        "inverse-surface": "#faf8ff",
+                        "on-tertiary-container": "#0b5800",
+                        "on-secondary": "#005359",
+                        "secondary-dim": "#00deec",
+                        "on-tertiary-fixed-variant": "#0d6200",
+                        "tertiary-fixed": "#2ff801",
+                        "error-container": "#a70138",
+                        "outline-variant": "#464752",
+                        "surface-container": "#171924",
+                        "secondary-container": "#006970",
+                        "error-dim": "#d73357",
+                        "surface-container-high": "#1c1f2b",
+                        "secondary-fixed": "#00eefc",
+                        "on-error-container": "#ffb2b9",
+                        "on-error": "#490013"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0c0e17; }
+        ::-webkit-scrollbar-thumb { background: #464752; }
+        .terminal-panel { transition: height 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body selection:bg-primary selection:text-on-primary min-h-screen flex flex-col">
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 right-0 z-50 bg-[#11131d] border-none shadow-none">
+<div class="flex justify-between items-center w-full px-8 py-4 max-w-[1920px] mx-auto">
+<div class="flex items-center gap-8">
+<span class="text-2xl font-bold tracking-tighter text-[#6c33f2] font-['Space_Grotesk']">EnjinSight</span>
+<nav class="hidden md:flex gap-6">
+<a class="text-[#aaaab7] hover:text-[#6c33f2] transition-all duration-200 font-['Inter'] text-sm relative group" href="#">Home</a>
+<a class="text-[#aaaab7] hover:text-[#6c33f2] transition-all duration-200 font-['Inter'] text-sm relative group" href="#">Era Explorer</a>
+<a class="text-[#6c33f2] border-b-2 border-[#6c33f2] pb-1 font-bold font-['Inter'] text-sm" href="#">Staking Cadence</a>
+<a class="text-[#aaaab7] hover:text-[#6c33f2] transition-all duration-200 font-['Inter'] text-sm relative group" href="#">Balance Viewer</a>
+<a class="text-[#aaaab7] hover:text-[#6c33f2] transition-all duration-200 font-['Inter'] text-sm relative group" href="#">Reward History</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<span class="hidden lg:block text-[#6c33f2] font-['Space_Grotesk'] text-sm font-medium">Enjin Matrixchain</span>
+<button class="material-symbols-outlined text-[#aaaab7] hover:bg-[#282b3a] p-2 rounded-full transition-all duration-200 scale-95 active:scale-90" data-icon="settings">settings</button>
+<button class="material-symbols-outlined text-[#aaaab7] hover:bg-[#282b3a] p-2 rounded-full transition-all duration-200 scale-95 active:scale-90" data-icon="account_circle">account_circle</button>
+</div>
+</div>
+</header>
+<main class="flex-grow pt-[72px] pb-[280px]">
+<!-- Main Content Canvas -->
+<section class="max-w-[1920px] mx-auto p-8 space-y-8">
+<!-- Top Control Panel -->
+<div class="bg-surface-container-low p-6 rounded-xl flex flex-wrap items-center justify-between gap-6">
+<div class="flex items-center gap-8">
+<div class="space-y-1">
+<label class="block text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Scan Range (Eras)</label>
+<input class="bg-surface-container border-none text-primary font-headline font-bold text-xl w-24 rounded-lg focus:ring-1 focus:ring-primary" type="number" value="14"/>
+</div>
+<div class="h-10 w-px bg-outline-variant/20"></div>
+<div class="flex gap-3">
+<button class="bg-[#6c33f2] text-white px-6 py-2.5 rounded-lg font-bold flex items-center gap-2 hover:brightness-110 transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined text-xl" data-icon="play_arrow" data-weight="fill">play_arrow</span>
+                            Run
+                        </button>
+<button class="bg-surface-container hover:bg-surface-bright hover:brightness-110 text-on-surface px-6 py-2.5 rounded-lg font-bold flex items-center gap-2 transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined text-xl" data-icon="stop">stop</span>
+                            Stop
+                        </button>
+<button class="bg-surface-container hover:bg-surface-bright hover:brightness-110 text-on-surface px-6 py-2.5 rounded-lg font-bold flex items-center gap-2 transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined text-xl" data-icon="refresh">refresh</span>
+                            Reset
+                        </button>
+</div>
+</div>
+<div class="flex bg-surface-container-highest p-1 rounded-full transition-all duration-300">
+<button class="px-6 py-2 rounded-full bg-[#6c33f2] text-white text-sm font-bold shadow-lg transition-all duration-200 hover:brightness-110 active:scale-95">Validators</button>
+<button class="px-6 py-2 rounded-full text-on-surface-variant text-sm font-medium hover:text-on-surface hover:bg-surface-bright transition-all duration-200 active:scale-95">Nomination Pools</button>
+</div>
+</div>
+<!-- Summary Stats -->
+<div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+<div class="bg-surface-container p-5 rounded-xl border-l-4 border-secondary">
+<p class="text-[10px] uppercase tracking-wider text-on-surface-variant font-bold mb-1">Total Scanned</p>
+<p class="text-3xl font-headline font-bold text-secondary">2,482</p>
+</div>
+<div class="bg-surface-container p-5 rounded-xl border-l-4 border-error">
+<p class="text-[10px] uppercase tracking-wider text-on-surface-variant font-bold mb-1">Missed Rewards %</p>
+<p class="text-3xl font-headline font-bold text-error">4.2%</p>
+</div>
+<div class="bg-surface-container p-5 rounded-xl border-l-4 border-error-container">
+<p class="text-[10px] uppercase tracking-wider text-on-surface-variant font-bold mb-1">High Severity</p>
+<p class="text-3xl font-headline font-bold text-on-surface">12</p>
+</div>
+<div class="bg-surface-container p-5 rounded-xl border-l-4 border-primary">
+<p class="text-[10px] uppercase tracking-wider text-on-surface-variant font-bold mb-1">Medium Severity</p>
+<p class="text-3xl font-headline font-bold text-on-surface">34</p>
+</div>
+<div class="bg-surface-container p-5 rounded-xl border-l-4 border-on-surface-variant">
+<p class="text-[10px] uppercase tracking-wider text-on-surface-variant font-bold mb-1">Low Severity</p>
+<p class="text-3xl font-headline font-bold text-on-surface">89</p>
+</div>
+</div>
+<!-- Results Grid -->
+<div class="space-y-4">
+<div class="flex justify-between items-end">
+<h2 class="font-headline text-2xl font-bold tracking-tight">Active Scan Results</h2>
+<span class="text-xs text-on-surface-variant font-mono uppercase tracking-tighter">Displaying 124 Nodes</span>
+</div>
+<!-- Card 1: Expanded Detail -->
+<div class="group">
+<div class="bg-surface-container hover:bg-surface-bright transition-all cursor-pointer rounded-t-xl p-6 border-b border-outline-variant/10 flex items-center justify-between">
+<div class="flex items-center gap-6">
+<div class="w-12 h-12 rounded-full overflow-hidden bg-surface-container-highest">
+<img alt="Node Identicon" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAUEXryxiljaRpgQa8bSgcYjANtyywfM32VZ_MSmF77P80l-VfBrK2OgWfLFm2AsqcGhKEV4nx00o7KEKAPUkyGR06s622CRn15CnbHbHP8q_UwiDZQudAhDIIwi3M8hGkLzEvPEfBYp3XnXxwaXjc2EHdWU3zuIkAQRobhtH10RebTFEWFDn83AL-ro0S2IrBSNmwEhqe7TkTGbWtS7HSqKiNWp3w9gRMkVaff2HcpWK1_dSZXCsKLhgJWYzeVfUQmn8XlWzHxx3B2"/>
+</div>
+<div>
+<h4 class="font-bold text-on-surface flex items-center gap-2">
+                                    Enjin-Community-01
+                                    <span class="text-[10px] font-mono bg-error-container/20 text-error px-2 py-0.5 rounded border border-error/20">HIGH SEVERITY</span>
+</h4>
+<p class="text-xs font-mono text-on-surface-variant">0x8a1b2c...3d4e</p>
+</div>
+</div>
+<div class="flex items-center gap-12 text-right">
+<div>
+<p class="text-[10px] uppercase text-on-surface-variant font-bold">Missed Eras</p>
+<p class="text-xl font-headline font-bold text-error">7 / 14</p>
+</div>
+<div class="flex flex-col items-end">
+<p class="text-[10px] uppercase text-on-surface-variant font-bold">Total Bonded</p>
+<p class="text-xl font-headline font-bold text-primary">1.2M ENJ</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant rotate-180" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+<div class="bg-surface-container-low p-6 rounded-b-xl overflow-hidden shadow-inner">
+<table class="w-full text-sm">
+<thead>
+<tr class="text-[10px] uppercase tracking-widest text-on-surface-variant/60 font-bold border-b border-outline-variant/10">
+<th class="text-left pb-4 px-2">Era</th>
+<th class="text-left pb-4">Reward Amount</th>
+<th class="text-left pb-4">Bonded Status</th>
+<th class="text-right pb-4 px-2">Status</th>
+</tr>
+</thead>
+<tbody class="font-mono text-xs">
+<tr class="hover:bg-surface-container/50 transition-colors">
+<td class="py-3 px-2">1204</td>
+<td class="py-3">124.50 ENJ</td>
+<td class="py-3"><span class="text-tertiary">Active</span></td>
+<td class="py-3 px-2 text-right"><span class="material-symbols-outlined text-tertiary text-lg" data-icon="check_circle">check_circle</span></td>
+</tr>
+<tr class="hover:bg-surface-container/50 transition-colors">
+<td class="py-3 px-2">1203</td>
+<td class="py-3 text-on-surface-variant/40">---</td>
+<td class="py-3"><span class="text-error">Missed</span></td>
+<td class="py-3 px-2 text-right"><span class="material-symbols-outlined text-error text-lg" data-icon="cancel">cancel</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Terminal Panel -->
+<div class="fixed bottom-0 left-0 right-0 z-40 flex flex-col bg-[#000000] border-t border-outline-variant/15 terminal-panel h-64" id="terminal-panel">
+<!-- Terminal Header -->
+<div class="flex items-center justify-between px-6 py-2 border-b border-outline-variant/15 bg-surface-container-lowest">
+<div class="flex items-center gap-6">
+<div class="flex flex-col">
+<h3 class="font-mono text-[10px] uppercase tracking-widest text-[#b6a0ff] font-bold">Live Terminal</h3>
+<div class="flex items-center gap-1.5 text-[9px] font-mono">
+<span class="w-1.5 h-1.5 bg-tertiary rounded-full animate-pulse"></span>
+<span class="text-on-surface-variant">NODE: SYNCED</span>
+</div>
+</div>
+<div class="flex bg-[#11131d] rounded-lg p-1 gap-1">
+<button class="flex items-center gap-2 px-4 py-1.5 bg-[#171924] text-[#b6a0ff] border-l-2 border-[#8051ff] font-mono text-[10px] uppercase tracking-widest transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="terminal">terminal</span>
+                        Terminal
+                    </button>
+<button class="flex items-center gap-2 px-4 py-1.5 text-[#464752] hover:text-[#aaaab7] hover:bg-[#11131d] font-mono text-[10px] uppercase tracking-widest transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="list_alt">list_alt</span>
+                        Logs
+                    </button>
+<button class="flex items-center gap-2 px-4 py-1.5 text-[#464752] hover:text-[#aaaab7] hover:bg-[#11131d] font-mono text-[10px] uppercase tracking-widest transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="hub">hub</span>
+                        Events
+                    </button>
+<button class="flex items-center gap-2 px-4 py-1.5 text-[#464752] hover:text-[#aaaab7] hover:bg-[#11131d] font-mono text-[10px] uppercase tracking-widest transition-all">
+<span class="material-symbols-outlined text-sm" data-icon="monitoring">monitoring</span>
+                        Metrics
+                    </button>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-[10px] font-mono tracking-widest text-[#aaaab7] hover:text-white transition-all uppercase" onclick="document.getElementById('terminal-panel').classList.toggle('h-10'); document.getElementById('terminal-panel').classList.toggle('h-64')">
+                    Toggle Panel
+                </button>
+</div>
+</div>
+<!-- Terminal Content -->
+<div class="flex-1 overflow-y-auto p-6 font-mono text-[11px] space-y-2 leading-relaxed bg-[#000000] inset-shadow-sm">
+<div class="flex gap-4">
+<span class="text-on-surface-variant/40 w-16">14:22:01</span>
+<span class="text-tertiary w-16">[INIT]</span>
+<span class="text-on-surface-variant">Connecting to Enjin RPC...</span>
+</div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant/40 w-16">14:22:03</span>
+<span class="text-[#b6a0ff] w-16">[SCAN]</span>
+<span class="text-on-surface-variant">Fetching validators for Era 1204</span>
+</div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant/40 w-16">14:22:05</span>
+<span class="text-secondary w-16">[DATA]</span>
+<span class="text-on-surface-variant">Validator 0x8a...4f scanned. Status: MISSING_REWARD</span>
+</div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant/40 w-16">14:22:08</span>
+<span class="text-error w-16">[WARN]</span>
+<span class="text-on-surface-variant">Era 1201 data incomplete for Pool #42</span>
+</div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant/40 w-16">14:22:12</span>
+<span class="text-tertiary w-16">[SCAN]</span>
+<span class="text-on-surface-variant">Processing 14 Eras... 45% complete</span>
+</div>
+</div>
+<!-- Terminal Footer -->
+<div class="flex items-center justify-between px-6 py-2 border-t border-outline-variant/15 bg-surface-container-lowest">
+<span class="text-[9px] font-mono text-on-surface-variant/40 uppercase tracking-widest">Buffer: 2.4MB / 10MB</span>
+<button class="text-[10px] font-mono tracking-widest text-[#b6a0ff] hover:text-[#8051ff] transition-all uppercase font-bold">
+                Clear Logs
+            </button>
+</div>
+</div>
+<!-- Footer -->
+<footer class="bg-[#0c0e17] flex justify-between items-center w-full px-8 py-6 border-t border-[#464752]/15 relative z-50">
+<div class="flex items-center gap-6">
+<span class="text-sm font-medium text-[#aaaab7] font-['Inter']">EnjinSight — Read-only, No wallet required</span>
+</div>
+<div class="flex items-center gap-8">
+<a class="text-sm font-medium text-[#aaaab7] hover:text-[#00eefc] underline underline-offset-4 transition-all opacity-80 hover:opacity-100" href="#">Documentation</a>
+<a class="text-sm font-medium text-[#aaaab7] hover:text-[#00eefc] underline underline-offset-4 transition-all opacity-80 hover:opacity-100" href="#">GitHub</a>
+<a class="text-sm font-medium text-[#aaaab7] hover:text-[#00eefc] underline underline-offset-4 transition-all opacity-80 hover:opacity-100" href="#">Support</a>
+</div>
+</footer>
+</body></html>

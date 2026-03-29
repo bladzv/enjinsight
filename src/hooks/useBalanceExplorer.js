@@ -44,9 +44,45 @@ const initialState = {
   status:     STATUS.IDLE,
   records:    [],       // array of decoded AccountInfo records
   logs:       [],       // { level, msg, ts } log entries
-  progress:   null,     // { pct, text } | null
+  progress:   null,     // { text, phases:[...] } | null
   dataSource: 'none',   // 'query' | 'import' | 'none'
   errorMsg:   null,
+}
+
+function buildPhaseProgress({
+  totalBlocks = 0,
+  queriedBlocks = 0,
+  connectStatus = 'pending',
+  queryStatus = 'pending',
+  finalizeStatus = 'pending',
+  text = '',
+}) {
+  return {
+    text,
+    phases: [
+      {
+        key: 'connect',
+        label: 'Connect to Archive',
+        total: 1,
+        completed: connectStatus === 'completed' ? 1 : 0,
+        status: connectStatus,
+      },
+      {
+        key: 'query',
+        label: 'Query Balance Snapshots',
+        total: totalBlocks,
+        completed: Math.min(Math.max(queriedBlocks, 0), Math.max(totalBlocks, 0)),
+        status: queryStatus,
+      },
+      {
+        key: 'finalize',
+        label: 'Assemble Records',
+        total: 1,
+        completed: finalizeStatus === 'completed' ? 1 : 0,
+        status: finalizeStatus,
+      },
+    ],
+  }
 }
 
 function reducer(state, action) {
@@ -72,14 +108,14 @@ function reducer(state, action) {
         status:     STATUS.DONE,
         records:    action.records,
         dataSource: action.dataSource,
-        progress:   { pct: 100, text: `✓ ${action.records.length} records loaded.` },
+        progress:   action.progress ?? state.progress,
       }
 
     case 'ERROR':
       return { ...state, status: STATUS.ERROR, errorMsg: action.payload, progress: null }
 
     case 'CANCELLED':
-      return { ...state, status: STATUS.CANCELLED, progress: { pct: 0, text: 'Query cancelled.' } }
+      return { ...state, status: STATUS.CANCELLED, progress: action.payload ?? state.progress }
 
     default:
       return state
@@ -240,7 +276,16 @@ export default function useBalanceExplorer() {
 
     // ── Query ────────────────────────────────────────────────────────────
     dispatch({ type: 'STATUS', payload: STATUS.CONNECTING })
-    dispatch({ type: 'PROGRESS', payload: { pct: 0, text: `Connecting to ${ep}…` } })
+    dispatch({
+      type: 'PROGRESS',
+      payload: buildPhaseProgress({
+        totalBlocks: blocks.length,
+        connectStatus: 'in_progress',
+        queryStatus: 'pending',
+        finalizeStatus: 'pending',
+        text: `Connecting to ${ep}…`,
+      }),
+    })
 
     log('info', 'Session started')
     log('info', `Endpoint: ${ep}`)
@@ -250,22 +295,31 @@ export default function useBalanceExplorer() {
     const rpc = new EnjinRPC(ep)
     rpcRef.current = rpc
     const results = []
+    let connected = false
+    let queriedBlocks = 0
 
     try {
       log('info', 'Opening WebSocket connection…')
       await rpc.connect()
+      connected = true
       log('ok', 'WebSocket connected')
 
       dispatch({ type: 'STATUS', payload: STATUS.QUERYING })
       log('info', `Querying ${blocks.length.toLocaleString('en')} blocks…`)
+      dispatch({
+        type: 'PROGRESS',
+        payload: buildPhaseProgress({
+          totalBlocks: blocks.length,
+          queriedBlocks: 0,
+          connectStatus: 'completed',
+          queryStatus: 'in_progress',
+          finalizeStatus: 'pending',
+          text: `Querying ${blocks.length.toLocaleString('en')} block snapshots…`,
+        }),
+      })
 
       for (let i = 0; i < blocks.length; i++) {
         const blk = blocks[i]
-        const pct = Math.round((i / blocks.length) * 100)
-        dispatch({
-          type: 'PROGRESS',
-          payload: { pct, text: `Block ${blk.toLocaleString('en')}  (${i + 1} / ${blocks.length})` },
-        })
 
         const hash = await rpc.call('chain_getBlockHash', [blk])
         if (!hash || !isValidBlockHash(hash) || /^0x0{64}$/.test(hash)) {
@@ -274,30 +328,64 @@ export default function useBalanceExplorer() {
             block: blk, blockHash: '', free: 0n, reserved: 0n,
             miscFrozen: 0n, feeFrozen: 0n, nonce: 0, newFormat: false,
           })
-          continue
+        } else {
+          const raw = await rpc.call('state_getStorage', [storKey, hash])
+          if (!raw || raw === '0x') {
+            log('warn', `Block #${blk.toLocaleString('en')}: no account storage at this block — account may not exist yet or has zero balance`)
+            results.push({
+              block: blk, blockHash: hash, free: 0n, reserved: 0n,
+              miscFrozen: 0n, feeFrozen: 0n, nonce: 0, newFormat: false,
+            })
+          } else {
+            const dec = decodeAccountInfo(raw)
+            log('info', `Block #${blk.toLocaleString('en')} → free=${dec.free} res=${dec.reserved}${dec.newFormat ? ' [new-fmt]' : ''}`)
+            results.push({ block: blk, blockHash: hash, ...dec })
+          }
         }
 
-        const raw = await rpc.call('state_getStorage', [storKey, hash])
-        if (!raw || raw === '0x') {
-          log('warn', `Block #${blk.toLocaleString('en')}: no account storage at this block — account may not exist yet or has zero balance`)
-          results.push({
-            block: blk, blockHash: hash, free: 0n, reserved: 0n,
-            miscFrozen: 0n, feeFrozen: 0n, nonce: 0, newFormat: false,
-          })
-          continue
-        }
-        const dec = decodeAccountInfo(raw)
-        log('info', `Block #${blk.toLocaleString('en')} → free=${dec.free} res=${dec.reserved}${dec.newFormat ? ' [new-fmt]' : ''}`)
-        results.push({ block: blk, blockHash: hash, ...dec })
+        queriedBlocks = i + 1
+        dispatch({
+          type: 'PROGRESS',
+          payload: buildPhaseProgress({
+            totalBlocks: blocks.length,
+            queriedBlocks,
+            connectStatus: 'completed',
+            queryStatus: 'in_progress',
+            finalizeStatus: 'pending',
+            text: `Block ${blk.toLocaleString('en')} (${queriedBlocks} / ${blocks.length})`,
+          }),
+        })
       }
 
       log('ok', `Fetch complete — ${results.length.toLocaleString('en')} records`)
-      dispatch({ type: 'DONE', records: results, dataSource: 'query' })
+      dispatch({
+        type: 'DONE',
+        records: results,
+        dataSource: 'query',
+        progress: buildPhaseProgress({
+          totalBlocks: blocks.length,
+          queriedBlocks: blocks.length,
+          connectStatus: 'completed',
+          queryStatus: 'completed',
+          finalizeStatus: 'completed',
+          text: `✓ ${results.length} records loaded.`,
+        }),
+      })
 
     } catch (e) {
       if (e.message === 'Cancelled') {
         log('warn', 'Query cancelled by user')
-        dispatch({ type: 'CANCELLED' })
+        dispatch({
+          type: 'CANCELLED',
+          payload: buildPhaseProgress({
+            totalBlocks: blocks.length,
+            queriedBlocks,
+            connectStatus: connected ? 'completed' : 'in_progress',
+            queryStatus: connected ? 'in_progress' : 'pending',
+            finalizeStatus: 'pending',
+            text: 'Query cancelled.',
+          }),
+        })
       } else {
         log('err', `Query failed: ${e.message}`)
         dispatch({ type: 'ERROR', payload: `Error: ${e.message}` })

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>EnjinSight | Blockchain Analytics</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-surface-variant": "#aaaab7",
+              "secondary-fixed-dim": "#00deec",
+              "surface-variant": "#222532",
+              "tertiary-fixed-dim": "#2be800",
+              "secondary": "#00eefc",
+              "on-tertiary": "#0d6100",
+              "on-surface": "#f0f0fd",
+              "on-background": "#f0f0fd",
+              "tertiary-dim": "#2be800",
+              "on-primary": "#350090",
+              "on-tertiary-fixed": "#064200",
+              "on-secondary-container": "#e3fdff",
+              "outline": "#737580",
+              "on-primary-fixed-variant": "#33008a",
+              "error": "#ff6e84",
+              "on-secondary-fixed": "#003f43",
+              "tertiary-container": "#2ff801",
+              "on-primary-container": "#280071",
+              "on-primary-fixed": "#000000",
+              "surface-container-low": "#11131d",
+              "primary-dim": "#8051ff",
+              "background": "#0c0e17",
+              "primary-container": "#aa8fff",
+              "inverse-primary": "#6a30f0",
+              "inverse-on-surface": "#53545f",
+              "on-secondary-fixed-variant": "#005e64",
+              "surface-container-lowest": "#000000",
+              "primary-fixed": "#aa8fff",
+              "surface-container-highest": "#222532",
+              "surface": "#0c0e17",
+              "surface-dim": "#0c0e17",
+              "tertiary": "#8eff71",
+              "primary-fixed-dim": "#9d7eff",
+              "primary": "#b6a0ff",
+              "surface-tint": "#b6a0ff",
+              "surface-bright": "#282b3a",
+              "inverse-surface": "#faf8ff",
+              "on-tertiary-container": "#0b5800",
+              "on-secondary": "#005359",
+              "secondary-dim": "#00deec",
+              "on-tertiary-fixed-variant": "#0d6200",
+              "tertiary-fixed": "#2ff801",
+              "error-container": "#a70138",
+              "outline-variant": "#464752",
+              "surface-container": "#171924",
+              "secondary-container": "#006970",
+              "error-dim": "#d73357",
+              "surface-container-high": "#1c1f2b",
+              "secondary-fixed": "#00eefc",
+              "on-error-container": "#ffb2b9",
+              "on-error": "#490013"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-headline { font-family: 'Space Grotesk', sans-serif; }
+        .blockchain-grid {
+            background-image: 
+                linear-gradient(to right, rgba(70, 71, 82, 0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(70, 71, 82, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+        .glass-card {
+            background: rgba(28, 31, 43, 0.8);
+            backdrop-filter: blur(12px);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background selection:bg-primary selection:text-on-primary">
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 right-0 z-50 bg-[#11131d] border-none shadow-none">
+<div class="flex justify-between items-center w-full px-8 py-4 max-w-[1920px] mx-auto">
+<div class="flex items-center gap-8">
+<span class="text-2xl font-bold tracking-tighter text-[#b6a0ff] font-['Space_Grotesk']">EnjinSight</span>
+<nav class="hidden md:flex gap-6">
+<a class="text-[#b6a0ff] border-b-2 border-[#b6a0ff] pb-1 font-bold font-['Inter'] text-sm" href="#">Home</a>
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors font-['Inter'] text-sm" href="#">Era Explorer</a>
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors font-['Inter'] text-sm" href="#">Staking Cadence</a>
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors font-['Inter'] text-sm" href="#">Balance Viewer</a>
+<a class="text-[#aaaab7] hover:text-[#b6a0ff] transition-colors font-['Inter'] text-sm" href="#">Reward History</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<span class="hidden lg:block text-[#b6a0ff] font-['Space_Grotesk'] text-sm font-medium">Enjin Matrixchain</span>
+<button class="material-symbols-outlined text-[#aaaab7] hover:bg-[#282b3a] p-2 rounded-full transition-all duration-200 scale-95 active:scale-90" data-icon="settings">settings</button>
+<button class="material-symbols-outlined text-[#aaaab7] hover:bg-[#282b3a] p-2 rounded-full transition-all duration-200 scale-95 active:scale-90" data-icon="account_circle">account_circle</button>
+</div>
+</div>
+</header>
+<main class="pt-24 min-h-screen blockchain-grid">
+<!-- Hero Section -->
+<section class="max-w-7xl mx-auto px-8 pt-20 pb-16 text-center">
+<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container-high border border-outline-variant/20 mb-6">
+<span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
+<span class="text-xs font-label font-medium text-on-surface-variant uppercase tracking-widest">Network Live: Era 1,402</span>
+</div>
+<h1 class="text-6xl md:text-8xl font-headline font-bold tracking-tight text-on-surface mb-6">
+                Enjin Blockchain <br/> <span class="text-primary">Analytics &amp; Monitoring</span>
+</h1>
+<p class="text-xl text-on-surface-variant max-w-2xl mx-auto font-body font-light">
+                Comprehensive data insights for the Enjin Matrixchain. Read-only, No wallet required.
+            </p>
+</section>
+<!-- Bento Grid Tools -->
+<section class="max-w-7xl mx-auto px-8 pb-24">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+<!-- Card 1: Era Explorer -->
+<div class="glass-card p-8 rounded-xl border border-outline-variant/10 flex flex-col justify-between group hover:border-primary/40 transition-all duration-300">
+<div>
+<div class="w-12 h-12 bg-surface-container-high rounded-lg flex items-center justify-center mb-6 text-primary group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-3xl" data-icon="globe">globe</span>
+</div>
+<h3 class="text-2xl font-headline font-bold text-on-surface mb-3">Era Block Explorer</h3>
+<p class="text-on-surface-variant font-body text-sm leading-relaxed mb-8">
+                            Real-time block production tracking, finality monitoring, and validator health metrics across the Enjin Ecosystem.
+                        </p>
+</div>
+<button class="w-full py-3 bg-surface-variant hover:bg-primary hover:text-on-primary text-on-surface font-medium rounded transition-all duration-200 flex items-center justify-center gap-2">
+                        Launch Explorer
+                        <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<!-- Card 2: Staking Rewards Cadence -->
+<div class="glass-card p-8 rounded-xl border border-outline-variant/10 flex flex-col justify-between group hover:border-secondary/40 transition-all duration-300">
+<div>
+<div class="w-12 h-12 bg-surface-container-high rounded-lg flex items-center justify-center mb-6 text-secondary group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-3xl" data-icon="check_circle">check_circle</span>
+</div>
+<h3 class="text-2xl font-headline font-bold text-on-surface mb-3">Staking Rewards Cadence</h3>
+<p class="text-on-surface-variant font-body text-sm leading-relaxed mb-8">
+                            Visualise reward cycles, project upcoming payouts, and monitor validator commission changes in real-time.
+                        </p>
+</div>
+<button class="w-full py-3 bg-surface-variant hover:bg-secondary hover:text-on-secondary-fixed text-on-surface font-medium rounded transition-all duration-200 flex items-center justify-center gap-2">
+                        View Cadence
+                        <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<!-- Card 3: Historical Balance Viewer -->
+<div class="glass-card p-8 rounded-xl border border-outline-variant/10 flex flex-col justify-between group hover:border-primary/40 transition-all duration-300">
+<div>
+<div class="w-12 h-12 bg-surface-container-high rounded-lg flex items-center justify-center mb-6 text-primary group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-3xl" data-icon="show_chart">show_chart</span>
+</div>
+<h3 class="text-2xl font-headline font-bold text-on-surface mb-3">Historical Balance Viewer</h3>
+<p class="text-on-surface-variant font-body text-sm leading-relaxed mb-8">
+                            Audit any address history. Track ENJ balance fluctuations and asset transfers over specific time intervals.
+                        </p>
+</div>
+<button class="w-full py-3 bg-surface-variant hover:bg-primary hover:text-on-primary text-on-surface font-medium rounded transition-all duration-200 flex items-center justify-center gap-2">
+                        Track Address
+                        <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<!-- Card 4: Reward History Viewer -->
+<div class="glass-card p-8 rounded-xl border border-outline-variant/10 flex flex-col justify-between group hover:border-tertiary/40 transition-all duration-300">
+<div>
+<div class="w-12 h-12 bg-surface-container-high rounded-lg flex items-center justify-center mb-6 text-tertiary group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-3xl" data-icon="history">history</span>
+</div>
+<h3 class="text-2xl font-headline font-bold text-on-surface mb-3">Reward History Viewer</h3>
+<p class="text-on-surface-variant font-body text-sm leading-relaxed mb-8">
+                            Deep-dive into staking performance. Export reward reports for tax or accounting purposes with one click.
+                        </p>
+</div>
+<button class="w-full py-3 bg-surface-variant hover:bg-tertiary hover:text-on-tertiary text-on-surface font-medium rounded transition-all duration-200 flex items-center justify-center gap-2">
+                        Audit History
+                        <span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Summary Stats Bar -->
+<section class="max-w-7xl mx-auto px-8 mb-24">
+<div class="bg-surface-container rounded-2xl p-1 px-1 border border-outline-variant/5">
+<div class="grid grid-cols-2 lg:grid-cols-4 divide-x divide-outline-variant/10 py-8">
+<div class="text-center px-4">
+<p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Total Stake</p>
+<p class="text-3xl font-headline font-bold text-secondary">2.4B ENJ</p>
+</div>
+<div class="text-center px-4">
+<p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Active Validators</p>
+<p class="text-3xl font-headline font-bold text-on-surface">150</p>
+</div>
+<div class="text-center px-4">
+<p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Era Progress</p>
+<p class="text-3xl font-headline font-bold text-primary">84%</p>
+</div>
+<div class="text-center px-4">
+<p class="text-xs font-label uppercase tracking-widest text-on-surface-variant mb-1">Inflation Rate</p>
+<p class="text-3xl font-headline font-bold text-tertiary">4.2%</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Decorative Visual -->
+<section class="max-w-7xl mx-auto px-8 mb-32">
+<div class="relative h-96 rounded-3xl overflow-hidden group">
+<img alt="Data visualization" class="w-full h-full object-cover opacity-40 group-hover:scale-105 transition-transform duration-[2000ms]" data-alt="Abstract digital visualization of high-speed blockchain data flowing in a dark technical environment with purple and cyan neon highlights" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCKhLZy_0zQPjMvM4yPxw3xZ5KoqG7ZE6xuiQ179NqKFAxEskf39jKe5QyCMK6ZUs_Dl0Rsm_cVyn5I2uQec38opmZiKLQi2LaEJZ58eVR9mZYCUq5UT9n2ch7_F0b8VqcUrSh2vmaAhER97CkcYaUDwcuvLHuM19uDXYM5w2jrBgQi1QrQLMkoYdQuSIBZbWCZdoNj2dBT2zK1h5zdfkpof2-0BaMSFEKdy_QdkILd5LQBVUyVhgh2mHvhr8LihfNr8EDMS-Cq33m9"/>
+<div class="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent"></div>
+<div class="absolute bottom-12 left-12">
+<h2 class="text-4xl font-headline font-bold text-on-surface mb-2">Designed for Clarity</h2>
+<p class="text-on-surface-variant max-w-lg">Advanced filters and real-time streams provide the most accurate look into the Enjin Matrixchain state.</p>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-[#0c0e17] border-t border-[#464752]/15">
+<div class="flex justify-between items-center w-full px-8 py-6 max-w-[1920px] mx-auto">
+<div class="flex flex-col gap-1">
+<p class="text-[#aaaab7] font-['Inter'] text-sm font-medium">EnjinSight — Read-only, No wallet required</p>
+</div>
+<div class="flex gap-8">
+<a class="text-[#aaaab7] hover:text-[#00eefc] underline underline-offset-4 transition-all duration-200 opacity-80 hover:opacity-100 font-['Inter'] text-sm font-medium" href="#">Documentation</a>
+<a class="text-[#aaaab7] hover:text-[#00eefc] underline underline-offset-4 transition-all duration-200 opacity-80 hover:opacity-100 font-['Inter'] text-sm font-medium" href="#">GitHub</a>
+<a class="text-[#aaaab7] hover:text-[#00eefc] underline underline-offset-4 transition-all duration-200 opacity-80 hover:opacity-100 font-['Inter'] text-sm font-medium" href="#">Support</a>
+</div>
+</div>
+</footer>
+</body></html>

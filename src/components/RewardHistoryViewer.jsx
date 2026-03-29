@@ -19,9 +19,11 @@ import {
 } from 'lucide-react'
 import { useRewardHistory, RH_STATUS } from '../hooks/useRewardHistory.js'
 import { fetchLiveChainInfo } from '../utils/chainInfo.js'
+import PhaseProgressCards from './PhaseProgressCards.jsx'
 import TerminalLog from './TerminalLog.jsx'
 import { PLANCK_PER_ENJ } from '../constants.js'
 import { aesEncrypt, aesDecrypt, downloadFile, safeFilename } from '../utils/balanceExport.js'
+import { truncateAddress } from '../utils/format.js'
 import { MAX_IMPORT_MB } from '../constants.js'
 
 // ── Era-CSV date helpers (copied from BalanceExplorer) ───────────────────────
@@ -327,13 +329,13 @@ function RewardChart({ data }) {
 
   if (!data.length) return null
   return (
-    <div className="bg-surface rounded-xl p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-        <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">Reward Chart</h3>
-        <span className="text-[10px] text-text-secondary ml-1">(all filtered eras · aggregated by pool)</span>
+    <div className="rounded-[1.5rem] bg-surface p-5 shadow-ambient">
+      <div className="mb-3">
+        <p className="section-label">Visualization</p>
+        <h3 className="mt-2 font-headline text-2xl font-bold text-text">Reward Growth</h3>
+        <p className="mt-2 text-xs text-text-secondary">(all filtered eras, aggregated by pool)</p>
       </div>
-      <div style={{ height: '280px' }}>
+      <div className="rounded-[1.25rem] bg-card/80 p-3" style={{ height: '280px' }}>
         <canvas ref={canvasRef} />
       </div>
     </div>
@@ -424,13 +426,13 @@ function PoolBondedPieChart({ data }) {
 
   if (!data.length) return null
   return (
-    <div className="bg-surface rounded-xl p-4 flex flex-col">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-        <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">My Bonded ENJ by Pool</h3>
-        <span className="text-[10px] text-text-secondary ml-1">(wallet share · latest era per pool)</span>
+    <div className="flex flex-col rounded-[1.5rem] bg-surface p-5 shadow-ambient">
+      <div className="mb-3">
+        <p className="section-label">Allocation</p>
+        <h3 className="mt-2 font-headline text-2xl font-bold text-text">My Bonded ENJ by Pool</h3>
+        <p className="mt-2 text-xs text-text-secondary">(wallet share, latest era per pool)</p>
       </div>
-      <div style={{ height: '240px' }}>
+      <div className="rounded-[1.25rem] bg-card/80 p-3" style={{ height: '240px' }}>
         <canvas ref={canvasRef} />
       </div>
     </div>
@@ -470,13 +472,13 @@ function PoolRewardPieChart({ data }) {
 
   if (!data.length) return null
   return (
-    <div className="bg-surface rounded-xl p-4 flex flex-col">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-0.5 h-3.5 bg-violet-400 rounded-sm" />
-        <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-violet-400">Reward ENJ by Pool</h3>
-        <span className="text-[10px] text-text-secondary ml-1">(aggregated across filtered eras)</span>
+    <div className="flex flex-col rounded-[1.5rem] bg-surface p-5 shadow-ambient">
+      <div className="mb-3">
+        <p className="section-label">Distribution</p>
+        <h3 className="mt-2 font-headline text-2xl font-bold text-text">Reward ENJ by Pool</h3>
+        <p className="mt-2 text-xs text-text-secondary">(aggregated across filtered eras)</p>
       </div>
-      <div style={{ height: '240px' }}>
+      <div className="rounded-[1.25rem] bg-card/80 p-3" style={{ height: '240px' }}>
         <canvas ref={canvasRef} />
       </div>
     </div>
@@ -528,15 +530,14 @@ function PoolMultiSelect({ pools, value, onChange }) {
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 bg-card rounded px-2.5 py-1 text-xs text-text hover:bg-surface-bright transition-colors min-w-[110px] justify-between"
+        className="flex min-w-[130px] items-center justify-between gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs text-text transition-colors hover:bg-surface-bright"
       >
         <span className={allSelected ? 'text-text-secondary' : 'text-cyan font-semibold'}>{countLabel}</span>
         <ChevronDown size={10} className={`text-text-secondary transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 min-w-[200px] max-h-64 overflow-y-auto
-                        bg-card rounded-lg shadow-xl shadow-black/40 py-1">
+        <div className="absolute left-0 top-full z-50 mt-1 max-h-64 min-w-[220px] overflow-y-auto rounded-[1rem] bg-card py-1 shadow-xl shadow-black/40">
           {/* Select All / Clear */}
           <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-bright rounded-t-lg">
             <button
@@ -655,15 +656,17 @@ function RewardTableV2({ results, onFilter }) {
   const pageSlice  = filtered.slice((safePage - 1) * pageSize, safePage * pageSize)
 
   return (
-    <div className="bg-surface rounded-xl p-4">
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <div className="w-0.5 h-3.5 bg-cyan rounded-sm flex-shrink-0" />
-        <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">Reward History</h3>
-        <span className="text-xs text-text-secondary font-mono ml-1">{filtered.length} / {results.length} rows</span>
+    <div className="rounded-[1.5rem] bg-surface p-5 shadow-ambient">
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div>
+          <p className="section-label">Ledger View</p>
+          <h3 className="mt-2 font-headline text-2xl font-bold text-text">Per-era reward ledger</h3>
+        </div>
+        <span className="mini-chip">{filtered.length} / {results.length} rows</span>
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3 mb-3 flex-wrap">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] font-bold tracking-widest uppercase text-text-secondary">Pool:</span>
           <PoolMultiSelect
@@ -676,23 +679,23 @@ function RewardTableV2({ results, onFilter }) {
           <span className="text-[10px] font-bold tracking-widest uppercase text-text-secondary">Era:</span>
           <input type="number" placeholder="Min" value={filterEraMin}
             onChange={e => { setFilterEraMin(e.target.value); setPage(1) }}
-            className="w-16 bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary" />
+            className="w-20 rounded-full bg-card px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary" />
           <span className="text-text-secondary text-xs">–</span>
           <input type="number" placeholder="Max" value={filterEraMax}
             onChange={e => { setFilterEraMax(e.target.value); setPage(1) }}
-            className="w-16 bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary" />
+            className="w-20 rounded-full bg-card px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary" />
         </div>
         <div className="ml-auto flex items-center gap-1.5">
           <span className="text-[10px] font-bold tracking-widest uppercase text-text-secondary">Per page:</span>
           <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
-            className="bg-card rounded px-1.5 py-0.5 text-xs text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary">
+            className="rounded-full bg-card px-2 py-1 text-xs text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary">
             {PAGE_SIZES.map(n => <option key={n} value={n}>{n}</option>)}
           </select>
         </div>
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-lg">
+      <div className="overflow-x-auto rounded-[1.25rem] bg-card/70 p-1">
         <table className="border-collapse text-xs font-mono w-max">
           <thead className="sticky top-0 z-10">
             <tr>
@@ -700,7 +703,7 @@ function RewardTableV2({ results, onFilter }) {
                 const isSorted = sortCol === col.key
                 return (
                   <th key={col.key} onClick={() => col.sortable && handleSort(col.key)}
-                    className={`bg-surface-high px-3 py-2 font-bold tracking-widest
+                    className={`bg-surface-high px-3 py-3 font-bold tracking-widest
                                 uppercase select-none whitespace-nowrap transition-colors text-[10px]
                                 relative group
                                 ${col.align === 'right' ? 'text-right' : 'text-left'}
@@ -726,7 +729,7 @@ function RewardTableV2({ results, onFilter }) {
             {pageSlice.length === 0 ? (
               <tr><td colSpan={TABLE_COLS.length} className="px-3 py-6 text-center text-text-secondary">No rows match filters.</td></tr>
             ) : pageSlice.map((r, i) => (
-              <tr key={`${r.era}-${r.poolId}`} className={`hover:bg-surface-bright transition-colors ${i % 2 ? 'bg-card' : ''}`}>
+              <tr key={`${r.era}-${r.poolId}`} className={`transition-colors hover:bg-surface-bright/80 ${i % 2 ? 'bg-card' : ''}`}>
                 <td className="px-3 py-1.5 text-cyan font-bold">{r.era}</td>
                 <td className="px-3 py-1.5 text-text-secondary whitespace-nowrap">{fmtDate(r.eraStartDateUtc)}</td>
                 <td className="px-3 py-1.5 text-text whitespace-nowrap font-semibold">#{r.poolId}</td>
@@ -750,7 +753,7 @@ function RewardTableV2({ results, onFilter }) {
 
       {/* Pagination */}
       {filtered.length > pageSize && (
-        <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <span className="text-xs text-text-secondary font-mono">
             Page {safePage}/{totalPages} · {((safePage-1)*pageSize+1).toLocaleString('en')}–{Math.min(safePage*pageSize,filtered.length).toLocaleString('en')}
           </span>
@@ -801,16 +804,16 @@ function RewardSummary({ results }) {
   ]
 
   return (
-    <div className="bg-surface rounded-xl p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-        <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">Summary</h3>
+    <div className="rounded-[1.5rem] bg-surface p-5 shadow-ambient">
+      <div className="mb-3">
+        <p className="section-label">Summary</p>
+        <h3 className="mt-2 font-headline text-2xl font-bold text-text">Reward overview</h3>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {stats.map(({ label, value, accent }) => (
-          <div key={label} className="bg-card rounded-xl p-6 hover:bg-surface-bright text-center transition-colors">
-            <p className="text-[10px] font-bold tracking-widest uppercase text-muted mb-1">{label}</p>
-            <p className={`text-sm font-bold font-mono leading-tight ${accent}`}>{value}</p>
+          <div key={label} className="metric-card text-center">
+            <p className="metric-label">{label}</p>
+            <p className={`mt-3 text-sm font-bold font-mono leading-tight ${accent}`}>{value}</p>
           </div>
         ))}
       </div>
@@ -858,10 +861,10 @@ function RewardExportPanel({ results, address }) {
   }
 
   return (
-    <div className="bg-surface rounded-xl p-4">
-      <div className="flex items-center gap-2 mb-4">
-        <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-        <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">Export Data</h3>
+    <div className="rounded-[1.5rem] bg-surface p-5 shadow-ambient">
+      <div className="mb-4">
+        <p className="section-label">Export</p>
+        <h3 className="mt-2 font-headline text-2xl font-bold text-text">Save reward dataset</h3>
       </div>
       {msg && (
         <div role="alert" className={`mb-4 px-3 py-2 rounded-lg border text-sm font-medium
@@ -944,8 +947,8 @@ function RewardImportPanel({ onImport }) {
         } catch {}
       }
       try {
-        const { results } = parseRewardImport(text, ext)
-        onImport(results)
+        const { results, meta } = parseRewardImport(text, ext)
+        onImport(results, meta)
       } catch (e) { showAlert('err', e.message) }
       setIsPending(false)
     }
@@ -958,8 +961,8 @@ function RewardImportPanel({ onImport }) {
     setIsPending(true)
     try {
       const plain = await aesDecrypt(encPending.text, decPwd)
-      const { results } = parseRewardImport(plain, 'json')
-      onImport(results)
+      const { results, meta } = parseRewardImport(plain, 'json')
+      onImport(results, meta)
       setEncPending(null); setDecPwd('')
     } catch (e) { showAlert('err', `Decryption failed: ${e.message}`) }
     setIsPending(false)
@@ -977,8 +980,9 @@ function RewardImportPanel({ onImport }) {
         </div>
       )}
       <div role="button" tabIndex={0} aria-label="Drop file or click to browse"
-        className={`border-2 border-dashed rounded-lg p-10 text-center cursor-pointer transition-all
-          ${isDragOver?'border-cyan bg-cyan/10':'border-[rgba(70,71,82,0.10)] hover:border-primary hover:bg-surface-bright'}`}
+        className={`rounded-[1.5rem] p-10 text-center cursor-pointer transition-all
+          ${isDragOver?'bg-cyan/10 shadow-cyan-glow':'bg-card hover:bg-surface-high'}`}
+        style={{ border: '1px dashed rgba(70, 71, 82, 0.18)' }}
         onClick={() => fileInputRef.current?.click()}
         onKeyDown={e => e.key==='Enter'&&fileInputRef.current?.click()}
         onDragOver={e=>{e.preventDefault();setIsDragOver(true)}}
@@ -1000,7 +1004,7 @@ function RewardImportPanel({ onImport }) {
       </div>
       {encPending && (
         <div className="space-y-3">
-          <div className="flex gap-2 px-4 py-3 rounded-lg bg-cyan/10 border border-cyan/30 text-sm text-cyan">
+          <div className="flex gap-2 rounded-[1rem] border border-cyan/30 bg-cyan/10 px-4 py-3 text-sm text-cyan">
             🔒 Encrypted file detected. Enter password to decrypt.
           </div>
           <div className="flex gap-3 items-end">
@@ -1038,6 +1042,7 @@ export default function RewardHistoryViewer() {
 
   // Imported results (separate from computed)
   const [importedResults, setImportedResults] = useState(null)
+  const [importedAddress, setImportedAddress] = useState('')
 
   // Include past pool interactions toggle
   const [includeHistory, setIncludeHistory] = useState(false)
@@ -1113,11 +1118,25 @@ export default function RewardHistoryViewer() {
 
   // Progress state
   const phases      = progress?.phases ?? []
-  const activePhase = phases.find(p => p.status === 'in_progress') ?? phases[phases.length - 1]
+  const activePhase = phases.find(p => p.status === 'in_progress') ?? phases.find(p => p.status === 'pending') ?? phases[phases.length - 1]
   const phasePct    = activePhase && activePhase.total > 0
     ? Math.min(100, Math.round(activePhase.completed / activePhase.total * 100))
     : 0
   const allDone     = phases.length > 0 && phases.every(p => p.status === 'completed')
+  const completedPhaseCount = phases.filter(p => p.status === 'completed').length
+  const progressTitle = allDone
+    ? 'Reward history ready'
+    : isStopped
+      ? 'Reward computation stopped'
+      : (activePhase?.label ?? 'Computing rewards')
+  const progressMeta = activePhase && activePhase.total > 0
+    ? `${activePhase.completed ?? 0} / ${activePhase.total} (${phasePct}%)`
+    : `${completedPhaseCount} / ${phases.length} phases complete`
+  const progressSummary = allDone
+    ? 'All reward-history phases completed successfully.'
+    : isStopped
+      ? 'The computation was stopped before every phase completed.'
+      : null
 
   // Sync filtered rows when results change
   useEffect(() => {
@@ -1147,9 +1166,10 @@ export default function RewardHistoryViewer() {
     setStartDate(toDateInput(from)); setEndDate(toDateInput(now)); setActivePreset(label)
   }
 
-  function handleImportResults(rows) {
+  function handleImportResults(rows, meta) {
     setImportedResults(rows)
     setFilteredRows(rows)
+    setImportedAddress(meta?.address ?? '')
   }
 
   const showResults = (isDone || isStopped || importedResults) && activeResults.length > 0
@@ -1157,9 +1177,45 @@ export default function RewardHistoryViewer() {
   return (
     <div className={`space-y-4 transition-[padding] duration-200 ${logExpanded ? 'pb-[380px]' : 'pb-16'}`}>
 
+      <section className="page-hero">
+        <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1.12fr)_minmax(280px,0.88fr)] lg:items-end">
+          <div className="space-y-5">
+            <div className="hero-kicker">
+              <span className="hero-dot" />
+              Reward History Viewer
+            </div>
+            <div className="space-y-4">
+              <h1 className="hero-title text-balance">Pool reward history with export-ready structure.</h1>
+              <p className="hero-copy">
+                Compute per-era reward attribution for nomination pools, filter and visualize the result set, and keep import or export workflows intact for downstream analysis.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="metric-card">
+              <p className="metric-label">Range Mode</p>
+              <p className="metric-value text-cyan">{rangeMode === 'era' ? 'Era Range' : 'Date Range'}</p>
+            </div>
+            <div className="metric-card">
+              <p className="metric-label">Result Rows</p>
+              <p className="metric-value text-success">{activeResults.length}</p>
+            </div>
+            <div className="metric-card">
+              <p className="metric-label">Source</p>
+              <p className="metric-value text-text">{importedResults ? 'Imported Data' : 'Archive RPC'}</p>
+            </div>
+            <div className="metric-card">
+              <p className="metric-label">Pool Scope</p>
+              <p className="metric-value text-text">{includeHistory ? 'Historic + Active' : 'Active Only'}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── Tabs ── */}
-      <div className="bg-surface rounded-xl overflow-hidden">
-        <div role="tablist" className="flex bg-card">
+      <div className="overflow-hidden rounded-[1.75rem] bg-surface shadow-ambient">
+        <div role="tablist" className="m-4 mb-0 flex rounded-full bg-card p-2">
           {[
             { key: 'compute', label: 'Compute Rewards', icon: Server },
             { key: 'import',  label: 'Import Data',     icon: Upload },
@@ -1168,8 +1224,8 @@ export default function RewardHistoryViewer() {
               disabled={isLoading}
               onClick={() => setTab(key)}
               className={`flex items-center justify-center gap-1.5 flex-1 px-4 py-3
-                text-xs sm:text-sm font-medium transition-colors disabled:opacity-50
-                ${tab===key?'bg-surface-bright text-cyan':'text-muted hover:text-text'}`}>
+                text-xs sm:text-sm font-medium rounded-full transition-colors disabled:opacity-50
+                ${tab===key?'bg-primary text-on-primary shadow-primary-glow':'text-muted hover:text-text'}`}>
               <Icon size={14} />{label}
             </button>
           ))}
@@ -1178,15 +1234,18 @@ export default function RewardHistoryViewer() {
         {/* ── Compute pane ── */}
         {tab === 'compute' && (
           <div role="tabpanel" className="p-4 sm:p-5 space-y-4">
-            <div className="flex items-center gap-2">
-              <TrendingUp size={15} className="text-primary flex-shrink-0" />
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
-                               bg-cyan/10 border border-cyan/25 text-[10px] font-semibold tracking-widest uppercase text-cyan">
-                Relaychain
-              </span>
-              {csvCount > 0 && (
-                <span className="ml-1 text-xs text-muted font-mono">{csvCount} eras in CSV</span>
-              )}
+            <div>
+              <div className="flex items-center gap-2">
+                <TrendingUp size={15} className="text-primary flex-shrink-0" />
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+                                 bg-cyan/10 border border-cyan/25 text-[10px] font-semibold tracking-widest uppercase text-cyan">
+                  Relaychain
+                </span>
+                {csvCount > 0 && (
+                  <span className="ml-1 text-xs text-muted font-mono">{csvCount} eras in CSV</span>
+                )}
+              </div>
+              <h2 className="mt-3 font-headline text-2xl font-bold text-text">Compute pool reward history</h2>
             </div>
 
             <p className="text-xs text-text-secondary leading-relaxed">
@@ -1218,7 +1277,7 @@ export default function RewardHistoryViewer() {
             </div>
 
             {/* ── Live chain snapshot ──────────────────────────────── */}
-            <div className="flex flex-wrap gap-x-5 gap-y-1 px-3 py-2 rounded-lg bg-card text-[11px] font-mono">
+            <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-[1.25rem] bg-card px-4 py-3 text-[11px] font-mono shadow-inset-soft">
               <span className="text-text-secondary">Era:&nbsp;
                 <span className="text-cyan">{chainInfo.loading ? '…' : (chainInfo.era != null ? chainInfo.era.toLocaleString() : '—')}</span>
               </span>
@@ -1230,9 +1289,9 @@ export default function RewardHistoryViewer() {
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-              <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">RPC Configuration</h3>
+            <div>
+              <p className="section-label">RPC Configuration</p>
+              <h3 className="mt-2 font-headline text-2xl font-bold text-text">Archive node query</h3>
             </div>
 
             {/* Address */}
@@ -1362,7 +1421,7 @@ export default function RewardHistoryViewer() {
                   <Square size={14} />Stop
                 </button>
               ) : (isDone || isStopped || isError || importedResults) ? (
-                <button onClick={() => { reset(); setImportedResults(null) }} className="btn-primary gap-1.5 px-5">
+                <button onClick={() => { reset(); setImportedResults(null); setImportedAddress('') }} className="btn-primary gap-1.5 px-5">
                   <RotateCcw size={14} />Reset
                 </button>
               ) : (
@@ -1378,9 +1437,9 @@ export default function RewardHistoryViewer() {
         {/* ── Import pane ── */}
         {tab === 'import' && (
           <div role="tabpanel" className="p-4 sm:p-5 space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-              <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">Import Reward Data</h3>
+            <div>
+              <p className="section-label">Import</p>
+              <h3 className="mt-2 font-headline text-2xl font-bold text-text">Import Reward Data</h3>
             </div>
             <p className="text-xs text-text-secondary leading-relaxed">
               Import previously exported reward history (JSON or CSV). Encrypted files (.enc.json) are also supported.
@@ -1391,48 +1450,35 @@ export default function RewardHistoryViewer() {
       </div>
 
       {/* ── Progress ── */}
-      {isLoading && phases.length > 0 && (
-        <section className="bg-surface rounded-xl p-4 space-y-3" aria-live="polite">
-          <div className="flex items-center justify-between text-xs mb-1">
-            <p className="text-text-secondary">{allDone ? 'Complete!' : (activePhase?.label ?? 'Computing…')}</p>
-            <p className="font-mono text-text">{activePhase?.completed ?? 0} / {activePhase?.total ?? 0} ({phasePct}%)</p>
-          </div>
-          <div className="h-2 rounded-full bg-surface overflow-hidden">
-            <div className="h-full rounded-full bg-gradient-to-r from-primary-dim via-primary to-cyan transition-all duration-300"
-                 style={{ width: `${phasePct}%` }} />
-          </div>
-          <div className="space-y-1.5">
-            {phases.map((ph, i) => {
-              const cls = ph.status==='completed'?'text-success':ph.status==='in_progress'?'text-cyan':'text-dim'
-              const lbl = ph.status==='completed'?'Done':ph.status==='in_progress'?'Running':'Pending'
-              return (
-                <div key={ph.key} className="flex items-center justify-between text-[11px] bg-card rounded px-2.5 py-1.5">
-                  <span className={`font-medium ${cls}`}>Phase {i}: {ph.label}</span>
-                  <span className={`font-semibold ${cls}`}>{lbl}</span>
-                </div>
-              )
-            })}
-          </div>
-        </section>
+      {phases.length > 0 && (isLoading || isDone || isStopped) && (
+        <PhaseProgressCards
+          eyebrow="Computation Progress"
+          indexLabel="Phase"
+          title={progressTitle}
+          summary={progressSummary}
+          meta={progressMeta}
+          phases={phases}
+          ariaLabel="Reward history progress"
+        />
       )}
 
       {/* ── Error ── */}
       {isError && errorMsg && (
-        <div className="bg-surface rounded-xl p-4 border border-danger/30 bg-danger/5">
+        <div className="rounded-[1.5rem] bg-danger/5 p-4 border border-danger/30">
           <p className="text-sm text-danger">{errorMsg}</p>
         </div>
       )}
 
       {/* ── Stopped ── */}
       {isStopped && !activeResults.length && (
-        <div className="bg-surface rounded-xl p-4 border border-warning/30 bg-warning/5">
+        <div className="rounded-[1.5rem] bg-warning/5 p-4 border border-warning/30">
           <p className="text-sm text-warning">Computation stopped before results were available.</p>
         </div>
       )}
 
       {/* ── Empty result ── */}
       {isDone && !activeResults.length && (
-        <div className="bg-surface rounded-xl p-6 text-center">
+        <div className="rounded-[1.5rem] bg-surface p-6 text-center shadow-ambient">
           <p className="text-sm text-text-secondary">No rewards found for the given address and era range.</p>
           <p className="text-xs text-muted mt-2">
             If you have exited your pool(s), enable "Include past pool interactions"
@@ -1444,6 +1490,16 @@ export default function RewardHistoryViewer() {
       {/* ── Results section ── */}
       {showResults && (
         <>
+          {/* Address summary bar */}
+          {(() => { const dispAddr = importedResults ? importedAddress : address; return dispAddr ? (
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-[1.5rem] bg-surface px-5 py-4 shadow-ambient">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[11px] font-bold tracking-widest uppercase text-text-secondary">Wallet</span>
+                <span className="text-sm font-bold text-text font-mono" title={dispAddr}>{dispAddr}</span>
+              </div>
+            </div>
+          ) : null })()
+          }
           <RewardSummary results={filteredRows.length ? filteredRows : activeResults} />
           <RewardTableV2 results={activeResults} onFilter={setFilteredRows} />
           <RewardChart data={filteredRows} />
@@ -1452,6 +1508,7 @@ export default function RewardHistoryViewer() {
             <PoolRewardPieChart data={filteredRows} />
           </div>
           {!importedResults && <RewardExportPanel results={activeResults} address={address} />}
+          {importedResults && <RewardExportPanel results={activeResults} address={importedAddress} />}
           {importedResults && (
             <div className="flex items-center gap-2 text-xs text-text-secondary px-1">
               <span>Showing imported data.</span>

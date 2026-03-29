@@ -72,18 +72,18 @@ export default function BalanceTable({ records, isLoading = false }) {
   }
 
   return (
-    <div className="bg-surface rounded-xl p-4 animate-fade-in">
+    <div className="animate-fade-in rounded-[1.5rem] bg-surface p-5 shadow-ambient">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-          <h3 className="text-xs font-bold tracking-widest uppercase text-cyan font-headline">Balance History</h3>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="section-label">Ledger View</p>
+          <h3 className="mt-2 font-headline text-2xl font-bold text-text">Block-by-block log</h3>
           {isLoading && (
-            <span className="text-[10px] text-cyan animate-pulse font-mono">Populating…</span>
+            <span className="mt-2 inline-block text-[10px] text-cyan animate-pulse font-mono">Populating…</span>
           )}
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          <span className="font-mono text-xs text-text-secondary">
+          <span className="mini-chip">
             {records.length.toLocaleString('en')} record{records.length !== 1 ? 's' : ''}
           </span>
           {/* Page size selector */}
@@ -92,7 +92,7 @@ export default function BalanceTable({ records, isLoading = false }) {
             <select
               value={pageSize}
               onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
-              className="bg-card rounded px-1.5 py-0.5 text-xs text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+              className="rounded-full bg-card px-2 py-1 text-xs text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
               aria-label="Rows per page"
             >
               {PAGE_SIZE_OPTIONS.map(n => (
@@ -103,7 +103,7 @@ export default function BalanceTable({ records, isLoading = false }) {
           {/* Table zoom */}
           <div className="flex items-center gap-1" title="Table text size">
             <button
-              className="w-6 h-6 rounded bg-card text-text-secondary text-sm font-bold
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-card text-sm font-bold text-text-secondary
                          flex items-center justify-center hover:text-cyan transition-colors"
               onClick={() => setZoomIdx(i => Math.max(0, i - 1))}
               aria-label="Zoom out table"
@@ -113,14 +113,14 @@ export default function BalanceTable({ records, isLoading = false }) {
               {['S', 'M', 'L'][zoomIdx]}
             </span>
             <button
-              className="w-6 h-6 rounded bg-card text-text-secondary text-sm font-bold
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-card text-sm font-bold text-text-secondary
                          flex items-center justify-center hover:text-cyan transition-colors"
               onClick={() => setZoomIdx(i => Math.min(ZOOM_SIZES.length - 1, i + 1))}
               aria-label="Zoom in table"
               disabled={zoomIdx === ZOOM_SIZES.length - 1}
             >+</button>
             <button
-              className="w-6 h-6 rounded bg-card text-[10px] text-text-secondary font-bold
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-card text-[10px] font-bold text-text-secondary
                          flex items-center justify-center hover:text-cyan transition-colors"
               onClick={() => setZoomIdx(DEFAULT_ZOOM)}
               aria-label="Reset table zoom"
@@ -130,7 +130,7 @@ export default function BalanceTable({ records, isLoading = false }) {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-xl">
+      <div className="overflow-x-auto rounded-[1.25rem] bg-card/70 p-1">
         <table className={`w-full border-collapse ${textSize}`}>
           <thead className="sticky top-0 z-10">
             <tr>
@@ -140,7 +140,7 @@ export default function BalanceTable({ records, isLoading = false }) {
                   <th
                     key={col.key}
                     onClick={() => handleSort(col.key)}
-                    className={`bg-surface-high px-3 py-2 font-bold tracking-widest
+                    className={`bg-surface-high px-3 py-3 font-bold tracking-widest
                                 uppercase cursor-pointer select-none whitespace-nowrap transition-colors
                                 text-[calc(1em*0.79)] ${col.align === 'right' ? 'text-right' : 'text-left'}
                                 ${isSorted ? 'text-cyan' : 'text-muted hover:text-cyan'}`}
@@ -163,7 +163,7 @@ export default function BalanceTable({ records, isLoading = false }) {
             ) : pageSlice.map((d, idx) => {
               const safeHash = isValidBlockHash(d.blockHash) ? d.blockHash : ''
               return (
-                <tr key={`${d.block}-${idx}`} className="hover:bg-surface-bright transition-colors">
+                <tr key={`${d.block}-${idx}`} className="hover:bg-surface-bright/80 transition-colors">
                   <td className="px-3 py-2 font-semibold text-text whitespace-nowrap font-mono">
                     {d.block.toLocaleString('en')}
                   </td>
@@ -202,7 +202,7 @@ export default function BalanceTable({ records, isLoading = false }) {
 
       {/* Pagination */}
       {records.length > pageSize && (
-        <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <span className="text-xs text-text-secondary font-mono">
             Page {safePage} of {totalPages}
             {' · '}

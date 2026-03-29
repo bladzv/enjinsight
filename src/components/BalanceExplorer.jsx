@@ -19,10 +19,12 @@ import { Activity, AlertTriangle, Calendar, ChevronDown, Info, RotateCcw, Server
 import useBalanceExplorer, { STATUS } from '../hooks/useBalanceExplorer.js'
 import { ENJIN_NETWORKS, MAX_RPC_CALLS } from '../constants.js'
 import { fetchEraBoundariesFromRpc } from '../utils/eraRpc.js'
+import { truncateAddress } from '../utils/format.js'
 import BalanceChart       from './BalanceChart.jsx'
 import BalanceTable       from './BalanceTable.jsx'
 import BalanceExportPanel from './BalanceExportPanel.jsx'
 import BalanceImportPanel from './BalanceImportPanel.jsx'
+import PhaseProgressCards from './PhaseProgressCards.jsx'
 import TerminalLog        from './TerminalLog.jsx'
 
 // ── Address prefix map ───────────────────────────────────────────────────────
@@ -216,6 +218,7 @@ export default function BalanceExplorer() {
 
   // Form state (controlled inputs — validated before any API call)
   const [address,    setAddress]    = useState('')
+  const [queriedAddress, setQueriedAddress] = useState('')
   const [startBlock, setStartBlock] = useState('')
   const [endBlock,   setEndBlock]   = useState('')
   const [step,       setStep]       = useState('')
@@ -321,6 +324,21 @@ export default function BalanceExplorer() {
 
   const isLoading  = status === STATUS.CONNECTING || status === STATUS.QUERYING
   const hasResults = records.length > 0
+  const phases = progress?.phases ?? []
+  const activePhase = phases.find(p => p.status === 'in_progress') ?? phases.find(p => p.status === 'pending') ?? phases[phases.length - 1]
+  const activePhasePct = activePhase && activePhase.total > 0
+    ? Math.round((Math.min(activePhase.completed, activePhase.total) / activePhase.total) * 100)
+    : 0
+  const completedPhaseCount = phases.filter(p => p.status === 'completed').length
+  const progressTitle = status === STATUS.DONE
+    ? 'Balance snapshots ready'
+    : status === STATUS.CANCELLED
+      ? 'Balance query stopped'
+      : (activePhase?.label ?? 'Balance query in progress')
+  const progressMeta = activePhase && activePhase.total > 0
+    ? `${activePhase.completed ?? 0} / ${activePhase.total} (${activePhasePct}%)`
+    : `${completedPhaseCount} / ${phases.length} phases complete`
+  const progressSummary = progress?.text ?? null
 
   async function handleFetch() {
     let effStart = startBlock
@@ -385,6 +403,7 @@ export default function BalanceExplorer() {
 
     const effectiveAddress = address.trim()
     rpcMetaRef.current = { endpoint, address: effectiveAddress }
+    setQueriedAddress(effectiveAddress)
     await runQuery({ endpoint, address: effectiveAddress, startBlock: effStart, endBlock: effEnd, step: effStep })
   }
 
@@ -399,24 +418,32 @@ export default function BalanceExplorer() {
 
   function handleImport(text, ext, fname) {
     const { rpcConfig } = importData(text, ext, fname)
-    if (rpcConfig?.address) setAddress(rpcConfig.address.slice(0, 64))
+    if (rpcConfig?.address) {
+      setAddress(rpcConfig.address)
+      setQueriedAddress(rpcConfig.address)
+    }
     // Stay on import tab to show results, don't auto-switch
     setShowImportResults(true)
   }
 
   async function handleImportEncrypted(encText, pwd, ext, fname) {
     const { rpcConfig } = await importEncrypted(encText, pwd, ext, fname)
-    if (rpcConfig?.address) setAddress(rpcConfig.address.slice(0, 64))
+    if (rpcConfig?.address) {
+      setAddress(rpcConfig.address)
+      setQueriedAddress(rpcConfig.address)
+    }
     // Stay on import tab to show results, don't auto-switch
     setShowImportResults(true)
   }
 
   // Estimate RPC calls
   const { estCalls, estTimeLabel } = (() => {
+    // require a filled step input before estimating
+    if (step === '' || step == null) return { estCalls: null, estTimeLabel: null }
     const s  = parseInt(startBlock, 10)
     const e  = parseInt(endBlock,   10)
-    const st = parseInt(step, 10) || 100
-    if (!Number.isFinite(s) || !Number.isFinite(e) || s > e) return { estCalls: null, estTimeLabel: null }
+    const st = parseInt(step, 10)
+    if (!Number.isFinite(s) || !Number.isFinite(e) || s > e || !Number.isFinite(st) || st <= 0) return { estCalls: null, estTimeLabel: null }
     const calls = Math.min(Math.ceil((e - s) / st) + 1, MAX_RPC_CALLS + 1)
     const secs = Math.round(calls * 0.60 + 2.5)
     let label
@@ -482,18 +509,55 @@ export default function BalanceExplorer() {
   const stepMin         = 1
   const stepPlaceholder = rangeMode === 'date' ? '1' :
                           rangeMode === 'era'  ? '1' : '14400'
+  const rangeModeLabel = rangeMode === 'date' ? 'Date Range' : rangeMode === 'era' ? 'Era Range' : 'Block Range'
 
   return (
     <div className="space-y-4 sm:space-y-5">
 
+      <section className="page-hero">
+        <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1.12fr)_minmax(280px,0.88fr)] lg:items-end">
+          <div className="space-y-5">
+            <div className="hero-kicker">
+              <span className="hero-dot" />
+              Historical Balance Viewer
+            </div>
+            <div className="space-y-4">
+              <h1 className="hero-title text-balance">Balance archive with deeper state context.</h1>
+              <p className="hero-copy">
+                Query archive-node snapshots across blocks, eras, or dates, then review the records through charts, sortable tables, imports, and then export it.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="metric-card">
+              <p className="metric-label">Network</p>
+              <p className="metric-value text-cyan">{activeNetwork.label}</p>
+            </div>
+            <div className="metric-card">
+              <p className="metric-label">Range Mode</p>
+              <p className="metric-value text-text">{rangeModeLabel}</p>
+            </div>
+            <div className="metric-card">
+              <p className="metric-label">Records Loaded</p>
+              <p className="metric-value text-success">{records.length}</p>
+            </div>
+            <div className="metric-card">
+              <p className="metric-label">Data Source</p>
+              <p className="metric-value text-text">{dataSource === 'import' ? 'Imported' : 'Archive RPC'}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── Unified input card (tab bar + pane) ────────────────────── */}
-      <div className="bg-surface rounded-xl overflow-hidden">
+      <div className="overflow-hidden rounded-[1.75rem] bg-surface shadow-ambient">
 
         {/* Tab bar */}
         <div
           role="tablist"
           aria-label="Balance explorer mode"
-          className="flex bg-card rounded-xl p-1 m-4 mb-0"
+          className="m-4 mb-0 flex rounded-full bg-card p-2"
         >
           {TABS.map(({ key, label, icon: Icon }) => (
             <button
@@ -503,10 +567,10 @@ export default function BalanceExplorer() {
               disabled={isLoading}
               onClick={() => { setTab(key); if (key === 'query') setShowImportResults(false) }}
               className={`flex items-center justify-center gap-1.5 flex-1 px-4 py-2.5
-                          text-xs sm:text-sm font-medium rounded-lg transition-colors
+                          text-xs sm:text-sm font-medium rounded-full transition-colors
                           disabled:opacity-50 disabled:cursor-not-allowed
                           ${tab === key
-                            ? 'bg-surface-bright text-cyan'
+                            ? 'bg-primary text-on-primary shadow-primary-glow'
                             : 'text-muted hover:text-text'}`}
             >
               <Icon size={14} />
@@ -521,7 +585,7 @@ export default function BalanceExplorer() {
 
             {/* Section heading */}
             {/* ── Live chain snapshot ──────────────────────────────── */}
-            <div className="flex flex-wrap gap-x-5 gap-y-1 px-3 py-2 rounded-lg bg-card text-[11px] font-mono">
+            <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-[1.25rem] bg-card px-4 py-3 text-[11px] font-mono shadow-inset-soft">
               <span className="text-text-secondary">Era:&nbsp;
                 <span className="text-cyan">{chainInfo.loading ? '…' : (chainInfo.era != null ? chainInfo.era.toLocaleString() : '—')}</span>
               </span>
@@ -533,9 +597,9 @@ export default function BalanceExplorer() {
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-              <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">RPC Configuration</h3>
+            <div>
+              <p className="section-label">RPC Configuration</p>
+              <h3 className="mt-2 font-headline text-2xl font-bold text-text">Query archive node</h3>
             </div>
 
             {/* Network dropdown + address */}
@@ -850,7 +914,7 @@ export default function BalanceExplorer() {
             )}
 
             {/* ── Disclaimer — Archive RPC ─────────────────── */}
-            <div className="flex gap-2.5 px-3 py-2.5 rounded-lg bg-primary/5">
+            <div className="flex gap-2.5 rounded-[1.25rem] bg-primary/5 px-4 py-3">
               <Info size={14} className="text-primary/70 flex-shrink-0 mt-0.5" />
               <p className="text-[11px] text-text-secondary leading-relaxed">
                 <span className="text-text font-medium">Note:</span> Balance data is fetched
@@ -871,14 +935,14 @@ export default function BalanceExplorer() {
             )}
 
             {/* Action row */}
-            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               {isLoading ? (
                 <button onClick={cancel} className="btn-stop w-full sm:w-auto sm:min-w-[200px]">
                   <Square size={14} />
                   STOP
                 </button>
               ) : hasResults ? (
-                <button onClick={reset} className="btn-primary w-full sm:w-auto sm:min-w-[200px]">
+                <button onClick={() => { reset(); setQueriedAddress('') }} className="btn-primary w-full sm:w-auto sm:min-w-[200px]">
                   <RotateCcw size={14} />
                   RESET
                 </button>
@@ -889,6 +953,7 @@ export default function BalanceExplorer() {
                   disabled={
                     !address.trim() ||
                     addressNote?.type === 'error' ||
+                    (step === '' || step == null) ||
                     (rangeMode === 'block' ? (!startBlock || !endBlock || !!blockErr) :
                      rangeMode === 'era'   ? (!startEraNum || !endEraNum || !!eraValidErr) :
                                             (!startDate || !endDate || !!dateValidErr))
@@ -898,7 +963,7 @@ export default function BalanceExplorer() {
                   Fetch Balance
                 </button>
               )}
-              {estCalls != null && addressNote?.type !== 'error' && !(rangeMode === 'block' ? !!blockErr : rangeMode === 'era' ? !!eraValidErr : !!dateValidErr) && (
+              {estCalls != null && addressNote?.type !== 'error' && step !== '' && step != null && !(rangeMode === 'block' ? !!blockErr : rangeMode === 'era' ? !!eraValidErr : !!dateValidErr) && (
                 <span className="text-xs font-mono text-text-secondary">
                   {estCalls > MAX_RPC_CALLS
                     ? (
@@ -919,32 +984,29 @@ export default function BalanceExplorer() {
               )}
             </div>
 
-            {/* Progress bar */}
-            {isLoading && progress && (
-              <div aria-live="polite" className="space-y-1.5">
-                <div className="flex justify-between text-xs text-text-secondary font-mono">
-                  <span>{progress.text}</span>
-                  <span>{progress.pct}%</span>
-                </div>
-                <div className="h-2 bg-card rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-primary-dim via-primary to-cyan transition-all duration-300"
-                    style={{ width: `${progress.pct}%` }}
-                  />
-                </div>
-              </div>
+            {phases.length > 0 && status !== STATUS.IDLE && status !== STATUS.ERROR && (
+              <PhaseProgressCards
+                eyebrow="Query Progress"
+                indexLabel="Phase"
+                title={progressTitle}
+                summary={progressSummary}
+                meta={progressMeta}
+                phases={phases}
+                ariaLabel="Balance query progress"
+                className="mt-2"
+              />
             )}
           </div>
         )}
 
         {/* ── Import pane ───────────────────────────────────────── */}
         {tab === 'import' && (
-          <div role="tabpanel" className="p-4 sm:p-6">
-            {!showImportResults ? (
-              <>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-                  <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">Import Balance Data</h3>
+            <div role="tabpanel" className="p-4 sm:p-6">
+              {!showImportResults ? (
+                <>
+                <div>
+                  <p className="section-label">Import</p>
+                  <h3 className="mt-2 font-headline text-2xl font-bold text-text">Import Balance Data</h3>
                 </div>
                 <p className="text-xs text-text-secondary mb-4 leading-relaxed">
                   Only files previously exported by this tool (JSON, CSV, or XML) can be imported.
@@ -959,9 +1021,9 @@ export default function BalanceExplorer() {
             ) : (
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <div className="w-0.5 h-3.5 bg-cyan rounded-sm" />
-                    <h3 className="text-xs font-bold font-headline tracking-widest uppercase text-cyan">Imported Data</h3>
+                  <div>
+                    <p className="section-label">Import</p>
+                    <h3 className="mt-2 font-headline text-2xl font-bold text-text">Imported Data</h3>
                   </div>
                   <button
                     type="button"
@@ -987,8 +1049,9 @@ export default function BalanceExplorer() {
         <>
           {/* Records summary bar */}
           {hasResults && (
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 bg-surface rounded-xl px-5 py-3.5">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-[1.5rem] bg-surface px-5 py-4 shadow-ambient">
               {[
+                { label: 'Wallet',         value: queriedAddress ? queriedAddress : '—' },
                 { label: 'Records',        value: records.length.toLocaleString('en') },
                 { label: 'Block Range',    value: minBlk != null ? `${minBlk.toLocaleString('en')} – ${maxBlk.toLocaleString('en')}` : '—' },
                 { label: 'Balance Format', value: hasNewFmt ? 'New (frozen+flags)' : 'Legacy (misc+fee)' },
