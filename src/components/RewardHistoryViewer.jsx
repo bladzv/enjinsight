@@ -13,9 +13,9 @@
  */
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
-  TrendingUp, Play, Square, RotateCcw, Download, Upload,
+  Play, Square, RotateCcw, Download, Upload,
   ChevronDown, ChevronUp, Lock, Unlock, FolderOpen,
-  AlertTriangle, Calendar, Server,
+  AlertTriangle, AlertCircle, Calendar, Server, Info, XCircle, CheckCircle,
 } from 'lucide-react'
 import { useRewardHistory, RH_STATUS } from '../hooks/useRewardHistory.js'
 import { fetchLiveChainInfo } from '../utils/chainInfo.js'
@@ -166,30 +166,32 @@ function rewardToXML(results, meta) {
 
 /** Parse imported reward JSON/CSV back into result rows */
 function parseRewardImport(text, ext) {
+  // ── Shared row mapper ─────────────────────────────────────────────────────
+  function mapRow(r) {
+    return {
+      era:             Number(r.era ?? r.Era ?? 0),
+      poolId:          Number(r.pool_id ?? r.poolId ?? 0),
+      poolLabel:       String(r.pool_label ?? r.poolLabel ?? ''),
+      eraStartBlock:   r.era_start_block != null ? Number(r.era_start_block) : null,
+      eraStartDateUtc: r.era_date_utc || r.eraStartDateUtc || null,
+      memberBalance:   BigInt(String(r.member_senj ?? r.memberBalance ?? '0').replace(/[^0-9]/g, '') || '0'),
+      poolSupply:      BigInt(String(r.pool_supply_senj ?? r.poolSupply ?? '0').replace(/[^0-9]/g, '') || '0'),
+      reinvested:      BigInt(String(r.reinvested_enj ?? r.reinvested ?? '0').replace(/[^0-9]/g, '') || '0'),
+      reward:          BigInt(String(r.reward_enj ?? r.reward ?? '0').replace(/[^0-9]/g, '') || '0'),
+      accumulated:     BigInt(String(r.cumulative_enj ?? r.accumulated ?? '0').replace(/[^0-9]/g, '') || '0'),
+      apy:             parseFloat(r.apy_pct ?? r.apy ?? '0') || 0,
+      rollingApy:      parseFloat(r.rolling_apy_pct ?? r.rollingApy ?? '') || undefined,
+    }
+  }
+
   if (ext === 'json') {
     let parsed
     try { parsed = JSON.parse(text) } catch { throw new Error('JSON parse failed.') }
     const arr = Array.isArray(parsed) ? parsed : parsed?.records
     if (!Array.isArray(arr)) throw new Error('Expected JSON array or {records:[]}.')
-    const meta = parsed?._meta ?? null
-    return {
-      results: arr.map(r => ({
-        era:             Number(r.era ?? r.Era ?? 0),
-        poolId:          Number(r.pool_id ?? r.poolId ?? 0),
-        poolLabel:       String(r.pool_label ?? r.poolLabel ?? ''),
-        eraStartBlock:   r.era_start_block != null ? Number(r.era_start_block) : null,
-        eraStartDateUtc: r.era_date_utc || r.eraStartDateUtc || null,
-        memberBalance:   BigInt(String(r.member_senj ?? r.memberBalance ?? '0').replace(/[^0-9]/g, '') || '0'),
-        poolSupply:      BigInt(String(r.pool_supply_senj ?? r.poolSupply ?? '0').replace(/[^0-9]/g, '') || '0'),
-        reinvested:      BigInt(String(r.reinvested_enj ?? r.reinvested ?? '0').replace(/[^0-9]/g, '') || '0'),
-        reward:          BigInt(String(r.reward_enj ?? r.reward ?? '0').replace(/[^0-9]/g, '') || '0'),
-        accumulated:     BigInt(String(r.cumulative_enj ?? r.accumulated ?? '0').replace(/[^0-9]/g, '') || '0'),
-        apy:             parseFloat(r.apy_pct ?? r.apy ?? '0') || 0,
-        rollingApy:      parseFloat(r.rolling_apy_pct ?? r.rollingApy ?? '') || undefined,
-      })),
-      meta,
-    }
+    return { results: arr.map(mapRow), meta: parsed?._meta ?? null }
   }
+
   if (ext === 'csv') {
     const allLines = text.trim().split(/\r?\n/)
     const comments  = allLines.filter(l => l.startsWith('#'))
@@ -202,24 +204,38 @@ function parseRewardImport(text, ext) {
     const results = dataLines.slice(1).map(row => {
       const c = row.replace(/"/g, '').split(',')
       const g = k => c[idx(k)] ?? ''
-      return {
-        era:             Number(g('era')) || 0,
-        poolId:          Number(g('pool_id')) || 0,
-        poolLabel:       g('pool_label'),
-        eraStartBlock:   g('era_start_block') ? Number(g('era_start_block')) : null,
-        eraStartDateUtc: g('era_date_utc') || null,
-        memberBalance:   BigInt(g('member_senj').replace(/[^0-9]/g,'') || '0'),
-        poolSupply:      BigInt(g('pool_supply_senj').replace(/[^0-9]/g,'') || '0'),
-        reinvested:      BigInt(g('reinvested_enj').replace(/[^0-9]/g,'') || '0'),
-        reward:          BigInt(g('reward_enj').replace(/[^0-9]/g,'') || '0'),
-        accumulated:     BigInt(g('cumulative_enj').replace(/[^0-9]/g,'') || '0'),
-        apy:             parseFloat(g('apy_pct')) || 0,
-        rollingApy:      parseFloat(g('rolling_apy_pct')) || undefined,
-      }
+      return mapRow({
+        era: g('era'), pool_id: g('pool_id'), pool_label: g('pool_label'),
+        era_start_block: g('era_start_block'), era_date_utc: g('era_date_utc'),
+        member_senj: g('member_senj'), pool_supply_senj: g('pool_supply_senj'),
+        reinvested_enj: g('reinvested_enj'), reward_enj: g('reward_enj'),
+        cumulative_enj: g('cumulative_enj'), apy_pct: g('apy_pct'),
+        rolling_apy_pct: g('rolling_apy_pct'),
+      })
     })
     return { results, meta: address ? { address } : null }
   }
-  throw new Error('Unsupported format. Export from this app first.')
+
+  if (ext === 'xml') {
+    const doc = new DOMParser().parseFromString(text, 'text/xml')
+    if (doc.querySelector('parsererror')) throw new Error('XML parse failed.')
+    const g = (el, k) => el.querySelector(k)?.textContent ?? ''
+    const results = Array.from(doc.querySelectorAll('record')).map(r =>
+      mapRow({
+        era: g(r,'era'), pool_id: g(r,'pool_id'), pool_label: g(r,'pool_label'),
+        era_start_block: g(r,'era_start_block'), era_date_utc: g(r,'era_date_utc'),
+        member_senj: g(r,'member_senj'), pool_supply_senj: g(r,'pool_supply_senj'),
+        reinvested_enj: g(r,'reinvested_enj'), reward_enj: g(r,'reward_enj'),
+        cumulative_enj: g(r,'cumulative_enj'), apy_pct: g(r,'apy_pct'),
+        rolling_apy_pct: g(r,'rolling_apy_pct'),
+      })
+    )
+    const metaEl = doc.querySelector('meta')
+    const meta = metaEl ? { address: g(metaEl,'address'), exportedAt: g(metaEl,'exportedAt') } : null
+    return { results, meta }
+  }
+
+  throw new Error('Unsupported format.')
 }
 
 // ── Reward Chart (line: Reward ENJ per era) ─────────────────────────────────
@@ -254,35 +270,48 @@ function RewardChart({ data }) {
 
     let destroyed = false
 
-    // Aggregate reward ENJ by era (filters already applied by table, ignores pagination)
-    const allEras = [...new Set(data.map(r => r.era))].sort((a, b) => a - b)
-    const byEra = {}
-    for (const r of data) {
-      byEra[r.era] = (byEra[r.era] ?? 0n) + r.reward
-    }
-    const rwdData = allEras.map(e => Number(byEra[e]) / 1e18)
+    // One dataset per pool, plotting cumulative ENJ (r.accumulated) over eras
+    const allEras   = [...new Set(data.map(r => r.era))].sort((a, b) => a - b)
+    const poolIds   = [...new Set(data.map(r => r.poolId))].sort((a, b) => a - b)
 
-    const uniquePools = [...new Set(data.map(r => r.poolLabel))]
-    const rwdLabel = uniquePools.length === 1 ? `${uniquePools[0]} — Reward ENJ` : 'Aggregated Reward ENJ'
+    // Design-token colours cycling across pools
+    const POOL_COLORS = [
+      { line: '#b6a0ff', fill: 'rgba(182,160,255,0.12)' },
+      { line: '#00d9ff', fill: 'rgba(0,217,255,0.10)' },
+      { line: '#8eff71', fill: 'rgba(142,255,113,0.10)' },
+      { line: '#f59e0b', fill: 'rgba(245,158,11,0.10)' },
+      { line: '#ef4444', fill: 'rgba(239,68,68,0.10)' },
+    ]
+
+    const datasets = poolIds.map((poolId, idx) => {
+      const poolRows = data.filter(r => r.poolId === poolId)
+      const eraMap   = new Map(poolRows.map(r => [r.era, r]))
+      const clr      = POOL_COLORS[idx % POOL_COLORS.length]
+      const lbl      = poolRows[0]?.poolLabel ?? `Pool #${poolId}`
+      return {
+        label:           lbl,
+        data:            allEras.map(era => {
+          const row = eraMap.get(era)
+          return row ? Number(row.accumulated) / 1e18 : null
+        }),
+        borderColor:     clr.line,
+        backgroundColor: clr.fill,
+        fill:            true,
+        tension:         0.35,
+        borderWidth:     2.5,
+        pointRadius:     0,
+        pointHoverRadius: 4,
+        spanGaps:        true,
+      }
+    })
 
     import('chart.js/auto').then(({ Chart }) => {
       if (destroyed) return
       if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null }
 
       chartRef.current = new Chart(canvasRef.current, {
-        type: 'bar',
-        data: {
-          labels: allEras,
-          datasets: [{
-            label:           rwdLabel,
-            data:            rwdData,
-            backgroundColor: 'rgba(0,217,255,0.55)',
-            borderColor:     '#00d9ff',
-            borderWidth:     1,
-            borderRadius:    3,
-            hoverBackgroundColor: 'rgba(0,217,255,0.85)',
-          }],
-        },
+        type: 'line',
+        data: { labels: allEras, datasets },
         options: {
           responsive:          true,
           maintainAspectRatio: false,
@@ -290,32 +319,32 @@ function RewardChart({ data }) {
           plugins: {
             legend: {
               display: true,
-              labels: { color: '#A0A0C8', font: { size: 11 }, boxWidth: 14, padding: 16 },
+              labels: { color: '#A0A0C8', font: { size: 11 }, boxWidth: 12, padding: 16, usePointStyle: true },
             },
             tooltip: {
-              backgroundColor: 'rgba(12,14,23,0.97)',
-              borderColor:     'rgba(70,71,82,0.15)',
+              backgroundColor: 'rgba(23,25,36,0.97)',
+              borderColor:     'rgba(70,71,82,0.3)',
               borderWidth:     1,
-              titleColor:      '#00d9ff',
+              titleColor:      '#b6a0ff',
               bodyColor:       '#A0A0C8',
               padding:         10,
               callbacks: {
                 title: ctx => `Era ${ctx[0]?.label}`,
                 label: ctx => ctx.raw == null ? null
-                  : ` ${ctx.raw.toLocaleString('en', { minimumFractionDigits: 6, maximumFractionDigits: 6 })} ENJ`,
+                  : ` ${ctx.raw.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ENJ`,
               },
             },
           },
           scales: {
             x: {
-              ticks: { color: '#6B6B8A', font: { size: 10 }, maxTicksLimit: 14 },
-              grid:  { color: 'rgba(255,255,255,0.04)' },
+              ticks: { color: '#6B6B8A', font: { size: 10 }, maxTicksLimit: 12 },
+              grid:  { color: 'rgba(70,71,82,0.15)', drawBorder: false },
               title: { display: true, text: 'Era', color: '#6B6B8A', font: { size: 11 } },
             },
             y: {
-              ticks: { color: '#00d9ff', font: { size: 10 } },
-              grid:  { color: 'rgba(255,255,255,0.04)' },
-              title: { display: true, text: 'Reward ENJ', color: '#00d9ff', font: { size: 11 } },
+              ticks: { color: '#b6a0ff', font: { size: 10 } },
+              grid:  { color: 'rgba(70,71,82,0.15)', drawBorder: false },
+              title: { display: true, text: 'Cumulative ENJ', color: '#b6a0ff', font: { size: 11 } },
               beginAtZero: true,
             },
           },
@@ -330,12 +359,13 @@ function RewardChart({ data }) {
   if (!data.length) return null
   return (
     <div className="rounded-[1.5rem] bg-surface p-5 shadow-ambient">
-      <div className="mb-3">
-        <p className="section-label">Visualization</p>
-        <h3 className="mt-2 font-headline text-2xl font-bold text-text">Reward Growth</h3>
-        <p className="mt-2 text-xs text-text-secondary">(all filtered eras, aggregated by pool)</p>
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h3 className="font-headline text-xl font-bold text-text">Reward Growth</h3>
+          <p className="mt-1 text-xs text-text-secondary">Cumulative ENJ rewards per pool over selected eras</p>
+        </div>
       </div>
-      <div className="rounded-[1.25rem] bg-card/80 p-3" style={{ height: '280px' }}>
+      <div className="rounded-[1.25rem] bg-card/80 p-3" style={{ height: '320px' }}>
         <canvas ref={canvasRef} />
       </div>
     </div>
@@ -657,10 +687,10 @@ function RewardTableV2({ results, onFilter }) {
 
   return (
     <div className="rounded-[1.5rem] bg-surface p-5 shadow-ambient">
-      <div className="mb-4 flex flex-wrap items-end gap-3">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="section-label">Ledger View</p>
-          <h3 className="mt-2 font-headline text-2xl font-bold text-text">Per-era reward ledger</h3>
+          <h3 className="font-headline text-2xl font-bold text-text">Ledger Data</h3>
+          <p className="mt-1 text-xs text-text-secondary">Deep-dive into per-era nomination performance</p>
         </div>
         <span className="mini-chip">{filtered.length} / {results.length} rows</span>
       </div>
@@ -679,16 +709,16 @@ function RewardTableV2({ results, onFilter }) {
           <span className="text-[10px] font-bold tracking-widest uppercase text-text-secondary">Era:</span>
           <input type="number" placeholder="Min" value={filterEraMin}
             onChange={e => { setFilterEraMin(e.target.value); setPage(1) }}
-            className="w-20 rounded-full bg-card px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary" />
+            className="w-20 input-field font-mono !rounded-full" />
           <span className="text-text-secondary text-xs">–</span>
           <input type="number" placeholder="Max" value={filterEraMax}
             onChange={e => { setFilterEraMax(e.target.value); setPage(1) }}
-            className="w-20 rounded-full bg-card px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary" />
+            className="w-20 input-field font-mono !rounded-full" />
         </div>
         <div className="ml-auto flex items-center gap-1.5">
           <span className="text-[10px] font-bold tracking-widest uppercase text-text-secondary">Per page:</span>
           <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
-            className="rounded-full bg-card px-2 py-1 text-xs text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary">
+            className="select-compact">
             {PAGE_SIZES.map(n => <option key={n} value={n}>{n}</option>)}
           </select>
         </div>
@@ -696,7 +726,7 @@ function RewardTableV2({ results, onFilter }) {
 
       {/* Table */}
       <div className="overflow-x-auto rounded-[1.25rem] bg-card/70 p-1">
-        <table className="border-collapse text-xs font-mono w-max">
+        <table className="border-collapse text-xs font-mono w-full min-w-max">
           <thead className="sticky top-0 z-10">
             <tr>
               {TABLE_COLS.map(col => {
@@ -708,7 +738,7 @@ function RewardTableV2({ results, onFilter }) {
                                 relative group
                                 ${col.align === 'right' ? 'text-right' : 'text-left'}
                                 ${col.sortable ? 'cursor-pointer' : ''}
-                                ${isSorted ? 'text-cyan' : 'text-muted hover:text-cyan'}`}>
+                                ${isSorted ? 'text-cyan' : 'text-primary/70 hover:text-cyan'}`}>
                     {col.label}{isSorted && (sortDir === 1 ? ' ↑' : ' ↓')}
                     {col.tooltip && (
                       <div className={`pointer-events-none absolute z-50 top-full mt-1 w-56 p-2.5
@@ -732,13 +762,19 @@ function RewardTableV2({ results, onFilter }) {
               <tr key={`${r.era}-${r.poolId}`} className={`transition-colors hover:bg-surface-bright/80 ${i % 2 ? 'bg-card' : ''}`}>
                 <td className="px-3 py-1.5 text-cyan font-bold">{r.era}</td>
                 <td className="px-3 py-1.5 text-text-secondary whitespace-nowrap">{fmtDate(r.eraStartDateUtc)}</td>
-                <td className="px-3 py-1.5 text-text whitespace-nowrap font-semibold">#{r.poolId}</td>
+                <td className="px-3 py-1.5 whitespace-nowrap">
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-primary/20 text-[10px] font-bold text-primary">
+                    {r.poolId}
+                  </span>
+                </td>
                 <td className="px-3 py-1.5 text-text min-w-[180px]" title={getPoolName(r)}>{getPoolName(r)}</td>
                 <td className="px-3 py-1.5 text-right text-text">{fmtEnj(r.memberBalance)}</td>
-                <td className="px-3 py-1.5 text-right text-text">{fmtEnj(r.reinvested)}</td>
+                <td className="px-3 py-1.5 text-right text-success">{fmtEnj(r.reinvested)}</td>
                 <td className="px-3 py-1.5 text-right text-success font-semibold">{fmtEnj(r.reward)}</td>
                 <td className="px-3 py-1.5 text-right text-cyan">{fmtEnj(r.accumulated)}</td>
-                <td className="px-3 py-1.5 text-right text-violet-400">{fmtApy(r.apy)}</td>
+                <td className="px-3 py-1.5 text-right">
+                  <span className="inline-block px-2 py-0.5 rounded bg-cyan/10 text-cyan text-[10px] font-bold">{fmtApy(r.apy)}</span>
+                </td>
                 <td className="px-3 py-1.5 text-right text-violet-300">{fmtApy(r.rollingApy)}</td>
               </tr>
             ))}
@@ -795,34 +831,36 @@ function RewardSummary({ results }) {
   const bestPool = [...byPool.entries()].sort((a, b) => (b[1].total > a[1].total ? 1 : -1))[0]
 
   const stats = [
-    { label: 'Total Reward',  value: `${fmtEnj(totalReward)} ENJ`, accent: 'text-success' },
-    { label: 'Avg APY',       value: fmtApy(avgApy),               accent: 'text-violet-400' },
-    { label: 'Era Range',     value: `${eraMin} – ${eraMax}`,      accent: 'text-text' },
-    { label: 'Eras with Reward', value: eraCount,                  accent: 'text-cyan' },
-    { label: 'Pools',         value: poolCount,                    accent: 'text-text' },
-    { label: 'Best APY Era',  value: maxApyRow ? `Era ${maxApyRow.era} (${fmtApy(maxApyRow.apy)})` : '—', accent: 'text-warning' },
+    { label: 'Total Rewards',    value: `${fmtEnj(totalReward)}`, unit: 'ENJ', accent: 'text-success',      border: 'metric-card-left-success' },
+    { label: 'Average APY',      value: fmtApy(avgApy),            unit: null,  accent: 'text-violet-400',   border: 'metric-card-left-primary' },
+    { label: 'Era Range',        value: `${eraCount} Eras`,        unit: null,  accent: 'text-cyan',          border: 'metric-card-left-cyan' },
+    { label: 'Number of Pools',  value: `${poolCount} Active`,     unit: null,  accent: 'text-text',          border: 'metric-card-left-warning' },
   ]
 
   return (
     <div className="rounded-[1.5rem] bg-surface p-5 shadow-ambient">
-      <div className="mb-3">
-        <p className="section-label">Summary</p>
-        <h3 className="mt-2 font-headline text-2xl font-bold text-text">Reward overview</h3>
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h3 className="font-headline text-2xl font-bold text-text">Reward Overview</h3>
+          <p className="mt-1 text-xs text-text-secondary">Aggregated across all filtered eras</p>
+        </div>
+        {bestPool && (
+          <p className="text-xs text-text-secondary">
+            Best pool: <span className="text-text font-semibold">{bestPool[1].label}</span>
+            {' · '}{fmtEnj(bestPool[1].total)} ENJ over {bestPool[1].rows} era(s)
+          </p>
+        )}
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {stats.map(({ label, value, accent }) => (
-          <div key={label} className="metric-card text-center">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {stats.map(({ label, value, unit, accent, border }) => (
+          <div key={label} className={`metric-card ${border}`}>
             <p className="metric-label">{label}</p>
-            <p className={`mt-3 text-sm font-bold font-mono leading-tight ${accent}`}>{value}</p>
+            <p className={`mt-2 font-headline text-2xl font-bold leading-tight ${accent}`}>
+              {value}{unit && <span className="text-xs font-body text-primary-dim uppercase tracking-wide ml-1">{unit}</span>}
+            </p>
           </div>
         ))}
       </div>
-      {bestPool && (
-        <p className="mt-3 text-xs text-text-secondary">
-          Best pool: <span className="text-text font-semibold">{bestPool[1].label}</span>
-          {' · '}{fmtEnj(bestPool[1].total)} ENJ over {bestPool[1].rows} era(s)
-        </p>
-      )}
     </div>
   )
 }
@@ -891,21 +929,21 @@ function RewardExportPanel({ results, address }) {
           <label htmlFor="rh-enc-pwd" className="block text-xs font-bold tracking-widest uppercase text-text-secondary mb-1.5">Encryption Password</label>
           <input id="rh-enc-pwd" type="password" placeholder="Enter password…" maxLength={1024}
             value={password} onChange={e => setPassword(e.target.value)}
-            className="w-full bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary" />
+            className="w-full input-field font-mono" />
         </div>
       )}
       <div className="grid gap-3 sm:grid-cols-[1fr_120px_auto] items-end">
         <div>
-          <label htmlFor="rh-fname" className="block text-xs font-bold tracking-widest uppercase text-text-secondary mb-1.5">Filename</label>
+          <label htmlFor="rh-fname" className="block text-xs font-bold tracking-widest uppercase text-text-secondary mb-2">Filename</label>
           <input id="rh-fname" type="text" maxLength={200} autoComplete="off" spellCheck="false"
             placeholder={`reward-history-${(address||'').slice(0,10)}`}
             value={filename} onChange={e => setFilename(e.target.value)}
-            className="w-full bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary" />
+            className="w-full input-field font-mono" />
         </div>
         <div>
-          <label htmlFor="rh-fmt" className="block text-xs font-bold tracking-widest uppercase text-text-secondary mb-1.5">Format</label>
+          <label htmlFor="rh-fmt" className="block text-xs font-bold tracking-widest uppercase text-text-secondary mb-2">Format</label>
           <select id="rh-fmt" value={format} onChange={e => setFormat(e.target.value)}
-            className="w-full bg-card rounded px-3 py-2 text-sm text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary">
+            className="w-full select-field">
             <option value="json">JSON</option>
             <option value="csv">CSV</option>
             <option value="xml">XML</option>
@@ -921,38 +959,84 @@ function RewardExportPanel({ results, address }) {
   )
 }
 
+// ── Reward sniff — verifies file was exported by this tool ───────────────────
+function sniffReward(text, ext) {
+  if (ext === 'json') {
+    try {
+      const obj = JSON.parse(text)
+      if (obj?.encrypted === true) return true
+      const arr = Array.isArray(obj) ? obj : obj?.records
+      return Array.isArray(arr) && (obj?._meta != null || arr[0]?.era != null)
+    } catch { return false }
+  }
+  if (ext === 'csv') {
+    const firstLine = text.trimStart().split(/\r?\n/).find(l => !l.startsWith('#')) ?? ''
+    return firstLine.includes('era') && firstLine.includes('pool_id')
+  }
+  if (ext === 'xml') return text.includes('<enjinRewardHistory>')
+  return false
+}
+
 // ── Import panel ─────────────────────────────────────────────────────────────
 function RewardImportPanel({ onImport }) {
   const [isDragOver, setIsDragOver] = useState(false)
   const [isPending,  setIsPending]  = useState(false)
   const [encPending, setEncPending] = useState(null)
   const [decPwd,     setDecPwd]     = useState('')
-  const [alert,      setAlert]      = useState(null)
+  const [alert,      setAlert]      = useState(null)  // post-parse errors
+  const [fileStatus, setFileStatus] = useState(null)  // { name, ext?, sizeKb, rejected, reason? }
   const fileInputRef = useRef(null)
 
   function showAlert(type, text) { setAlert({ type, text }); setTimeout(() => setAlert(null), 8000) }
 
   function processFile(file) {
-    if (file.size > MAX_IMPORT_MB * 1024 * 1024) { showAlert('err', `File too large (max ${MAX_IMPORT_MB} MB).`); return }
+    setFileStatus(null); setAlert(null); setEncPending(null)
+
+    const sizeKb = (file.size / 1024).toFixed(1)
+
+    // ── Size check ──────────────────────────────────────────────────────
+    if (file.size > MAX_IMPORT_MB * 1024 * 1024) {
+      setFileStatus({ name: file.name, sizeKb, rejected: true, reason: `File too large — max ${MAX_IMPORT_MB} MB allowed.` })
+      return
+    }
+
+    // ── Extension check ─────────────────────────────────────────────────
     const ext = file.name.split('.').pop().toLowerCase()
-    if (!['json','csv'].includes(ext)) { showAlert('err', 'Only .json and .csv exports from this app are supported.'); return }
-    setIsPending(true); setAlert(null); setEncPending(null)
+    if (!['json','csv','xml'].includes(ext)) {
+      setFileStatus({ name: file.name, ext, sizeKb, rejected: true, reason: `".${ext}" is not a supported file type. Only .json, .csv, or .xml exports from this tool can be imported.` })
+      return
+    }
+
+    setIsPending(true)
     const reader = new FileReader()
     reader.onload = ev => {
       const text = ev.target.result
+
+      // ── Content sniff ───────────────────────────────────────────────
+      if (!sniffReward(text, ext)) {
+        setFileStatus({ name: file.name, ext, sizeKb, rejected: true, reason: "This file doesn't appear to be an export from this tool. Only files generated by EnjinSight's Reward History Viewer are supported." })
+        setIsPending(false)
+        return
+      }
+
+      setFileStatus({ name: file.name, ext, sizeKb, rejected: false })
+
+      // ── Encrypted JSON ──────────────────────────────────────────────
       if (ext === 'json') {
         try {
           const obj = JSON.parse(text)
           if (obj?.encrypted === true) { setEncPending({ text, fname: file.name, ext }); setIsPending(false); return }
         } catch {}
       }
+
       try {
         const { results, meta } = parseRewardImport(text, ext)
         onImport(results, meta)
+        setFileStatus(null)
       } catch (e) { showAlert('err', e.message) }
       setIsPending(false)
     }
-    reader.onerror = () => { showAlert('err', 'Failed to read file.'); setIsPending(false) }
+    reader.onerror = () => { setFileStatus({ name: file.name, sizeKb, rejected: true, reason: 'Failed to read the file.' }); setIsPending(false) }
     reader.readAsText(file)
   }
 
@@ -973,12 +1057,41 @@ function RewardImportPanel({ onImport }) {
 
   return (
     <div className="space-y-3">
+
+      {/* ── File identification card ────────────────────────────────────── */}
+      {fileStatus && (
+        <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-[11px] leading-snug
+          ${fileStatus.rejected ? 'bg-danger/8 border-danger/25' : 'bg-success/8 border-success/25'}`}>
+          {fileStatus.rejected
+            ? <XCircle size={14} className="text-danger flex-shrink-0 mt-0.5" />
+            : <CheckCircle size={14} className="text-success flex-shrink-0 mt-0.5" />}
+          <div className="min-w-0 space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-text/80 truncate max-w-[220px]">{fileStatus.name}</span>
+              {fileStatus.ext && (
+                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest flex-shrink-0
+                  ${fileStatus.rejected ? 'bg-danger/15 text-danger' : 'bg-success/15 text-success'}`}>
+                  .{fileStatus.ext}
+                </span>
+              )}
+              <span className="text-muted">{fileStatus.sizeKb} KB</span>
+            </div>
+            {fileStatus.rejected
+              ? <p className="text-danger">{fileStatus.reason}</p>
+              : <p className="text-success">File recognized — processing…</p>}
+          </div>
+        </div>
+      )}
+
+      {/* ── Post-parse alert ────────────────────────────────────────────── */}
       {alert && (
         <div role="alert" className={`px-4 py-2.5 rounded-lg border text-sm font-medium
           ${alert.type==='ok'?'bg-success/10 border-success/30 text-success':'bg-danger/10 border-danger/30 text-danger'}`}>
           {alert.text}
         </div>
       )}
+
+      {/* ── Drop zone ───────────────────────────────────────────────────── */}
       <div role="button" tabIndex={0} aria-label="Drop file or click to browse"
         className={`rounded-[1.5rem] p-10 text-center cursor-pointer transition-all
           ${isDragOver?'bg-cyan/10 shadow-cyan-glow':'bg-card hover:bg-surface-high'}`}
@@ -997,11 +1110,13 @@ function RewardImportPanel({ onImport }) {
           <>
             <FolderOpen size={32} className="mx-auto mb-3 text-text-secondary" />
             <p className="font-semibold text-text mb-1">Drop file here or click to browse</p>
-            <p className="text-sm text-text-secondary">JSON or CSV exports from this tool (max {MAX_IMPORT_MB} MB)</p>
+            <p className="text-sm text-text-secondary">JSON, CSV, or XML exports from this tool (max {MAX_IMPORT_MB} MB)</p>
           </>
         )}
-        <input ref={fileInputRef} type="file" accept=".json,.csv" className="hidden" onChange={onFileChange} aria-hidden />
+        <input ref={fileInputRef} type="file" accept=".json,.csv,.xml" className="hidden" onChange={onFileChange} aria-hidden />
       </div>
+
+      {/* ── Decrypt block ───────────────────────────────────────────────── */}
       {encPending && (
         <div className="space-y-3">
           <div className="flex gap-2 rounded-[1rem] border border-cyan/30 bg-cyan/10 px-4 py-3 text-sm text-cyan">
@@ -1009,10 +1124,10 @@ function RewardImportPanel({ onImport }) {
           </div>
           <div className="flex gap-3 items-end">
             <div className="flex-1">
-              <label htmlFor="rh-dec-pwd" className="block text-xs font-bold tracking-widest uppercase text-text-secondary mb-1.5">Password</label>
+              <label htmlFor="rh-dec-pwd" className="input-label">Password</label>
               <input id="rh-dec-pwd" type="password" placeholder="Enter password…" maxLength={1024}
                 value={decPwd} onChange={e=>setDecPwd(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleDecrypt()}
-                className="w-full bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary" />
+                className="w-full input-field font-mono" />
             </div>
             <button onClick={handleDecrypt} disabled={isPending} className="btn-primary py-2 px-4 self-end">
               {isPending?<span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"/>:<Upload size={14}/>}
@@ -1138,6 +1253,21 @@ export default function RewardHistoryViewer() {
       ? 'The computation was stopped before every phase completed.'
       : null
 
+  // Pre-scan placeholder phases (shown before any run starts)
+  const previewPhases = useMemo(() => [
+    { key: 'csv',       label: 'Load Era Reference',           status: 'pending', total: 1, completed: 0 },
+    { key: 'poolnames', label: 'Fetch Pool Names',             status: 'pending', total: 1, completed: 0 },
+    { key: 'connect',   label: 'Connect to Archive Node',      status: 'pending', total: 1, completed: 0 },
+    { key: 'pools',     label: 'Discover Pool Membership',     status: 'pending', total: 1, completed: 0 },
+    ...(includeHistory ? [{ key: 'history', label: 'Fetch Past Pool Interactions', status: 'pending', total: 1, completed: 0 }] : []),
+    { key: 'balances',  label: 'Query Era Balances',           status: 'pending', total: 1, completed: 0 },
+    { key: 'rewards',   label: 'Fetch Reinvested Amounts',     status: 'pending', total: 0, completed: 0 },
+  ], [includeHistory])
+  const displayPhases   = phases.length > 0 ? phases : previewPhases
+  const displayTitle    = phases.length > 0 ? progressTitle   : 'Ready to compute'
+  const displaySummary  = phases.length > 0 ? progressSummary : null
+  const displayMeta     = phases.length > 0 ? progressMeta    : null
+
   // Sync filtered rows when results change
   useEffect(() => {
     setFilteredRows(activeResults)
@@ -1178,7 +1308,7 @@ export default function RewardHistoryViewer() {
     <div className={`space-y-4 transition-[padding] duration-200 ${logExpanded ? 'pb-[380px]' : 'pb-16'}`}>
 
       <section className="page-hero">
-        <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1.12fr)_minmax(280px,0.88fr)] lg:items-end">
+        <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1.12fr)_minmax(280px,0.88fr)] lg:items-start">
           <div className="space-y-5">
             <div className="hero-kicker">
               <span className="hero-dot" />
@@ -1193,19 +1323,19 @@ export default function RewardHistoryViewer() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="metric-card">
+            <div className="metric-card metric-card-left-cyan">
               <p className="metric-label">Range Mode</p>
               <p className="metric-value text-cyan">{rangeMode === 'era' ? 'Era Range' : 'Date Range'}</p>
             </div>
-            <div className="metric-card">
+            <div className="metric-card metric-card-left-success">
               <p className="metric-label">Result Rows</p>
               <p className="metric-value text-success">{activeResults.length}</p>
             </div>
-            <div className="metric-card">
+            <div className="metric-card metric-card-left-primary">
               <p className="metric-label">Source</p>
               <p className="metric-value text-text">{importedResults ? 'Imported Data' : 'Archive RPC'}</p>
             </div>
-            <div className="metric-card">
+            <div className="metric-card metric-card-left-warning">
               <p className="metric-label">Pool Scope</p>
               <p className="metric-value text-text">{includeHistory ? 'Historic + Active' : 'Active Only'}</p>
             </div>
@@ -1233,46 +1363,48 @@ export default function RewardHistoryViewer() {
 
         {/* ── Compute pane ── */}
         {tab === 'compute' && (
-          <div role="tabpanel" className="p-4 sm:p-5 space-y-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <TrendingUp size={15} className="text-primary flex-shrink-0" />
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full
-                                 bg-cyan/10 border border-cyan/25 text-[10px] font-semibold tracking-widest uppercase text-cyan">
-                  Relaychain
-                </span>
-                {csvCount > 0 && (
-                  <span className="ml-1 text-xs text-muted font-mono">{csvCount} eras in CSV</span>
-                )}
+          <div role="tabpanel" className="p-4 sm:p-5">
+          <div className="lg:grid lg:grid-cols-[minmax(0,36rem)_1fr] lg:gap-6 lg:items-start">
+          <div className="space-y-4">
+            {/* Notes box */}
+            <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 text-[11px] leading-relaxed">
+
+              {/* Header */}
+              <div className="flex items-center gap-2 px-3 pt-3 pb-2">
+                <AlertCircle size={12} className="text-amber-400 flex-shrink-0" />
+                <span className="text-[10px] font-bold tracking-widest uppercase text-amber-400">Notes</span>
               </div>
-              <h2 className="mt-3 font-headline text-2xl font-bold text-text">Compute pool reward history</h2>
-            </div>
 
-            <p className="text-xs text-text-secondary leading-relaxed">
-              Computes staking rewards per era for pools you are staked in,
-              using archive-node RPC. Subscan is only used when
-              <span className="text-text/70"> Include past pool interactions </span>
-              is enabled.
-            </p>
+              {/* Sections */}
+              <div className="divide-y divide-amber-500/15 border-t border-amber-500/15">
 
-            {/* Tax information note */}
-            <div className="flex gap-2.5 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
-              <AlertTriangle size={13} className="text-amber-400 flex-shrink-0 mt-0.5" />
-              <div className="text-[11px] text-text-secondary leading-relaxed space-y-1.5">
-                <p>
-                  <span className="font-semibold text-text/80">Tax note:</span>{' '}
-                  In most jurisdictions, nomination pool staking is treated as a{' '}
-                  <span className="text-text/70">capital gain</span> rather than dividend income —
-                  similar to buying and selling an ETF. The taxable event is generally the{' '}
-                  <span className="text-text/70">difference in fiat value</span> of your ENJ when
-                  you bonded versus when you unbonded and withdrew. If you bonded or exited
-                  multiple times, FIFO (first-in, first-out) is the commonly accepted accounting
-                  method.
-                </p>
-                <p className="text-muted">
-                  This tool is for informational purposes only and does not constitute tax advice.
-                  Consult a qualified tax professional for guidance specific to your jurisdiction.
-                </p>
+                {/* Rewards accuracy */}
+                <div className="px-3 py-2.5 space-y-1">
+                  <p className="text-[10px] font-bold tracking-widest uppercase text-amber-400/60">Rewards Accuracy</p>
+                  <p className="text-text-secondary">
+                    Estimates only — reward values are derived from on-chain storage snapshots
+                    and proportional pool-share calculations.
+                  </p>
+                </div>
+
+                {/* Tax purposes */}
+                <div className="px-3 py-2.5 space-y-1.5">
+                  <p className="text-[10px] font-bold tracking-widest uppercase text-amber-400/60">Tax Purposes</p>
+                  <p className="text-text-secondary">
+                    In most jurisdictions, nomination pool staking is treated as a{' '}
+                    <span className="text-text/70">capital gain</span> rather than dividend income —
+                    similar to buying and selling an ETF. The taxable event is generally the{' '}
+                    <span className="text-text/70">difference in fiat value</span> of your ENJ when
+                    you bonded versus when you unbonded and withdrew. If you bonded or exited
+                    multiple times, FIFO (first-in, first-out) is the commonly accepted accounting
+                    method.
+                  </p>
+                  <p className="text-muted">
+                    This tool is for informational purposes only and does not constitute tax advice.
+                    Consult a qualified tax professional for guidance specific to your jurisdiction.
+                  </p>
+                </div>
+
               </div>
             </div>
 
@@ -1296,13 +1428,11 @@ export default function RewardHistoryViewer() {
 
             {/* Address */}
             <div className="space-y-1.5">
-              <label className="text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary">Wallet Address</label>
+              <label className="input-label">Relaychain Wallet Address</label>
               <input type="text" value={address}
                 onChange={e => setAddress(e.target.value)}
                 placeholder="en…" disabled={isLoading}
-                className={`w-full bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted
-                  focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50 transition-colors
-                  ${addrErr ? 'border border-danger/50' : ''}`}
+                className={`w-full input-field font-mono ${addrErr ? 'ring-1 ring-danger/60' : ''}`}
                 maxLength={60} />
               {addrErr && (
                 <p className="flex items-center gap-1 text-xs text-danger">
@@ -1320,11 +1450,11 @@ export default function RewardHistoryViewer() {
                   aria-checked={includeHistory}
                   disabled={isLoading}
                   onClick={() => setIncludeHistory(v => !v)}
-                  className={`relative flex-shrink-0 w-10 h-5 rounded-full transition-colors focus-visible:outline-none
+                  className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200 focus-visible:outline-none
                     focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50
                     ${includeHistory ? 'bg-primary' : 'bg-surface-bright'}`}
                 >
-                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200
                     ${includeHistory ? 'translate-x-5' : 'translate-x-0'}`} />
                 </button>
                 <span className="text-xs font-medium text-text">Include past pool interactions</span>
@@ -1338,7 +1468,7 @@ export default function RewardHistoryViewer() {
 
             {/* Range mode toggle */}
             <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary">Query Mode</span>
+              <span className="input-label">Query Mode</span>
               <div className="flex rounded-lg bg-card overflow-hidden">
                 <button type="button" onClick={() => setRangeMode('era')} disabled={isLoading}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors
@@ -1357,18 +1487,18 @@ export default function RewardHistoryViewer() {
             {rangeMode === 'era' && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary">Start Era</label>
+                  <label className="input-label">Start Era</label>
                   <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
                     onChange={e => setStartEra(e.target.value)}
                     placeholder="e.g. 980" disabled={isLoading}
-                    className="w-full bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50" />
+                    className="w-full input-field font-mono" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary">End Era</label>
+                  <label className="input-label">End Era</label>
                   <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
                     onChange={e => setEndEra(e.target.value)}
                     placeholder="e.g. 1000" disabled={isLoading}
-                    className="w-full bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50" />
+                    className="w-full input-field font-mono" />
                 </div>
                 {eraValidErr && <p className="col-span-2 flex items-center gap-1 text-xs text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{eraValidErr}</p>}
               </div>
@@ -1379,7 +1509,7 @@ export default function RewardHistoryViewer() {
               <div className="space-y-3">
                 {/* Quick presets */}
                 <div>
-                  <span className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">Quick Range</span>
+                  <span className="input-label">Quick Range</span>
                   <div className="flex flex-wrap gap-2">
                     {DATE_PRESETS.map(({ label, days }) => (
                       <button key={label} type="button"
@@ -1396,23 +1526,32 @@ export default function RewardHistoryViewer() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <label className="text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary">Start Date</label>
+                    <label className="input-label">Start Date</label>
                     <input type="date" placeholder="2026-03-01" max={toDateInput(new Date())} value={startDate}
                       onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
-                      className="w-full bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50 [color-scheme:dark]" />
+                      className="w-full input-field font-mono [color-scheme:dark]" />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary">End Date</label>
+                    <label className="input-label">End Date</label>
                     <input type="date" placeholder="2026-03-04" max={toDateInput(new Date())} value={endDate}
                       onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
-                      className="w-full bg-card rounded px-3 py-2 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:opacity-50 [color-scheme:dark]" />
+                      className="w-full input-field font-mono [color-scheme:dark]" />
                   </div>
                 </div>
                 {dateValidErr && <p className="flex items-center gap-1 text-xs text-danger"><AlertTriangle size={11} className="flex-shrink-0"/>{dateValidErr}</p>}
               </div>
             )}
+
+            {/* ── Disclaimer — Archive RPC ──────────────────────────── */}
+            <div className="flex gap-2.5 p-3 rounded-lg bg-card border border-surface-bright text-[11px] leading-relaxed">
+              <Info size={13} className="text-text-secondary flex-shrink-0 mt-0.5" />
+              <p className="text-text-secondary">
+                Rewards are computed directly from the Archive RPC endpoint — computation time
+                increases with the number of eras and pools queried.
+              </p>
+            </div>
 
             {/* Action button — single slot: Stop → Reset → Compute Rewards */}
             <div className="flex flex-wrap gap-2">
@@ -1432,6 +1571,19 @@ export default function RewardHistoryViewer() {
               )}
             </div>
           </div>
+          <div className="mt-4 lg:mt-0">
+            <PhaseProgressCards
+              eyebrow="Computation Progress"
+              indexLabel="Phase"
+              title={displayTitle}
+              summary={displaySummary}
+              meta={displayMeta}
+              phases={displayPhases}
+              ariaLabel="Reward history progress"
+            />
+          </div>
+          </div>
+          </div>
         )}
 
         {/* ── Import pane ── */}
@@ -1439,28 +1591,19 @@ export default function RewardHistoryViewer() {
           <div role="tabpanel" className="p-4 sm:p-5 space-y-3">
             <div>
               <p className="section-label">Import</p>
-              <h3 className="mt-2 font-headline text-2xl font-bold text-text">Import Reward Data</h3>
             </div>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              Import previously exported reward history (JSON or CSV). Encrypted files (.enc.json) are also supported.
-            </p>
+            <div className="flex gap-2.5 p-3 rounded-lg bg-card border border-surface-bright text-[11px] leading-relaxed">
+              <Info size={13} className="text-text-secondary flex-shrink-0 mt-0.5" />
+              <p className="text-text-secondary">
+                Only files previously exported by this tool{' '}
+                <span className="font-mono text-muted">(JSON, CSV, or XML)</span>{' '}
+                can be imported. Files from other sources or tools are not supported.
+              </p>
+            </div>
             <RewardImportPanel onImport={handleImportResults} />
           </div>
         )}
       </div>
-
-      {/* ── Progress ── */}
-      {phases.length > 0 && (isLoading || isDone || isStopped) && (
-        <PhaseProgressCards
-          eyebrow="Computation Progress"
-          indexLabel="Phase"
-          title={progressTitle}
-          summary={progressSummary}
-          meta={progressMeta}
-          phases={phases}
-          ariaLabel="Reward history progress"
-        />
-      )}
 
       {/* ── Error ── */}
       {isError && errorMsg && (

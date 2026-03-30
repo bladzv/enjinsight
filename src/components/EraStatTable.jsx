@@ -33,7 +33,7 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
           <select
             value={pageSize}
             onChange={e => { setPageSize(Number(e.target.value)); setPage(0) }}
-            className="text-xs bg-card rounded px-2 py-1 text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+            className="select-compact"
           >
             {[5,10,20,50].map(n => <option key={n} value={n}>{n}</option>)}
           </select>

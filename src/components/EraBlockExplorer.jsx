@@ -148,28 +148,26 @@ export default function EraBlockExplorer() {
 
       <section className="page-hero">
         <div className="relative z-10 space-y-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-              <div className="space-y-4">
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)] lg:items-start">
+            <div className="space-y-5">
               <div className="hero-kicker">
-                <div className="inline-flex items-center gap-3">
-                  <span className={`h-2 w-2 rounded-full ${statusCfg.dot}`} />
-                  <span>{statusCfg.label}</span>
-                </div>
+                <span className={`h-2 w-2 rounded-full ${statusCfg.dot}`} />
+                <span>{statusCfg.label}</span>
               </div>
               <div className="space-y-4">
-                    <h1 className="hero-title text-balance">Active Blockchain State</h1>
+                <h1 className="hero-title text-balance">Active Blockchain State</h1>
                 <p className="hero-copy">
                   Live relaychain heartbeat, current era telemetry, and archival lookup for any completed era from the same explorer surface.
                 </p>
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[360px]">
-              <div className="metric-card">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="metric-card metric-card-left-primary">
                 <p className="metric-label">Relaychain</p>
                 <p className="metric-value text-primary">Live</p>
               </div>
-              <div className="metric-card">
+              <div className="metric-card metric-card-left-cyan">
                 <p className="metric-label">Cached Eras</p>
                 <p className="metric-value text-cyan">{fmt(csvCount)}</p>
               </div>
@@ -200,13 +198,13 @@ export default function EraBlockExplorer() {
                 </div>
               </div>
 
-              <div className="rounded-[1.25rem] bg-card/90 p-5 shadow-ambient">
+              <div className="rounded-[1.25rem] bg-card/90 p-5 shadow-ambient border-l-[3px] border-l-primary" style={{ borderTop: '1px solid rgba(70,71,82,0.08)', borderRight: '1px solid rgba(70,71,82,0.08)', borderBottom: '1px solid rgba(70,71,82,0.08)' }}>
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
                     <p className="metric-label">Era Progress</p>
-                    <p className="mt-2 text-sm text-text-secondary">Target completion within the active era window</p>
+                    <p className="mt-2 text-sm text-text-secondary">Completion within the active era window</p>
                   </div>
-                  <span className="font-mono text-lg text-text">{pct}%</span>
+                  <span className="font-mono text-2xl font-bold text-primary">{pct}%</span>
                 </div>
                 <div className="h-2 rounded-full bg-surface overflow-hidden">
                   <div
@@ -227,10 +225,17 @@ export default function EraBlockExplorer() {
           <div>
               <h2 className="font-headline text-2xl font-bold text-text">Past Era Lookup</h2>
             </div>
-          {csvCount > 0 && (
-            <span className="mini-chip">
-              {csvCount} eras cached
-            </span>
+          {csvCount > 0 ? (
+            <div className="inline-flex items-center gap-2 rounded-full bg-success/10 border border-success/20 px-3 py-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-success" style={{ boxShadow: '0 0 6px rgba(142,255,113,0.7)' }} />
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-success">Ready</span>
+              <span className="text-[10px] text-text-secondary font-mono">· {csvCount} eras</span>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-2 rounded-full bg-warning/10 border border-warning/20 px-3 py-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-warning">Loading</span>
+            </div>
           )}
               <div className="ml-auto flex items-center gap-1.5">
             <button
@@ -258,8 +263,7 @@ export default function EraBlockExplorer() {
               value={eraInput}
               onChange={e => { setEraInput(e.target.value); resetLookup() }}
               placeholder="Era number"
-              className={`w-40 bg-card rounded-2xl px-4 py-3 text-sm font-mono text-text placeholder:text-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary
-                ${eraInputErr ? 'ring-1 ring-danger' : ''}`}
+              className={`w-40 input-field font-mono ${eraInputErr ? 'ring-1 ring-danger' : ''}`}
               aria-label="Era number to look up"
             />
             <button

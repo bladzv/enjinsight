@@ -48,19 +48,23 @@ const FEATURES = [
 ]
 
 const SIGNALS = [
-  { label: 'Tool Modules', value: '4', tone: 'text-primary' },
-  { label: 'Access Mode', value: 'Read-only', tone: 'text-cyan' },
-  { label: 'Wallet Required', value: 'None', tone: 'text-success' },
-  { label: 'Sources', value: 'RPC + Subscan', tone: 'text-text' },
+  { label: 'Tool Modules', value: '4', tone: 'text-primary', accent: 'metric-card-left-primary' },
+  { label: 'Access Mode', value: 'Read-only', tone: 'text-cyan', accent: 'metric-card-left-cyan' },
+  { label: 'Wallet Required', value: 'None', tone: 'text-success', accent: 'metric-card-left-success' },
+  { label: 'Sources', value: 'RPC + Subscan', tone: 'text-text', accent: 'metric-card-left-warning' },
 ]
 
 export default function LandingPage({ onNavigate }) {
   return (
-    <div className="space-y-8 pb-12 pt-8 sm:space-y-10 sm:pb-16 sm:pt-10 lg:space-y-12 lg:pt-14">
+    <div className="space-y-8 pb-12 sm:space-y-10 sm:pb-16 lg:space-y-12">
       <section className="page-hero">
-        <div className="relative z-10 grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:items-end">
+        <div className="relative z-10 grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:items-start">
           <div className="space-y-6">
             <div className="space-y-5 max-w-2xl">
+              <div className="hero-kicker">
+                <span className="hero-dot" />
+                Network Active
+              </div>
               <h2 className="hero-title text-balance">
                 Enjin blockchain analytics with a sharper lens.
               </h2>
@@ -75,14 +79,14 @@ export default function LandingPage({ onNavigate }) {
             {SIGNALS.map(signal => (
               <div
                 key={signal.label}
-                className="metric-card p-4 backdrop-blur-sm text-sm flex flex-col justify-center"
+                className={`metric-card ${signal.accent} p-4 backdrop-blur-sm text-sm flex flex-col justify-center`}
               >
                 <p className="metric-label">{signal.label}</p>
                 <p className={`metric-value text-lg ${signal.tone}`}>{signal.value}</p>
               </div>
             ))}
           </div>
-          
+
         </div>
       </section>
 

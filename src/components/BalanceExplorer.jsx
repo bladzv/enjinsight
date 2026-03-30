@@ -13,9 +13,10 @@
  * - BalanceTable receives isLoading for real-time population indication
  * - Custom endpoint option removed (only preset networks)
  */
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { fetchLiveChainInfo } from '../utils/chainInfo.js'
-import { Activity, AlertTriangle, Calendar, ChevronDown, Info, RotateCcw, Server, Square, Upload } from 'lucide-react'
+import { Activity, AlertTriangle, Calendar, ChevronDown, Info, RotateCcw, Server, Sparkles, Square, Upload } from 'lucide-react'
+import { fmtENJ } from '../utils/balanceExport.js'
 import useBalanceExplorer, { STATUS } from '../hooks/useBalanceExplorer.js'
 import { ENJIN_NETWORKS, MAX_RPC_CALLS } from '../constants.js'
 import { fetchEraBoundariesFromRpc } from '../utils/eraRpc.js'
@@ -340,6 +341,17 @@ export default function BalanceExplorer() {
     : `${completedPhaseCount} / ${phases.length} phases complete`
   const progressSummary = progress?.text ?? null
 
+  // Pre-scan placeholder phases (shown before any query starts)
+  const previewPhases = useMemo(() => [
+    { key: 'connect',  label: 'Connect to Archive',       status: 'pending', total: 1, completed: 0 },
+    { key: 'query',    label: 'Query Balance Snapshots',   status: 'pending', total: 1, completed: 0 },
+    { key: 'finalize', label: 'Assemble Records',          status: 'pending', total: 1, completed: 0 },
+  ], [])
+  const displayPhases  = phases.length > 0 ? phases : previewPhases
+  const displayTitle   = phases.length > 0 ? progressTitle   : 'Ready to query'
+  const displaySummary = phases.length > 0 ? progressSummary : null
+  const displayMeta    = phases.length > 0 ? progressMeta    : null
+
   async function handleFetch() {
     let effStart = startBlock
     let effEnd   = endBlock
@@ -500,7 +512,7 @@ export default function BalanceExplorer() {
     return ''
   })()
 
-  const inputField = 'w-full bg-card rounded px-3 py-1.5 text-[0.8rem] text-text font-mono placeholder-muted disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-primary transition-colors'
+  const inputField = 'w-full input-field font-mono'
 
   // Step label/hint
   const stepLabel       = rangeMode === 'date' ? 'Step (Every N Days)' :
@@ -515,7 +527,7 @@ export default function BalanceExplorer() {
     <div className="space-y-4 sm:space-y-5">
 
       <section className="page-hero">
-        <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1.12fr)_minmax(280px,0.88fr)] lg:items-end">
+        <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1.12fr)_minmax(280px,0.88fr)] lg:items-start">
           <div className="space-y-5">
             <div className="hero-kicker">
               <span className="hero-dot" />
@@ -530,19 +542,19 @@ export default function BalanceExplorer() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="metric-card">
+            <div className="metric-card metric-card-left-cyan">
               <p className="metric-label">Network</p>
               <p className="metric-value text-cyan">{activeNetwork.label}</p>
             </div>
-            <div className="metric-card">
+            <div className="metric-card metric-card-left-primary">
               <p className="metric-label">Range Mode</p>
               <p className="metric-value text-text">{rangeModeLabel}</p>
             </div>
-            <div className="metric-card">
+            <div className="metric-card metric-card-left-success">
               <p className="metric-label">Records Loaded</p>
               <p className="metric-value text-success">{records.length}</p>
             </div>
-            <div className="metric-card">
+            <div className="metric-card metric-card-left-warning">
               <p className="metric-label">Data Source</p>
               <p className="metric-value text-text">{dataSource === 'import' ? 'Imported' : 'Archive RPC'}</p>
             </div>
@@ -581,7 +593,9 @@ export default function BalanceExplorer() {
 
         {/* ── Query pane ───────────────────────────────────────── */}
         {tab === 'query' && (
-          <div role="tabpanel" className="p-4 sm:p-6 space-y-4">
+          <div role="tabpanel" className="p-4 sm:p-6">
+          <div className="lg:grid lg:grid-cols-[minmax(0,36rem)_1fr] lg:gap-6 lg:items-start">
+          <div className="space-y-4">
 
             {/* Section heading */}
             {/* ── Live chain snapshot ──────────────────────────────── */}
@@ -605,7 +619,7 @@ export default function BalanceExplorer() {
             {/* Network dropdown + address */}
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label htmlFor="bal-rpc-net" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
+                <label htmlFor="bal-rpc-net" className="input-label">
                   Archive Node WS Endpoint
                 </label>
                 <div className="relative">
@@ -614,7 +628,7 @@ export default function BalanceExplorer() {
                     value={networkKey}
                     onChange={e => setNetworkKey(e.target.value)}
                     disabled={isLoading}
-                    className={`${inputField} appearance-none pr-8 cursor-pointer`}
+                    className="w-full select-field appearance-none pr-8"
                   >
                     {PRESET_NETWORKS.map(n => (
                       <option key={n.key} value={n.key}>{n.label}</option>
@@ -627,7 +641,7 @@ export default function BalanceExplorer() {
                 </p>
               </div>
               <div>
-                <label htmlFor="bal-addr" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
+                <label htmlFor="bal-addr" className="input-label">
                   Wallet Address (SS58)
                 </label>
                 <input
@@ -693,7 +707,7 @@ export default function BalanceExplorer() {
               <div className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div>
-                    <label htmlFor="bal-start-era" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
+                    <label htmlFor="bal-start-era" className="input-label">
                       Start Era
                     </label>
                     <input
@@ -708,7 +722,7 @@ export default function BalanceExplorer() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="bal-end-era" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
+                    <label htmlFor="bal-end-era" className="input-label">
                       End Era
                     </label>
                     <input
@@ -723,7 +737,7 @@ export default function BalanceExplorer() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="bal-step-era" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
+                    <label htmlFor="bal-step-era" className="input-label">
                       {stepLabel}
                     </label>
                     <input
@@ -764,7 +778,7 @@ export default function BalanceExplorer() {
               <div className="space-y-2">
                 <div className="grid gap-3 sm:grid-cols-3">
                 <div>
-                  <label htmlFor="bal-start" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
+                  <label htmlFor="bal-start" className="input-label">
                     Start Block
                   </label>
                   <input
@@ -779,7 +793,7 @@ export default function BalanceExplorer() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="bal-end" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
+                  <label htmlFor="bal-end" className="input-label">
                     End Block
                   </label>
                   <input
@@ -794,7 +808,7 @@ export default function BalanceExplorer() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="bal-step" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
+                  <label htmlFor="bal-step" className="input-label">
                     {stepLabel}
                   </label>
                   <input
@@ -822,7 +836,7 @@ export default function BalanceExplorer() {
               <div className="space-y-3">
                 {/* Quick presets */}
                 <div>
-                  <span className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">Quick Range</span>
+                  <span className="input-label">Quick Range</span>
                   <div className="flex flex-wrap gap-2">
                     {DATE_PRESETS.map(({ label, days }) => (
                       <button
@@ -844,7 +858,7 @@ export default function BalanceExplorer() {
                 {/* Start / End date + step */}
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div>
-                    <label htmlFor="bal-start-date" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
+                    <label htmlFor="bal-start-date" className="input-label">
                       Start Date
                     </label>
                     <input
@@ -859,7 +873,7 @@ export default function BalanceExplorer() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="bal-end-date" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
+                    <label htmlFor="bal-end-date" className="input-label">
                       End Date
                     </label>
                     <input
@@ -874,7 +888,7 @@ export default function BalanceExplorer() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="bal-step-date" className="block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-1.5">
+                    <label htmlFor="bal-step-date" className="input-label">
                       {stepLabel}
                     </label>
                     <input
@@ -914,12 +928,12 @@ export default function BalanceExplorer() {
             )}
 
             {/* ── Disclaimer — Archive RPC ─────────────────── */}
-            <div className="flex gap-2.5 rounded-[1.25rem] bg-primary/5 px-4 py-3">
-              <Info size={14} className="text-primary/70 flex-shrink-0 mt-0.5" />
-              <p className="text-[11px] text-text-secondary leading-relaxed">
-                <span className="text-text font-medium">Note:</span> Balance data is fetched
-                directly from the Archive RPC endpoint — queries may take time, especially over
-                a wide range. Narrowing the range or increasing the step will reduce query time.
+            <div className="flex gap-2.5 p-3 rounded-lg bg-card border border-surface-bright text-[11px] leading-relaxed">
+              <Info size={13} className="text-text-secondary flex-shrink-0 mt-0.5" />
+              <p className="text-text-secondary">
+                Balance data is fetched directly from the Archive RPC endpoint — queries may
+                take time, especially over a wide range. Narrowing the range or increasing the
+                step will reduce query time.
               </p>
             </div>
 
@@ -984,18 +998,19 @@ export default function BalanceExplorer() {
               )}
             </div>
 
-            {phases.length > 0 && status !== STATUS.IDLE && status !== STATUS.ERROR && (
-              <PhaseProgressCards
-                eyebrow="Query Progress"
-                indexLabel="Phase"
-                title={progressTitle}
-                summary={progressSummary}
-                meta={progressMeta}
-                phases={phases}
-                ariaLabel="Balance query progress"
-                className="mt-2"
-              />
-            )}
+          </div>
+          <div className="mt-4 lg:mt-0">
+            <PhaseProgressCards
+              eyebrow="Query Progress"
+              indexLabel="Phase"
+              title={displayTitle}
+              summary={displaySummary}
+              meta={displayMeta}
+              phases={displayPhases}
+              ariaLabel="Balance query progress"
+            />
+          </div>
+          </div>
           </div>
         )}
 
@@ -1003,21 +1018,24 @@ export default function BalanceExplorer() {
         {tab === 'import' && (
             <div role="tabpanel" className="p-4 sm:p-6">
               {!showImportResults ? (
-                <>
+                <div className="space-y-3">
                 <div>
                   <p className="section-label">Import</p>
-                  <h3 className="mt-2 font-headline text-2xl font-bold text-text">Import Balance Data</h3>
                 </div>
-                <p className="text-xs text-text-secondary mb-4 leading-relaxed">
-                  Only files previously exported by this tool (JSON, CSV, or XML) can be imported.
-                  Files from other sources or tools are not supported.
-                </p>
+                <div className="flex gap-2.5 p-3 rounded-lg bg-card border border-surface-bright text-[11px] leading-relaxed">
+                  <Info size={13} className="text-text-secondary flex-shrink-0 mt-0.5" />
+                  <p className="text-text-secondary">
+                    Only files previously exported by this tool{' '}
+                    <span className="font-mono text-muted">(JSON, CSV, or XML)</span>{' '}
+                    can be imported. Files from other sources or tools are not supported.
+                  </p>
+                </div>
                 <BalanceImportPanel
                   bare
                   onImport={handleImport}
                   onImportEncrypted={handleImportEncrypted}
                 />
-              </>
+                </div>
             ) : (
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -1068,6 +1086,45 @@ export default function BalanceExplorer() {
           )}
 
           {hasResults && <BalanceChart records={records} />}
+
+          {hasResults && (() => {
+            const maxFree = records.reduce((m, r) => r.free > m ? r.free : m, 0n)
+            let totalLocked = 0n, totalBalance = 0n
+            for (const r of records) {
+              const frozen = r.miscFrozen ?? r.feeFrozen ?? 0n
+              const locked = r.reserved + frozen
+              totalLocked += locked
+              totalBalance += r.free + locked
+            }
+            const utilizationPct = totalBalance > 0n
+              ? Number((totalLocked * 10000n) / totalBalance) / 100
+              : 0
+            return (
+              <div className="rounded-[1.5rem] bg-surface px-5 py-4 shadow-ambient border border-white/5">
+                <div className="mb-3 flex items-center gap-2">
+                  <Sparkles size={14} className="text-primary" />
+                  <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-text-secondary">Smart Insights</span>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl bg-card px-4 py-3 border-l-[3px] border-l-cyan" style={{ border: '1px solid rgba(70,71,82,0.08)', borderLeft: '3px solid var(--cyan)' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-secondary">Max Free Balance</p>
+                    <p className="mt-2 font-headline text-lg font-bold text-cyan">{fmtENJ(maxFree)}</p>
+                  </div>
+                  <div className="rounded-xl bg-card px-4 py-3" style={{ border: '1px solid rgba(70,71,82,0.08)', borderLeft: '3px solid var(--primary)' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-secondary">Balance Utilization</p>
+                    <div className="mt-2 flex items-end gap-2">
+                      <p className="font-headline text-lg font-bold text-primary">{utilizationPct.toFixed(1)}%</p>
+                      <p className="mb-0.5 text-[11px] text-text-secondary">reserved + frozen</p>
+                    </div>
+                    <div className="mt-2 h-1.5 rounded-full bg-surface overflow-hidden">
+                      <div className="h-full rounded-full bg-gradient-to-r from-primary-dim to-primary transition-[width] duration-500" style={{ width: `${Math.min(100, utilizationPct)}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+
           <BalanceTable records={records} isLoading={isLoading} />
 
           {dataSource === 'query' && hasResults && (
