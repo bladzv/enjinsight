@@ -106,9 +106,7 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
             maxLength={1024}
             value={password}
             onChange={e => setPassword(e.target.value)}
-            className="w-full bg-card rounded px-3 py-2 text-sm
-                       text-text font-mono placeholder:text-muted focus-visible:outline-none
-                       focus-visible:ring-1 focus-visible:ring-primary transition-colors"
+            className="w-full input-field font-mono"
           />
         </div>
       )}
@@ -128,9 +126,7 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
             placeholder={defaultFilename()}
             value={filename}
             onChange={e => setFilename(e.target.value)}
-            className="w-full bg-card rounded px-3 py-2 text-sm
-                       text-text font-mono placeholder:text-muted focus-visible:outline-none
-                       focus-visible:ring-1 focus-visible:ring-primary transition-colors"
+            className="w-full input-field font-mono"
           />
         </div>
 
@@ -142,8 +138,7 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
             id="exp-fmt"
             value={format}
             onChange={e => setFormat(e.target.value)}
-            className="w-full bg-card rounded px-3 py-2 text-sm
-                       text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary transition-colors"
+            className="w-full select-field"
           >
             <option value="json">JSON</option>
             <option value="csv">CSV</option>

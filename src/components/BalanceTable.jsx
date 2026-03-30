@@ -92,7 +92,7 @@ export default function BalanceTable({ records, isLoading = false }) {
             <select
               value={pageSize}
               onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
-              className="rounded-full bg-card px-2 py-1 text-xs text-text focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+              className="select-compact"
               aria-label="Rows per page"
             >
               {PAGE_SIZE_OPTIONS.map(n => (
