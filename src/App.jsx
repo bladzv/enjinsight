@@ -135,12 +135,14 @@ export default function App() {
     if (status === 'loading') return // block navigation during active scan
     if (view === 'staking' && dest !== 'staking') handleReset()
     setView(dest)
+    window.scrollTo(0, 0)
   }
 
   function handleBack() {
     if (status === 'loading') return
     if (view === 'staking') handleReset()
     setView('home')
+    window.scrollTo(0, 0)
   }
 
   return (
@@ -171,7 +173,7 @@ export default function App() {
 
       {/* ── Home / Landing ──────────────────────────────────────────── */}
       {view === 'home' && (
-        <main className="relative z-10 mx-auto max-w-[92rem] px-4 pb-16 sm:px-6 sm:pb-20">
+        <main className="relative z-10 mx-auto max-w-[92rem] px-4 py-6 sm:px-6 sm:py-8 pb-16 sm:pb-20">
           <LandingPage onNavigate={handleNavigate} />
         </main>
       )}
@@ -181,7 +183,7 @@ export default function App() {
       <main className="relative z-10 mx-auto max-w-[92rem] px-4 py-6 sm:px-6 sm:py-8 pb-32 space-y-6">
 
         <section className="page-hero">
-          <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)] lg:items-end">
+          <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)] lg:items-start">
             <div className="space-y-5">
               <div className="hero-kicker">
                 <span className="hero-dot" />
@@ -198,19 +200,19 @@ export default function App() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="metric-card">
+              <div className="metric-card metric-card-left-cyan">
                 <p className="metric-label">Scanned Records</p>
                 <p className="metric-value text-cyan">{activeRecords.length}</p>
               </div>
-              <div className="metric-card">
+              <div className="metric-card metric-card-left-danger">
                 <p className="metric-label">Gaps Detected</p>
                 <p className={`metric-value ${gapCount > 0 ? 'text-danger' : 'text-success'}`}>{gapCount}</p>
               </div>
-              <div className="metric-card">
+              <div className="metric-card metric-card-left-success">
                 <p className="metric-label">Clean Results</p>
                 <p className="metric-value text-success">{cleanCount}</p>
               </div>
-              <div className="metric-card">
+              <div className="metric-card metric-card-left-warning">
                 <p className="metric-label">Fetch Errors</p>
                 <p className={`metric-value ${errorCount > 0 ? 'text-warning' : 'text-text'}`}>{errorCount}</p>
               </div>

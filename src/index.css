@@ -136,7 +136,7 @@
   }
 
   .page-hero {
-    @apply relative overflow-hidden rounded-[1.75rem] px-6 py-8 sm:px-8 sm:py-10 lg:px-10 lg:py-12;
+    @apply relative overflow-hidden rounded-[1.75rem] px-5 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8;
     background:
       radial-gradient(circle at top right, rgba(0, 238, 252, 0.12), transparent 30%),
       radial-gradient(circle at bottom left, rgba(182, 160, 255, 0.16), transparent 38%),
@@ -183,12 +183,12 @@
 
   .hero-title {
     @apply font-headline font-bold tracking-tight text-text;
-    font-size: clamp(2.6rem, 5vw, 5.4rem);
-    line-height: 0.95;
+    font-size: clamp(1.6rem, 3vw, 2.8rem);
+    line-height: 1.05;
   }
 
   .hero-copy {
-    @apply max-w-2xl text-sm leading-7 text-text-secondary sm:text-base;
+    @apply max-w-2xl text-xs leading-6 text-text-secondary sm:text-sm;
   }
 
   .section-label {
@@ -214,6 +214,13 @@
     transform: translateY(-1px);
   }
 
+  /* Colored left-border accent variants */
+  .metric-card-left-primary  { border-left: 3px solid theme('colors.primary') !important; }
+  .metric-card-left-cyan     { border-left: 3px solid theme('colors.cyan') !important; }
+  .metric-card-left-success  { border-left: 3px solid theme('colors.success') !important; }
+  .metric-card-left-warning  { border-left: 3px solid theme('colors.warning') !important; }
+  .metric-card-left-danger   { border-left: 3px solid theme('colors.danger') !important; }
+
   .metric-value {
     @apply mt-3 font-headline font-bold leading-none text-text;
     font-size: 34.5px; /* 15% larger than 30px (text-3xl) */
@@ -237,6 +244,30 @@
 
   .tool-tab-active {
     @apply bg-primary text-on-primary shadow-primary-glow;
+  }
+
+  /* ── Form controls ──────────────────────────────────────────────────────── */
+
+  .input-field {
+    @apply bg-surface-highest rounded-lg px-3 py-2.5 text-sm text-text placeholder:text-muted
+           disabled:opacity-50 transition-colors
+           focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary;
+  }
+
+  .select-field {
+    @apply bg-surface-highest rounded-lg px-3 py-2.5 text-sm text-text
+           disabled:opacity-50 transition-colors cursor-pointer
+           focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary;
+  }
+
+  /* Compact variant for table/filter controls */
+  .select-compact {
+    @apply bg-surface-highest rounded-lg px-2 py-1.5 text-xs text-text
+           focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary;
+  }
+
+  .input-label {
+    @apply block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-2;
   }
 
   .data-panel {
@@ -337,6 +368,11 @@
     transform: translateY(-1px);
   }
 
+  .btn-primary:active:not(:disabled) {
+    transform: scale(0.97);
+    filter: brightness(0.98);
+  }
+
   .btn-stop,
   .btn-danger {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-semibold tracking-wide text-white transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
@@ -352,6 +388,15 @@
 
   .btn-secondary:hover:not(:disabled) {
     background: rgba(40, 43, 58, 0.95);
+  }
+
+  .btn-secondary:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  .btn-stop:active:not(:disabled),
+  .btn-danger:active:not(:disabled) {
+    transform: scale(0.97);
   }
 
   .btn-ghost {
