@@ -115,7 +115,7 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
             <select
               value={pageSize}
               onChange={e => { setPageSize(Number(e.target.value)); setPage(0) }}
-              className="bg-card rounded px-1.5 py-0.5 text-xs text-text cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+              className="select-compact cursor-pointer"
               aria-label="Rows per page"
             >
               {[5, 10, 20, 50].map(s => (
