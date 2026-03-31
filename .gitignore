@@ -10,6 +10,7 @@ yarn-debug.log*
 yarn-error.log*
 .eslintcache
 .env
+.venv/
 new_feature/.env
 .DS_Store
 .vscode/
@@ -19,3 +20,7 @@ new_feature/.env
 # Session tracking files (managed by AI assistant during local sessions)
 .github/actions.md
 .github/pr_description.md
+
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
