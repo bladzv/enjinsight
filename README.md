@@ -124,8 +124,11 @@ EnjinSight is a static-frontend monitoring suite for the Enjin Blockchain. It bu
 │   ├── era-explorer.html        # Standalone era explorer (no React)
 │   └── site.webmanifest
 ├── scripts/
-│   ├── staking-rewards-rpc.py   # CLI: per-era pool reward computation via archive RPC
-│   └── relay-era-range-fetch.py # Builds / updates relay-era-reference.csv
+│   ├── staking-rewards-rpc.py      # CLI: per-era pool reward computation via archive RPC
+│   ├── relay-era-range-fetch.py    # Builds / updates relay-era-reference.csv
+│   ├── canary-era-range-fetch.py   # Builds / updates canary-relay-era-reference.csv
+│   ├── balance-lookup-explorer.py  # Educational: step-by-step balance query walkthrough
+│   └── token-lookup-explorer.py    # Educational: step-by-step token lookup walkthrough
 ├── src/
 │   ├── components/
 │   │   ├── AppHeader.jsx           # Sticky header with breadcrumb navigation
@@ -207,6 +210,83 @@ npm run build    # Production build → dist/
 npm run preview  # Preview production build locally
 npm run test     # Vitest unit tests
 npm run lint     # ESLint
+```
+
+---
+
+## Python Scripts
+
+The `scripts/` directory contains standalone Python utilities for data maintenance and two **educational explorer scripts** that mirror the web app's Substrate storage query logic step-by-step.
+
+### Requirements
+
+```bash
+pip install websockets          # required by both explorer scripts
+pip install certifi             # optional — improves TLS cert handling on macOS
+pip install substrate-interface # required by staking-rewards-rpc.py
+```
+
+### Data maintenance
+
+| Script | Command | Output |
+|--------|---------|--------|
+| `staking-rewards-rpc.py` | `python scripts/staking-rewards-rpc.py` | Interactive CLI → per-era reward table for an address |
+| `relay-era-range-fetch.py` | `python scripts/relay-era-range-fetch.py` | Updates `public/relay-era-reference.csv` |
+| `canary-era-range-fetch.py` | `python scripts/canary-era-range-fetch.py` | Updates `public/canary-relay-era-reference.csv` |
+
+### Educational RPC explorer scripts
+
+These scripts are designed for **developers and auditors** who want to understand exactly how the browser app constructs Substrate storage keys and makes archive-node RPC calls, without diving into the JavaScript source. Every intermediate value — raw bytes, hex hashes, encoded keys — is printed to the terminal.
+
+#### `balance-lookup-explorer.py`
+
+Walks through every step involved in fetching a wallet's ENJ balance:
+
+| Step | Operation |
+|------|-----------|
+| ① | SS58 address → 32-byte public key (Base58 decode + checksum strip) |
+| ② | Blake2b-128 hash of the public key |
+| ③ | Assemble the full `System.Account` storage key |
+| ④ | `chain_getHeader` RPC → current block number |
+| ⑤ | `chain_getBlockHash` RPC → 32-byte block hash |
+| ⑥ | `state_getStorage` RPC → raw SCALE `AccountInfo` bytes |
+| ⑦ | SCALE-decode `AccountInfo` → free / reserved / frozen balances |
+
+Mirrors the logic in `src/utils/substrate.js`. No `substrate-interface` dependency — uses raw `asyncio` WebSockets for full transparency.
+
+```bash
+python scripts/balance-lookup-explorer.py
+# → prompts for an Enjin address (en…) and RPC endpoint
+```
+
+#### `token-lookup-explorer.py`
+
+Walks through token discovery on both Enjin chains:
+
+**Enjin Relaychain — sENJ nomination-pool shares**
+
+| Step | Operation |
+|------|-----------|
+| ① | Build `NominationPools.BondedPools` storage-map prefix (twox128 × 2) |
+| ② | `state_getKeysPaged` RPC → enumerate every pool's storage key |
+| ③ | Decode each raw key to extract `pool_id` (u32 LE, last 4 bytes) |
+| ④ | Build `MultiTokens.TokenAccounts` key for each pool (Blake2_128Concat hashers) |
+| ⑤ | `state_getStorage` RPC → SCALE-compact member balance |
+| ⑥ | Compute share percentage: `your_balance / total_supply × 100` |
+
+**Enjin Matrixchain — NFTs & semi-fungible tokens**
+
+| Step | Operation |
+|------|-----------|
+| ① | Enumerate `MultiTokens.Collections` via storage-map prefix |
+| ② | Per collection: enumerate `MultiTokens.Tokens` to discover all token IDs |
+| ③ | Per `(collectionId, tokenId)`: check `MultiTokens.TokenAccounts` for the address |
+
+Demonstrates twox128 and Blake2_128Concat storage key derivation that the web app uses in `src/utils/substrate.js`.
+
+```bash
+python scripts/token-lookup-explorer.py
+# → prompts for chain (relay / matrix), address, and RPC endpoint
 ```
 
 ---
