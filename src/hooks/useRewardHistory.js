@@ -30,7 +30,7 @@ const ARCHIVE_WSS    = 'wss://archive.relay.blockchain.enjin.io'
 const COLLECTION_ID  = 1n          // sENJ multi-token collection
 const ERAS_PER_YEAR  = 365
 const EVENT_SCAN_AFTER = 40        // python parity: scan_start..(scan_start+40) inclusive
-const CSV_PATHS      = ['/relay-era-range-reference.csv', '/relay-era-reference.csv']
+const CSV_PATHS      = ['/relay-era-reference.csv']
 const LOG_CAP        = 500
 
 // Staking.ActiveEra storage key: twox128("Staking") + twox128("ActiveEra")
