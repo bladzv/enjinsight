@@ -356,7 +356,8 @@ function RewardChart({ data }) {
     return () => { destroyed = true; chartRef.current?.destroy(); chartRef.current = null }
   }, [data]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!data.length) return null
+  const uniqueEras = [...new Set(data.map(r => r.era))]
+  if (!data.length || uniqueEras.length < 2) return null
   return (
     <div className="rounded-[1.5rem] bg-surface p-5 shadow-ambient">
       <div className="mb-4 flex items-start justify-between gap-4">
