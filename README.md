@@ -1,5 +1,7 @@
 <h1 align="center">EnjinSight</h1>
 
+> **Disclaimer:** EnjinSight is **unofficial, third-party tooling** and is **not** developed by or affiliated with the Enjin development team. This is a personal project created independently. The accuracy or correctness of information displayed cannot be guaranteed. Use at your own risk.
+
 <p align="center">
   <a href="https://enjinsight.vercel.app/"><img alt="Live Demo" src="https://img.shields.io/badge/Live%20Demo-enjinsight.vercel.app-00C7B7?style=flat-square&logo=vercel&logoColor=white" /></a>
   <a href="https://github.com/bladzv/enjinsight/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/bladzv/enjinsight/ci.yml?branch=main&style=flat-square&label=CI&logo=github-actions&logoColor=white" /></a>

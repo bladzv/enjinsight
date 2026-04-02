@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Github, Menu, X } from 'lucide-react'
+import { Github, Menu, X, BookOpen, Info } from 'lucide-react'
 
 const NAV_ITEMS = [
   { key: 'home', label: 'Home' },
@@ -9,20 +9,21 @@ const NAV_ITEMS = [
   { key: 'reward-history', label: 'Reward History' },
 ]
 
-const VIEW_LABELS = {
-  era: 'Era Block Explorer',
-  staking: 'Staking Rewards Cadence',
-  balance: 'Historical Balance Viewer',
-  'reward-history': 'Reward History Viewer',
-}
+const GITHUB_URL = 'https://github.com/bladzv/enjinsight'
+const README_URL = 'https://github.com/bladzv/enjinsight#readme'
 
-export default function AppHeader({ status, view, onBack, onNavigate }) {
+export default function AppHeader({ status, view, onBack, onNavigate, onAbout }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const isLoading = status === 'loading'
 
   function handleNav(key) {
     setMenuOpen(false)
     onNavigate?.(key)
+  }
+
+  function handleAbout() {
+    setMenuOpen(false)
+    onAbout?.()
   }
 
   return (
@@ -46,17 +47,42 @@ export default function AppHeader({ status, view, onBack, onNavigate }) {
             </p>
           </button>
 
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            {/* README */}
             <a
-              href="https://github.com/bladzv/enjinsight"
+              href={README_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn-icon flex items-center gap-2 px-4"
+              className="btn-icon flex items-center gap-2 px-3"
+              aria-label="Open README on GitHub"
+            >
+              <BookOpen size={16} />
+              <span className="hidden md:inline-block text-sm font-semibold text-text-secondary">README</span>
+            </a>
+
+            {/* About */}
+            <button
+              type="button"
+              onClick={handleAbout}
+              className="btn-icon flex items-center gap-2 px-3"
+              aria-label="About EnjinSight"
+            >
+              <Info size={16} />
+              <span className="hidden md:inline-block text-sm font-semibold text-text-secondary">About</span>
+            </button>
+
+            {/* GitHub */}
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-icon flex items-center gap-2 px-3"
               aria-label="Open source on GitHub"
             >
               <Github size={16} />
               <span className="hidden md:inline-block text-sm font-semibold text-text-secondary">GitHub</span>
             </a>
+
             {/* Hamburger — visible below lg breakpoint */}
             <button
               type="button"
@@ -109,6 +135,43 @@ export default function AppHeader({ status, view, onBack, onNavigate }) {
               </button>
             )
           })}
+
+          {/* Divider */}
+          <div className="my-1 h-px bg-white/5" />
+
+          {/* README link */}
+          <a
+            href={README_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold text-text-secondary hover:bg-white/5 hover:text-text transition-colors"
+            onClick={() => setMenuOpen(false)}
+          >
+            <BookOpen size={15} />
+            README
+          </a>
+
+          {/* About */}
+          <button
+            type="button"
+            onClick={handleAbout}
+            className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold text-text-secondary hover:bg-white/5 hover:text-text transition-colors text-left"
+          >
+            <Info size={15} />
+            About
+          </button>
+
+          {/* GitHub link */}
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold text-text-secondary hover:bg-white/5 hover:text-text transition-colors"
+            onClick={() => setMenuOpen(false)}
+          >
+            <Github size={15} />
+            GitHub
+          </a>
         </div>
       )}
     </header>
