@@ -57,16 +57,18 @@ except ImportError:
 
 NETWORKS = {
     "1": {
-        "name":     "Enjin Matrixchain",
-        "endpoint": "wss://archive.matrix.blockchain.enjin.io",
-        "prefix":   1110,
-        "symbol":   "ENJ",
+        "name":        "Enjin Matrixchain",
+        "endpoint":    "wss://archive.matrix.blockchain.enjin.io",
+        "prefix":      1110,
+        "symbol":      "ENJ",
+        "addr_prefix": "ef",
     },
     "2": {
-        "name":     "Enjin Relaychain",
-        "endpoint": "wss://archive.relay.blockchain.enjin.io",
-        "prefix":   2135,
-        "symbol":   "ENJ",
+        "name":        "Enjin Relaychain",
+        "endpoint":    "wss://archive.relay.blockchain.enjin.io",
+        "prefix":      2135,
+        "symbol":      "ENJ",
+        "addr_prefix": "en",
     },
 }
 
@@ -189,6 +191,13 @@ def ss58_decode(address: str) -> bytes:
 
     raw = base58_decode(address)
 
+    # Minimum: 1-byte prefix + 32-byte pubkey + 2-byte checksum = 35 bytes
+    if len(raw) < 35:
+        raise ValueError(
+            f"Decoded address is only {len(raw)} bytes — SS58 requires at least 35 "
+            "(1 prefix + 32 pubkey + 2 checksum). Invalid address?"
+        )
+
     # ── Prefix length ──────────────────────────────────────────────────────────
     step("Inspect byte 0 to determine prefix width")
     b0 = raw[0]
@@ -235,15 +244,90 @@ def ss58_decode(address: str) -> bytes:
     step("Split the decoded bytes into their three regions:")
     note(f"  bytes[0:{pfx_len}]           prefix   = 0x{raw[:pfx_len].hex()}  ({pfx_len} byte{'s' if pfx_len>1 else ''})")
     note(f"  bytes[{pfx_len}:{pfx_len+32}]  pubkey   = 0x{pub.hex()}")
-    note(f"  bytes[{pfx_len+32}:]         checksum = 0x{checksum.hex()}  (2 bytes, not validated here)")
+    note(f"  bytes[{pfx_len+32}:]         checksum = 0x{checksum.hex()}  (2 bytes)")
 
     if len(pub) != 32:
         raise ValueError(f"Public key is {len(pub)} bytes — expected 32.  Invalid address?")
+
+    step("Verify the 2-byte SS58 checksum:")
+    note("  checksum = blake2b(b'SS58PRE' + prefix_bytes + pubkey, digest_size=64)[:2]")
+    note("  The constant b'SS58PRE' is the Substrate-mandated magic prefix for SS58.")
+    expected_checksum = hashlib.blake2b(b"SS58PRE" + raw[:-2], digest_size=64).digest()[:2]
+    note(f"  Expected : 0x{expected_checksum.hex()}")
+    note(f"  Got      : 0x{checksum.hex()}")
+    if checksum != expected_checksum:
+        raise ValueError(
+            f"SS58 checksum mismatch (got {checksum.hex()}, expected {expected_checksum.hex()}). "
+            "Wrong network prefix or corrupted address?"
+        )
+    note("  ✓ Checksum valid")
 
     step("Extracted 32-byte public key (AccountId32):")
     note(f"  0x{pub.hex()}")
 
     return pub
+
+
+def _ss58_decode_quiet(address: str) -> bytes:
+    """Decode an SS58 address to its 32-byte public key without printing anything."""
+    n = 0
+    for char in address:
+        idx = BASE58_ALPHABET.find(char)
+        if idx < 0:
+            raise ValueError(f"Invalid Base58 character: '{char}'")
+        n = n * 58 + idx
+    result = []
+    while n > 0:
+        result.append(n & 0xFF)
+        n >>= 8
+    result.reverse()
+    leading = len(address) - len(address.lstrip("1"))
+    raw     = bytes(leading) + bytes(result)
+    if len(raw) < 35:
+        raise ValueError(
+            f"Decoded address is only {len(raw)} bytes — SS58 requires at least 35 "
+            "(1 prefix + 32 pubkey + 2 checksum). Invalid address?"
+        )
+    pfx_len  = 2 if (raw[0] & 0x40) != 0 else 1
+    pub      = raw[pfx_len : pfx_len + 32]
+    if len(pub) != 32:
+        raise ValueError(f"Public key is {len(pub)} bytes — expected 32.")
+    expected = hashlib.blake2b(b"SS58PRE" + raw[:-2], digest_size=64).digest()[:2]
+    if raw[-2:] != expected:
+        raise ValueError(
+            f"SS58 checksum mismatch (got {raw[-2:].hex()}, expected {expected.hex()}). "
+            "Wrong network prefix or corrupted address?"
+        )
+    return pub
+
+
+def ss58_encode(pub: bytes, prefix: int) -> str:
+    """
+    Encode a 32-byte public key as an SS58 address for the given network prefix.
+
+    Inverse of _ss58_decode_quiet:
+      1. Encode the prefix (1 byte if < 64, else 2-byte canary encoding)
+      2. Compute checksum: blake2b(b"SS58PRE" + prefix_bytes + pub, digest_size=64)[:2]
+      3. Base58-encode (prefix_bytes + pub + checksum)
+    """
+    if prefix < 64:
+        prefix_bytes = bytes([prefix])
+    else:
+        # 2-byte canary encoding for prefixes 64–16383
+        b0 = ((prefix >> 2) & 0x3F) | 0x40
+        b1 = ((prefix & 0x03) << 6) | ((prefix >> 8) & 0x3F)
+        prefix_bytes = bytes([b0, b1])
+    payload  = prefix_bytes + pub
+    checksum = hashlib.blake2b(b"SS58PRE" + payload, digest_size=64).digest()[:2]
+    raw      = payload + checksum
+    n        = int.from_bytes(raw, 'big')
+    chars    = []
+    while n > 0:
+        n, r = divmod(n, 58)
+        chars.append(BASE58_ALPHABET[r])
+    chars.reverse()
+    leading = len(raw) - len(raw.lstrip(b'\x00'))
+    return '1' * leading + ''.join(chars)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -368,9 +452,20 @@ async def rpc_call(ws, req_id: int, method: str, params: list):
     for line in json.dumps(request, indent=4).splitlines():
         print(f"    {line}")
 
-    await ws.send(json.dumps(request))
+    await asyncio.wait_for(ws.send(json.dumps(request)), timeout=RPC_TIMEOUT_S)
     raw_resp = await asyncio.wait_for(ws.recv(), timeout=RPC_TIMEOUT_S)
-    resp = json.loads(raw_resp)
+    try:
+        resp = json.loads(raw_resp)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Node returned invalid JSON on method {method!r}: {exc}"
+        ) from exc
+
+    if resp.get("id") != req_id:
+        raise RuntimeError(
+            f"RPC response id mismatch: sent {req_id!r}, got {resp.get('id')!r} "
+            f"(method={method!r})"
+        )
 
     print()
     print(f"  ← RECEIVED (id={req_id}):")
@@ -381,6 +476,12 @@ async def rpc_call(ws, req_id: int, method: str, params: list):
 
     if "error" in resp:
         raise RuntimeError(f"RPC error on '{method}': {resp['error']}")
+
+    if "result" not in resp:
+        raise RuntimeError(
+            f"RPC response missing 'result' field (method={method!r}): "
+            f"keys present: {list(resp.keys())}"
+        )
 
     return resp["result"]
 
@@ -423,7 +524,10 @@ def decode_account_info(hex_val):
     step("Raw hex value as returned by state_getStorage:")
     note(f"{hex_val}")
 
-    raw = bytes.fromhex(hex_val[2:] if hex_val.startswith("0x") else hex_val)
+    try:
+        raw = bytes.fromhex(hex_val[2:] if hex_val.startswith("0x") else hex_val)
+    except ValueError as exc:
+        raise RuntimeError(f"Invalid hex in state_getStorage response: {exc}") from exc
 
     step(f"Converted to a {len(raw)}-byte array for parsing")
     note("SCALE encoding rules applied here:")
@@ -444,6 +548,11 @@ def decode_account_info(hex_val):
 
     def read_u32():
         start = off[0]
+        if start + 4 > len(raw):
+            raise ValueError(
+                f"Truncated AccountInfo: need 4 bytes at offset {start}, "
+                f"only {len(raw) - start} available"
+            )
         chunk = raw[start : start + 4]
         val   = struct.unpack("<I", chunk)[0]
         off[0] += 4
@@ -451,6 +560,11 @@ def decode_account_info(hex_val):
 
     def read_u128():
         start = off[0]
+        if start + 16 > len(raw):
+            raise ValueError(
+                f"Truncated AccountInfo: need 16 bytes at offset {start}, "
+                f"only {len(raw) - start} available"
+            )
         chunk = raw[start : start + 16]
         lo, hi = struct.unpack("<QQ", chunk)
         val = lo | (hi << 64)
@@ -593,6 +707,42 @@ async def main():
     if not address:
         print("No address entered.  Exiting.")
         sys.exit(1)
+
+    try:
+        pub = _ss58_decode_quiet(address)
+    except Exception as e:
+        print(f"\n  Invalid address: {e}")
+        sys.exit(1)
+
+    # Validate the address belongs to the selected network
+    expected_prefix = network["addr_prefix"]
+    if not address.startswith(expected_prefix):
+        other = next(
+            (v for v in NETWORKS.values()
+             if v["addr_prefix"] != expected_prefix
+             and address.startswith(v["addr_prefix"])),
+            None,
+        )
+        wrong_name = other["name"] if other else "another network"
+        print(f"\n  Error: This address looks like a {wrong_name} address "
+              f"(starts with '{address[:2]}'), not a {network['name']} address "
+              f"(expected addresses start with '{expected_prefix}').")
+        converted = ss58_encode(pub, network["prefix"])
+        print(f"\n  Converted address for {network['name']}:")
+        print(f"  {converted}")
+        print()
+        while True:
+            ans = input("  Proceed with the converted address? [Y/n]: ").strip().lower()
+            if ans in ("y", "yes", ""):
+                address = converted
+                print(f"  Using: {address}")
+                print()
+                break
+            elif ans in ("n", "no"):
+                print("  Exiting.")
+                sys.exit(1)
+            else:
+                print("  Please enter y or n.")
 
     print()
     print(f"  Network  : {network['name']}")

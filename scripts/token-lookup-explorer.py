@@ -40,6 +40,8 @@ Requirements:
     pip install websockets certifi
 """
 
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import json
@@ -73,14 +75,16 @@ except ImportError:
 
 NETWORKS = {
     "1": {
-        "name":     "Enjin Matrixchain",
-        "endpoint": "wss://archive.matrix.blockchain.enjin.io",
-        "prefix":   1110,
+        "name":        "Enjin Matrixchain",
+        "endpoint":    "wss://archive.matrix.blockchain.enjin.io",
+        "prefix":      1110,
+        "addr_prefix": "ef",
     },
     "2": {
-        "name":     "Enjin Relaychain",
-        "endpoint": "wss://archive.relay.blockchain.enjin.io",
-        "prefix":   2135,
+        "name":        "Enjin Relaychain",
+        "endpoint":    "wss://archive.relay.blockchain.enjin.io",
+        "prefix":      2135,
+        "addr_prefix": "en",
     },
 }
 
@@ -241,12 +245,54 @@ def base58_decode_silent(s: str) -> bytes:
 
 def ss58_decode_silent(address: str) -> bytes:
     """Decode an SS58 address to its raw 32-byte public key (no prints)."""
-    raw    = base58_decode_silent(address)
+    raw     = base58_decode_silent(address)
+    # Minimum: 1-byte prefix + 32-byte pubkey + 2-byte checksum = 35 bytes
+    if len(raw) < 35:
+        raise ValueError(
+            f"Decoded address is only {len(raw)} bytes — SS58 requires at least 35 "
+            "(1 prefix + 32 pubkey + 2 checksum). Invalid address?"
+        )
     pfx_len = 2 if (raw[0] & 0x40) != 0 else 1
-    pub    = raw[pfx_len : pfx_len + 32]
+    pub     = raw[pfx_len : pfx_len + 32]
     if len(pub) != 32:
         raise ValueError(f"Public key is {len(pub)} bytes — expected 32.")
+    # Verify the 2-byte SS58 checksum (blake2b-512 of the magic prefix + payload)
+    expected = hashlib.blake2b(b"SS58PRE" + raw[:-2], digest_size=64).digest()[:2]
+    if raw[-2:] != expected:
+        raise ValueError(
+            f"SS58 checksum mismatch (got {raw[-2:].hex()}, expected {expected.hex()}). "
+            "Wrong network prefix or corrupted address?"
+        )
     return pub
+
+
+def ss58_encode(pub: bytes, prefix: int) -> str:
+    """
+    Encode a 32-byte public key as an SS58 address for the given network prefix.
+
+    Inverse of ss58_decode_silent:
+      1. Encode the prefix (1 byte if < 64, else 2-byte canary encoding)
+      2. Compute checksum: blake2b(b"SS58PRE" + prefix_bytes + pub, digest_size=64)[:2]
+      3. Base58-encode (prefix_bytes + pub + checksum)
+    """
+    if prefix < 64:
+        prefix_bytes = bytes([prefix])
+    else:
+        # 2-byte canary encoding for prefixes 64–16383
+        b0 = ((prefix >> 2) & 0x3F) | 0x40
+        b1 = ((prefix & 0x03) << 6) | ((prefix >> 8) & 0x3F)
+        prefix_bytes = bytes([b0, b1])
+    payload  = prefix_bytes + pub
+    checksum = hashlib.blake2b(b"SS58PRE" + payload, digest_size=64).digest()[:2]
+    raw      = payload + checksum
+    n        = int.from_bytes(raw, 'big')
+    chars    = []
+    while n > 0:
+        n, r = divmod(n, 58)
+        chars.append(BASE58_ALPHABET[r])
+    chars.reverse()
+    leading = len(raw) - len(raw.lstrip(b'\x00'))
+    return '1' * leading + ''.join(chars)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -610,7 +656,10 @@ def collection_owner_pubkey(raw_hex: str) -> bytes | None:
     """
     if not raw_hex or raw_hex in (None, "0x", ""):
         return None
-    raw = bytes.fromhex(raw_hex[2:] if raw_hex.startswith("0x") else raw_hex)
+    try:
+        raw = bytes.fromhex(raw_hex[2:] if raw_hex.startswith("0x") else raw_hex)
+    except ValueError:
+        return None
     if len(raw) < 32:
         return None
     return raw[:32]
@@ -638,7 +687,10 @@ def decode_compact_first(hex_val: str, *, verbose: bool = False) -> int:
     if not hex_val or hex_val == "0x" or hex_val is None:
         return 0
 
-    raw  = bytes.fromhex(hex_val[2:] if hex_val.startswith("0x") else hex_val)
+    try:
+        raw = bytes.fromhex(hex_val[2:] if hex_val.startswith("0x") else hex_val)
+    except ValueError as exc:
+        raise ValueError(f"Invalid hex in compact value: {exc}") from exc
     if not raw:
         return 0
 
@@ -658,12 +710,20 @@ def decode_compact_first(hex_val: str, *, verbose: bool = False) -> int:
         if verbose:
             note(f"  value = byte[0] >> 2 = {raw[0]} >> 2 = {value}")
     elif mode == 1:
+        if len(raw) < 2:
+            raise ValueError(
+                f"Compact two-byte decode overflow: need 2 bytes, only {len(raw)} available"
+            )
         u16 = (raw[0] | (raw[1] << 8)) & 0xFFFF
         value = u16 >> 2
         if verbose:
             note(f"  u16_le = 0x{u16:04x}  ({u16})")
             note(f"  value  = {u16} >> 2 = {value}")
     elif mode == 2:
+        if len(raw) < 4:
+            raise ValueError(
+                f"Compact four-byte decode overflow: need 4 bytes, only {len(raw)} available"
+            )
         u32 = struct.unpack("<I", raw[0:4])[0]
         value = u32 >> 2
         if verbose:
@@ -671,6 +731,11 @@ def decode_compact_first(hex_val: str, *, verbose: bool = False) -> int:
             note(f"  value  = {u32} >> 2 = {value}")
     else:
         n = (raw[0] >> 2) + 4
+        if 1 + n > len(raw):
+            raise ValueError(
+                f"Compact big-int decode overflow: header requires {n} byte(s) "
+                f"but only {len(raw) - 1} available in raw value"
+            )
         v = int.from_bytes(raw[1:1+n], 'little')
         value = v
         if verbose:
@@ -702,9 +767,20 @@ async def rpc_call(ws, req_id: int, method: str, params: list, *, silent: bool =
         for line in json.dumps(request, indent=4).splitlines():
             print(f"    {line}")
 
-    await ws.send(json.dumps(request))
+    await asyncio.wait_for(ws.send(json.dumps(request)), timeout=RPC_TIMEOUT_S)
     raw_resp = await asyncio.wait_for(ws.recv(), timeout=RPC_TIMEOUT_S)
-    resp     = json.loads(raw_resp)
+    try:
+        resp = json.loads(raw_resp)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"Node returned invalid JSON on method {method!r}: {exc}"
+        ) from exc
+
+    if resp.get("id") != req_id:
+        raise RuntimeError(
+            f"RPC response id mismatch: sent {req_id!r}, got {resp.get('id')!r} "
+            f"(method={method!r})"
+        )
 
     if not silent:
         print()
@@ -721,6 +797,12 @@ async def rpc_call(ws, req_id: int, method: str, params: list, *, silent: bool =
 
     if "error" in resp:
         raise RuntimeError(f"RPC error on '{method}': {resp['error']}")
+
+    if "result" not in resp:
+        raise RuntimeError(
+            f"RPC response missing 'result' field (method={method!r}): "
+            f"keys present: {list(resp.keys())}"
+        )
 
     return resp["result"]
 
@@ -870,10 +952,40 @@ async def main():
         sys.exit(1)
 
     try:
-        ss58_decode_silent(address)
+        pub = ss58_decode_silent(address)
     except Exception as e:
         print(f"\n  Invalid address: {e}")
         sys.exit(1)
+
+    # Validate the address belongs to the selected network
+    expected_prefix = network["addr_prefix"]
+    if not address.startswith(expected_prefix):
+        other = next(
+            (v for v in NETWORKS.values()
+             if v["addr_prefix"] != expected_prefix
+             and address.startswith(v["addr_prefix"])),
+            None,
+        )
+        wrong_name = other["name"] if other else "another network"
+        print(f"\n  Error: This address looks like a {wrong_name} address "
+              f"(starts with '{address[:2]}'), not a {network['name']} address "
+              f"(expected addresses start with '{expected_prefix}').")
+        converted = ss58_encode(pub, network["prefix"])
+        print(f"\n  Converted address for {network['name']}:")
+        print(f"  {converted}")
+        print()
+        while True:
+            ans = input("  Proceed with the converted address? [Y/n]: ").strip().lower()
+            if ans in ("y", "yes", ""):
+                address = converted
+                print(f"  Using: {address}")
+                print()
+                break
+            elif ans in ("n", "no"):
+                print("  Exiting.")
+                sys.exit(1)
+            else:
+                print("  Please enter y or n.")
 
     # ── Matrixchain: ask scan mode before connecting ───────────────────────────
     specific_cids = []
@@ -901,6 +1013,8 @@ async def main():
                                  if x.strip()]
                 if not specific_cids:
                     raise ValueError("No valid IDs entered.")
+                if any(c < 0 or c > (2 ** 128 - 1) for c in specific_cids):
+                    raise ValueError("Collection IDs must be in the range 0 to 2^128−1.")
             except ValueError as e:
                 print(f"\n  Invalid input: {e}")
                 sys.exit(1)
@@ -1180,8 +1294,12 @@ async def main():
                     note("")
 
                     for i, k in enumerate(keys[:5]):
-                        pid     = pool_id_from_key(k)
-                        raw_key = bytes.fromhex(k[2:] if k.startswith("0x") else k)
+                        pid = pool_id_from_key(k)
+                        try:
+                            raw_key = bytes.fromhex(k[2:] if k.startswith("0x") else k)
+                        except ValueError:
+                            note(f"  key[{i}]: (malformed hex — skipping display)")
+                            continue
                         note(f"  key[{i}]: {k[:20]}…{k[-8:]}")
                         if i == 0:
                             note(f"     [0-15]  pallet hash  : {raw_key[0:16].hex()}")
