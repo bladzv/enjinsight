@@ -5,6 +5,7 @@ import { usePoolChecker }      from './hooks/usePoolChecker.js'
 import { resolveLatestEra }    from './utils/eraAnalysis.js'
 
 import AppHeader           from './components/AppHeader.jsx'
+import DisclaimerModal, { useFirstVisitDisclaimer } from './components/DisclaimerModal.jsx'
 import LandingPage         from './components/LandingPage.jsx'
 import BalanceExplorer     from './components/BalanceExplorer.jsx'
 import RewardHistoryViewer from './components/RewardHistoryViewer.jsx'
@@ -26,6 +27,8 @@ export default function App() {
   })
   const [mode,       setMode]       = useState('validators') // 'validators' | 'pools'
   const [lastEraCount, setLastEraCount] = useState(DEFAULT_ERA_COUNT)
+  const [showAbout, setShowAbout] = useState(false)
+  const { show: showFirstVisit, accept: acceptFirstVisit } = useFirstVisitDisclaimer()
 
   // Sync URL hash when view changes
   useEffect(() => {
@@ -152,7 +155,7 @@ export default function App() {
         <div className="absolute right-[-8rem] top-[20rem] h-[22rem] w-[22rem] rounded-full bg-cyan/10 blur-[120px]" />
       </div>
 
-      <AppHeader status={status} view={view} onBack={handleBack} onNavigate={handleNavigate} />
+      <AppHeader status={status} view={view} onBack={handleBack} onNavigate={handleNavigate} onAbout={() => setShowAbout(true)} />
 
       {/* ── Era Block Explorer ────────────────────────────────────── */}
       {view === 'era' && <EraBlockExplorer />}
@@ -368,6 +371,16 @@ export default function App() {
       {/* Sticky terminal log — always shown on staking view */}
       {view === 'staking' && (
         <TerminalLog logs={logs} sticky />
+      )}
+
+      {/* First-visit disclaimer */}
+      {showFirstVisit && (
+        <DisclaimerModal mode="first-visit" onClose={acceptFirstVisit} />
+      )}
+
+      {/* About modal */}
+      {showAbout && (
+        <DisclaimerModal mode="about" onClose={() => setShowAbout(false)} />
       )}
 
       {/* Vercel Analytics (lazy-loaded if dependency installed) */}
