@@ -15,7 +15,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   Play, Square, RotateCcw, Download, Upload,
   ChevronDown, ChevronUp, Lock, Unlock, FolderOpen,
-  AlertTriangle, AlertCircle, Calendar, Server, Info, XCircle, CheckCircle,
+  AlertTriangle, AlertCircle, Server, Info, XCircle, CheckCircle,
 } from 'lucide-react'
 import { useRewardHistory, RH_STATUS } from '../hooks/useRewardHistory.js'
 import { fetchLiveChainInfo } from '../utils/chainInfo.js'
@@ -23,7 +23,6 @@ import PhaseProgressCards from './PhaseProgressCards.jsx'
 import TerminalLog from './TerminalLog.jsx'
 import { PLANCK_PER_ENJ } from '../constants.js'
 import { aesEncrypt, aesDecrypt, downloadFile, safeFilename } from '../utils/balanceExport.js'
-import { truncateAddress } from '../utils/format.js'
 import { MAX_IMPORT_MB } from '../constants.js'
 
 // ── Era-CSV date helpers (copied from BalanceExplorer) ───────────────────────
@@ -91,6 +90,29 @@ const DATE_PRESETS = [
   { label: '3 months', days: 90  },
   { label: '6 months', days: 180 },
   { label: '1 year',   days: 365 },
+]
+
+function estimateRewardEraSpan(rangeMode, startEra, endEra, startDate, endDate) {
+  if (rangeMode === 'era') {
+    const s = parseInt(startEra, 10)
+    const e = parseInt(endEra, 10)
+    if (!Number.isFinite(s) || !Number.isFinite(e) || s > e) return null
+    return (e - s) + 1
+  }
+
+  if (rangeMode === 'date') {
+    const startMs = new Date(startDate).getTime()
+    const endMs = new Date(endDate).getTime()
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs > endMs) return null
+    return Math.round((endMs - startMs) / 86_400_000) + 1
+  }
+
+  return null
+}
+
+const REWARD_RANGE_MODE_OPTIONS = [
+  { key: 'era', badge: 'ERA', title: 'Era Range', description: 'Use exact era numbers for the reward window.' },
+  { key: 'date', badge: 'DAY', title: 'Date Range', description: 'Use dates and let the app estimate the eras.' },
 ]
 
 // ── Formatting helpers ───────────────────────────────────────────────────────
@@ -590,7 +612,7 @@ function PoolMultiSelect({ pools, value, onChange }) {
                 onChange={() => toggle(id)}
                 className="w-3.5 h-3.5 accent-cyan cursor-pointer"
               />
-              <span className="text-xs text-text truncate max-w-[150px]" title={label}>{label}</span>
+              <span className="max-w-[220px] whitespace-normal break-words text-xs text-text" title={label}>{label}</span>
             </label>
           ))}
         </div>
@@ -1068,7 +1090,7 @@ function RewardImportPanel({ onImport }) {
             : <CheckCircle size={14} className="text-success flex-shrink-0 mt-0.5" />}
           <div className="min-w-0 space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-text/80 truncate max-w-[220px]">{fileStatus.name}</span>
+              <span className="max-w-full break-all font-mono text-text/80">{fileStatus.name}</span>
               {fileStatus.ext && (
                 <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest flex-shrink-0
                   ${fileStatus.rejected ? 'bg-danger/15 text-danger' : 'bg-success/15 text-success'}`}>
@@ -1223,6 +1245,7 @@ export default function RewardHistoryViewer() {
     if (startDate && endDate && startDate > endDate) return 'Start date must be ≤ end date.'
     return ''
   })()
+  const estimatedEraSpan = estimateRewardEraSpan(rangeMode, startEra, endEra, startDate, endDate)
 
   const isLoading = status === RH_STATUS.LOADING
   const isDone    = status === RH_STATUS.DONE
@@ -1268,6 +1291,23 @@ export default function RewardHistoryViewer() {
   const displayTitle    = phases.length > 0 ? progressTitle   : 'Ready to compute'
   const displaySummary  = phases.length > 0 ? progressSummary : null
   const displayMeta     = phases.length > 0 ? progressMeta    : null
+  const rangeModeLabel = rangeMode === 'era' ? 'Era Range' : 'Date Range'
+  const liveChainSnapshot = (
+    <div className="grid gap-3 sm:grid-cols-3">
+      <div className="metric-card metric-card-left-cyan">
+        <p className="metric-label">Live Era</p>
+        <p className="metric-value text-cyan">{chainInfo.loading ? '…' : (chainInfo.era != null ? chainInfo.era.toLocaleString() : '—')}</p>
+      </div>
+      <div className="metric-card metric-card-left-primary">
+        <p className="metric-label">Live Block</p>
+        <p className="metric-value text-text">{chainInfo.loading ? '…' : (chainInfo.block != null ? chainInfo.block.toLocaleString() : '—')}</p>
+      </div>
+      <div className="metric-card metric-card-left-warning">
+        <p className="metric-label">RPC Time (UTC)</p>
+        <p className="mt-3 text-sm font-mono text-text">{chainInfo.loading ? '…' : (chainInfo.timestamp != null ? new Date(chainInfo.timestamp).toUTCString().replace(' GMT', ' UTC') : '—')}</p>
+      </div>
+    </div>
+  )
 
   // Sync filtered rows when results change
   useEffect(() => {
@@ -1303,7 +1343,7 @@ export default function RewardHistoryViewer() {
     setImportedAddress(meta?.address ?? '')
   }
 
-  const showResults = (isDone || isStopped || importedResults) && activeResults.length > 0
+  const showResults = (isLoading || isDone || isStopped || isError || importedResults) && activeResults.length > 0
 
   return (
     <div className={`space-y-4 transition-[padding] duration-200 ${logExpanded ? 'pb-[380px]' : 'pb-16'}`}>
@@ -1365,85 +1405,73 @@ export default function RewardHistoryViewer() {
         {/* ── Compute pane ── */}
         {tab === 'compute' && (
           <div role="tabpanel" className="p-4 sm:p-5">
-          <div className="lg:grid lg:grid-cols-[minmax(0,36rem)_1fr] lg:gap-6 lg:items-start">
+          <div className="xl:grid xl:grid-cols-2 xl:gap-6 xl:items-start">
           <div className="space-y-4">
             {/* Notes box */}
-            <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 text-[11px] leading-relaxed">
-
-              {/* Header */}
-              <div className="flex items-center gap-2 px-3 pt-3 pb-2">
-                <AlertCircle size={12} className="text-amber-400 flex-shrink-0" />
-                <span className="text-[10px] font-bold tracking-widest uppercase text-amber-400">Notes</span>
+            <div className="rounded-[1.5rem] bg-card/75 p-5 shadow-inset-soft">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-warning/10 text-warning">
+                  <AlertCircle size={16} />
+                </div>
+                <div className="space-y-2">
+                  <p className="section-label text-warning">Important Notes</p>
+                  <h3 className="font-headline text-2xl font-bold text-text">Reward history is an estimate</h3>
+                  <p className="section-subtitle">
+                    Archive snapshots reconstruct pool-level rewards and member share over time, so the output is best used for investigation and planning.
+                  </p>
+                </div>
               </div>
 
-              {/* Sections */}
-              <div className="divide-y divide-amber-500/15 border-t border-amber-500/15">
-
-                {/* Rewards accuracy */}
-                <div className="px-3 py-2.5 space-y-1">
-                  <p className="text-[10px] font-bold tracking-widest uppercase text-amber-400/60">Rewards Accuracy</p>
-                  <p className="text-text-secondary">
-                    Estimates only — reward values are derived from on-chain storage snapshots
-                    and proportional pool-share calculations.
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <div className="rounded-[1.25rem] bg-surface px-4 py-4">
+                  <p className="text-sm font-semibold text-text">Pool-level payouts</p>
+                  <p className="mt-2 text-sm leading-6 text-text-secondary">
+                    The pool gets daily rewards, not the user, so these values are estimations rather than wallet-level settlement records.
                   </p>
                 </div>
-
-                {/* Tax purposes */}
-                <div className="px-3 py-2.5 space-y-1.5">
-                  <p className="text-[10px] font-bold tracking-widest uppercase text-amber-400/60">Tax Purposes</p>
-                  <p className="text-text-secondary">
-                    In most jurisdictions, nomination pool staking is treated as a{' '}
-                    <span className="text-text/70">capital gain</span> rather than dividend income —
-                    similar to buying and selling an ETF. The taxable event is generally the{' '}
-                    <span className="text-text/70">difference in fiat value</span> of your ENJ when
-                    you bonded versus when you unbonded and withdrew. If you bonded or exited
-                    multiple times, FIFO (first-in, first-out) is the commonly accepted accounting
-                    method.
-                  </p>
-                  <p className="text-muted">
-                    This tool is for informational purposes only and does not constitute tax advice.
-                    Consult a qualified tax professional for guidance specific to your jurisdiction.
+                <div className="rounded-[1.25rem] bg-surface px-4 py-4">
+                  <p className="text-sm font-semibold text-text">Tax note</p>
+                  <p className="mt-2 text-sm leading-6 text-text-secondary">
+                    Tax treatment depends on your jurisdiction and activity history. Use this tool as a research aid, not tax advice.
                   </p>
                 </div>
-
               </div>
             </div>
 
             {/* ── Live chain snapshot ──────────────────────────────── */}
-            <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-[1.25rem] bg-card px-4 py-3 text-[11px] font-mono shadow-inset-soft">
-              <span className="text-text-secondary">Era:&nbsp;
-                <span className="text-cyan">{chainInfo.loading ? '…' : (chainInfo.era != null ? chainInfo.era.toLocaleString() : '—')}</span>
-              </span>
-              <span className="text-text-secondary">Block:&nbsp;
-                <span className="text-text">{chainInfo.loading ? '…' : (chainInfo.block != null ? chainInfo.block.toLocaleString() : '—')}</span>
-              </span>
-              <span className="text-text-secondary">Time:&nbsp;
-                <span className="text-text">{chainInfo.loading ? '…' : (chainInfo.timestamp != null ? new Date(chainInfo.timestamp).toUTCString().replace(' GMT', ' UTC') : '—')}</span>
-              </span>
-            </div>
+            <div className="xl:hidden">{liveChainSnapshot}</div>
 
-            <div>
-              <p className="section-label">RPC Configuration</p>
-              <h3 className="mt-2 font-headline text-2xl font-bold text-text">Archive node query</h3>
-            </div>
+            <div className="rounded-[1.5rem] bg-card/75 p-5 shadow-inset-soft">
+              <div>
+                <div>
+                  <p className="section-label">RPC Configuration</p>
+                  <h3 className="mt-2 font-headline text-2xl font-bold text-text">Archive node query</h3>
+                  <p className="mt-2 max-w-2xl section-subtitle">
+                    Enter a relaychain address, decide whether to include historical pool activity, and choose the era window to compute.
+                  </p>
+                </div>
+              </div>
 
             {/* Address */}
-            <div className="space-y-1.5">
-              <label className="input-label">Relaychain Wallet Address</label>
+            <div className="mt-5 rounded-[1.25rem] bg-surface px-4 py-4">
+              <p className="text-sm font-semibold text-text">Relaychain Wallet Address</p>
+              <p className="mt-2 text-sm leading-6 text-text-secondary">
+                Enter the relaychain account you want to analyze.
+              </p>
               <input type="text" value={address}
                 onChange={e => setAddress(e.target.value)}
                 placeholder="en…" disabled={isLoading}
-                className={`w-full input-field font-mono ${addrErr ? 'ring-1 ring-danger/60' : ''}`}
+                className={`mt-4 w-full input-field font-mono ${addrErr ? 'ring-1 ring-danger/60' : ''}`}
                 maxLength={60} />
               {addrErr && (
-                <p className="flex items-center gap-1 text-xs text-danger">
-                  <AlertTriangle size={11} className="flex-shrink-0" />{addrErr}
+                <p className="mt-2 flex items-center gap-1.5 text-xs leading-5 text-danger">
+                  <AlertTriangle size={12} className="flex-shrink-0" />{addrErr}
                 </p>
-              )}
+            )}
             </div>
 
             {/* Pool scope toggle */}
-            <div className="p-3 rounded-lg bg-card space-y-1">
+            <div className="mt-5 rounded-[1.25rem] bg-surface px-4 py-4 space-y-2">
               <div className="flex items-center gap-2.5">
                 <button
                   type="button"
@@ -1458,35 +1486,60 @@ export default function RewardHistoryViewer() {
                   <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200
                     ${includeHistory ? 'translate-x-5' : 'translate-x-0'}`} />
                 </button>
-                <span className="text-xs font-medium text-text">Include past pool interactions</span>
+                <span className="text-sm font-semibold text-text">Include past pool interactions</span>
               </div>
-              <p className="text-[11px] text-text-secondary leading-relaxed">
-                When enabled, also queries Subscan for pools this address
-                has ever interacted with (bond, unbond, withdraw). Useful
-                if you have exited a pool but want rewards from those eras.
+              <p className="text-sm leading-6 text-text-secondary">
+                Also query historical pool bond, unbond, and withdraw activity through Subscan when you want to include previously exited pools.
               </p>
             </div>
 
             {/* Range mode toggle */}
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="input-label">Query Mode</span>
-              <div className="flex rounded-lg bg-card overflow-hidden">
-                <button type="button" onClick={() => setRangeMode('era')} disabled={isLoading}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors
-                    ${rangeMode==='era'?'bg-surface-bright text-cyan':'text-muted hover:text-text'}`}>
-                  Era Range
-                </button>
-                <button type="button" onClick={() => setRangeMode('date')} disabled={isLoading}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors
-                    ${rangeMode==='date'?'bg-surface-bright text-cyan':'text-muted hover:text-text'}`}>
-                  <Calendar size={12} /> Date Range
-                </button>
+            <div className="mt-5 rounded-[1.25rem] bg-surface px-4 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="max-w-xl">
+                  <p className="text-sm font-semibold text-text">Query Mode</p>
+                  <p className="mt-2 text-sm leading-6 text-text-secondary">
+                    Use era numbers when you know the ledger window, or switch to date mode for a faster time-based estimate.
+                  </p>
+                </div>
               </div>
+              <div className="range-mode-grid mt-4 sm:grid-cols-2">
+                {REWARD_RANGE_MODE_OPTIONS.map(option => {
+                  const isActive = rangeMode === option.key
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => setRangeMode(option.key)}
+                      disabled={isLoading}
+                      className={`range-mode-option ${isActive ? 'range-mode-option-active' : 'range-mode-option-idle'}`}
+                    >
+                      <span className="range-mode-badge" aria-hidden="true">{option.badge}</span>
+                      <span className="min-w-0">
+                        <span className={`block text-sm font-semibold ${isActive ? 'text-text' : 'text-text-secondary'}`}>
+                          {option.title}
+                        </span>
+                        <span className={`mt-1 block text-xs leading-5 ${isActive ? 'text-text-secondary' : 'text-muted'}`}>
+                          {option.description}
+                        </span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
             </div>
 
             {/* Era range inputs */}
             {rangeMode === 'era' && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="range-params-card space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="section-label">Range Parameters</p>
+                    <h4 className="mt-1 text-base font-semibold text-text">Era Range Inputs</h4>
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <label className="input-label">Start Era</label>
                   <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
@@ -1502,12 +1555,19 @@ export default function RewardHistoryViewer() {
                     className="w-full input-field font-mono" />
                 </div>
                 {eraValidErr && <p className="col-span-2 flex items-center gap-1 text-xs text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{eraValidErr}</p>}
+                </div>
               </div>
             )}
 
             {/* Date range inputs */}
             {rangeMode === 'date' && (
-              <div className="space-y-3">
+              <div className="range-params-card space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="section-label">Range Parameters</p>
+                    <h4 className="mt-1 text-base font-semibold text-text">Date Range Inputs</h4>
+                  </div>
+                </div>
                 {/* Quick presets */}
                 <div>
                   <span className="input-label">Quick Range</span>
@@ -1516,16 +1576,15 @@ export default function RewardHistoryViewer() {
                       <button key={label} type="button"
                         onClick={() => applyDatePreset(days, label)}
                         disabled={isLoading}
-                        className={`px-2.5 py-1 rounded-md text-[11px] transition-colors disabled:opacity-50
-                          ${activePreset===label
-                            ?'bg-primary/15 text-primary font-semibold'
-                            :'bg-card text-text-secondary hover:bg-surface-bright hover:text-text'}`}>
+                        className={`range-preset-button ${
+                          activePreset === label ? 'range-preset-button-active' : 'range-preset-button-idle'
+                        }`}>
                         {label} ago
                       </button>
                     ))}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <label className="input-label">Start Date</label>
                     <input type="date" placeholder="2026-03-01" max={toDateInput(new Date())} value={startDate}
@@ -1545,17 +1604,8 @@ export default function RewardHistoryViewer() {
               </div>
             )}
 
-            {/* ── Disclaimer — Archive RPC ──────────────────────────── */}
-            <div className="flex gap-2.5 p-3 rounded-lg bg-card border border-surface-bright text-[11px] leading-relaxed">
-              <Info size={13} className="text-text-secondary flex-shrink-0 mt-0.5" />
-              <p className="text-text-secondary">
-                Rewards are computed directly from the Archive RPC endpoint — computation time
-                increases with the number of eras and pools queried.
-              </p>
-            </div>
-
             {/* Action button — single slot: Stop → Reset → Compute Rewards */}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {isLoading ? (
                 <button onClick={stop} className="btn-danger gap-1.5 px-5">
                   <Square size={14} />Stop
@@ -1570,9 +1620,17 @@ export default function RewardHistoryViewer() {
                   <Play size={14} />Compute Rewards
                 </button>
               )}
+              {estimatedEraSpan != null && !((rangeMode === 'era' && eraValidErr) || (rangeMode === 'date' && dateValidErr)) && (
+                <span className="text-xs font-mono text-text-secondary">
+                  <span className="flex items-center gap-2">
+                    <span>{rangeMode === 'date' ? `~${estimatedEraSpan.toLocaleString('en')} era estimates` : `${estimatedEraSpan.toLocaleString('en')} eras selected`}</span>
+                  </span>
+                </span>
+              )}
             </div>
           </div>
-          <div className="mt-4 lg:mt-0">
+          <div className="mt-4 space-y-4 xl:mt-0">
+            <div className="hidden xl:block">{liveChainSnapshot}</div>
             <PhaseProgressCards
               eyebrow="Computation Progress"
               indexLabel="Phase"
@@ -1651,7 +1709,7 @@ export default function RewardHistoryViewer() {
             <PoolBondedPieChart data={filteredRows} />
             <PoolRewardPieChart data={filteredRows} />
           </div>
-          {!importedResults && <RewardExportPanel results={activeResults} address={address} />}
+          {!importedResults && !isLoading && <RewardExportPanel results={activeResults} address={address} />}
           {importedResults && <RewardExportPanel results={activeResults} address={importedAddress} />}
           {importedResults && (
             <div className="flex items-center gap-2 text-xs text-text-secondary px-1">

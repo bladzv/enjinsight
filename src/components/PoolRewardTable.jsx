@@ -271,7 +271,7 @@ function BreakdownDetail({ era, bd, colSpan }) {
                       <tr key={`${era}-r-${v.address}`} className="hover:bg-surface-bright transition-colors">
                         <td className="px-2 py-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-text-secondary font-mono text-[11px] truncate">{v.display || truncateAddress(v.address)}</span>
+                            <span className="text-text-secondary font-mono text-[11px] break-words">{v.display || truncateAddress(v.address)}</span>
                             <a
                               href={validatorExplorerUrl(v.address)}
                               target="_blank"
@@ -299,9 +299,9 @@ function BreakdownDetail({ era, bd, colSpan }) {
               </p>
               <ul className="space-y-0.5 ml-4">
                 {activeUnrewarded.map(v => (
-                  <li key={`${era}-u-${v.address}`} className="text-text-secondary font-mono text-[11px] truncate">
+                  <li key={`${era}-u-${v.address}`} className="text-text-secondary font-mono text-[11px] break-words">
                     <div className="flex items-center gap-2">
-                      <span className="truncate">{v.display || truncateAddress(v.address)}</span>
+                      <span className="break-words">{v.display || truncateAddress(v.address)}</span>
                       <a
                         href={validatorExplorerUrl(v.address)}
                         target="_blank"
@@ -325,9 +325,9 @@ function BreakdownDetail({ era, bd, colSpan }) {
               </p>
               <ul className="space-y-0.5 ml-4">
                 {inactiveUnrewarded.map(v => (
-                  <li key={`${era}-i-${v.address}`} className="text-muted font-mono text-[11px] truncate">
+                  <li key={`${era}-i-${v.address}`} className="text-muted font-mono text-[11px] break-words">
                     <div className="flex items-center gap-2">
-                      <span className="truncate">{v.display || truncateAddress(v.address)}</span>
+                      <span className="break-words">{v.display || truncateAddress(v.address)}</span>
                       <a
                         href={validatorExplorerUrl(v.address)}
                         target="_blank"

@@ -118,6 +118,8 @@ function reducer(state, action) {
       return { ...state, csvCount: action.count }
     case 'SET_PROGRESS':
       return { ...state, progress: action.payload }
+    case 'SET_RESULTS':
+      return { ...state, results: action.results }
     case 'LOG': {
       const next = [...state.logs, action.payload]
       return { ...state, logs: next.length > LOG_CAP ? next.slice(-LOG_CAP) : next }
@@ -996,6 +998,7 @@ export function useRewardHistory() {
           eraStartBlock:   startBlock,
           eraStartDateUtc: startDateUtc,
         })
+        dispatch({ type: 'SET_RESULTS', results: [...results] })
 
         logFn('OK', `Era ${era} Pool #${pool.poolId}: reward ${fmtEnj(reward)} ENJ (APY ~${apy.toFixed(2)}%)`)
         patchPhase('rewards', { completed: i + 1 })
