@@ -69,7 +69,7 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
           <article key={`m-${v.address || i}`} className="rounded-xl bg-card p-3">
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted">#{page * pageSize + i + 1}</span>
-              <span className="font-mono text-text-secondary text-xs truncate">{truncateAddress(v.address)}</span>
+              <span className="font-mono text-text-secondary text-xs break-all">{truncateAddress(v.address)}</span>
               <button
                 onClick={() => copyAddr(v.address)}
                 className="btn-icon"
@@ -91,7 +91,7 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
               </a>
             </div>
             <div className="mt-2 flex items-center justify-between gap-2">
-              <p className="text-xs text-text-secondary truncate">{v.display || '—'}</p>
+              <p className="text-xs text-text-secondary break-words">{v.display || '—'}</p>
               {v.isActive
                 ? <span className="badge-active"><Shield size={10} />Active</span>
                 : <span className="badge-waiting"><Clock size={10} />Inactive</span>

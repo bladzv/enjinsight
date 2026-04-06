@@ -157,7 +157,7 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
             : <CheckCircle size={14} className="text-success flex-shrink-0 mt-0.5" />}
           <div className="min-w-0 space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-text/80 truncate max-w-[220px]">{fileStatus.name}</span>
+              <span className="max-w-full break-all font-mono text-text/80">{fileStatus.name}</span>
               {fileStatus.ext && (
                 <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest flex-shrink-0
                   ${fileStatus.rejected ? 'bg-danger/15 text-danger' : 'bg-success/15 text-success'}`}>

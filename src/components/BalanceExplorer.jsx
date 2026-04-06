@@ -15,12 +15,11 @@
  */
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { fetchLiveChainInfo } from '../utils/chainInfo.js'
-import { Activity, AlertTriangle, Calendar, ChevronDown, Info, RotateCcw, Server, Sparkles, Square, Upload } from 'lucide-react'
+import { Activity, AlertTriangle, ChevronDown, Info, RotateCcw, Server, Sparkles, Square, Upload } from 'lucide-react'
 import { fmtENJ } from '../utils/balanceExport.js'
 import useBalanceExplorer, { STATUS } from '../hooks/useBalanceExplorer.js'
 import { ENJIN_NETWORKS, MAX_RPC_CALLS } from '../constants.js'
 import { fetchEraBoundariesFromRpc } from '../utils/eraRpc.js'
-import { truncateAddress } from '../utils/format.js'
 import BalanceChart       from './BalanceChart.jsx'
 import BalanceTable       from './BalanceTable.jsx'
 import BalanceExportPanel from './BalanceExportPanel.jsx'
@@ -210,6 +209,48 @@ const TABS = [
   { key: 'import', label: 'Import Data', icon: Upload },
 ]
 
+function buildEstimateMeta(calls) {
+  if (!Number.isFinite(calls) || calls <= 0) return { estCalls: null, estTimeLabel: null }
+  const secs = Math.round(calls * 0.6 + 2.5)
+  let label
+  if (secs < 5) label = '< 5s'
+  else if (secs < 60) label = `~${secs}s`
+  else if (secs < 3600) label = `~${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, '0')}s`
+  else label = `~${Math.floor(secs / 3600)}h ${String(Math.floor((secs % 3600) / 60)).padStart(2, '0')}m`
+  return { estCalls: calls, estTimeLabel: label }
+}
+
+function estimateRangeCalls({ rangeMode, startBlock, endBlock, startEraNum, endEraNum, startDate, endDate, step }) {
+  const stepValue = parseInt(step, 10)
+  if (!Number.isFinite(stepValue) || stepValue <= 0) return { estCalls: null, estTimeLabel: null }
+
+  if (rangeMode === 'block') {
+    const s = parseInt(startBlock, 10)
+    const e = parseInt(endBlock, 10)
+    if (!Number.isFinite(s) || !Number.isFinite(e) || s > e) return { estCalls: null, estTimeLabel: null }
+    return buildEstimateMeta(Math.ceil((e - s) / stepValue) + 1)
+  }
+
+  if (rangeMode === 'era') {
+    const s = parseInt(startEraNum, 10)
+    const e = parseInt(endEraNum, 10)
+    if (!Number.isFinite(s) || !Number.isFinite(e) || s > e) return { estCalls: null, estTimeLabel: null }
+    return buildEstimateMeta(Math.ceil((e - s) / stepValue) + 1)
+  }
+
+  if (rangeMode === 'date') {
+    const startMs = new Date(startDate).getTime()
+    const endMs = new Date(endDate).getTime()
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs > endMs) {
+      return { estCalls: null, estTimeLabel: null }
+    }
+    const spanDays = Math.round((endMs - startMs) / 86_400_000)
+    return buildEstimateMeta(Math.ceil(spanDays / stepValue) + 1)
+  }
+
+  return { estCalls: null, estTimeLabel: null }
+}
+
 export default function BalanceExplorer() {
   const [tab, setTab] = useState('query')
   const [showImportResults, setShowImportResults] = useState(false)
@@ -247,6 +288,11 @@ export default function BalanceExplorer() {
   const activeNetwork        = PRESET_NETWORKS.find(n => n.key === networkKey) ?? PRESET_NETWORKS[0]
   const endpoint             = activeNetwork.endpoint
   const isDateRangeSupported = activeNetwork.supportsDateRange === true
+
+  function clearResolvedRange() {
+    setStartBlock('')
+    setEndBlock('')
+  }
 
   // Reset era/date modes when switching to a network without CSV support
   useEffect(() => {
@@ -351,6 +397,22 @@ export default function BalanceExplorer() {
   const displayTitle   = phases.length > 0 ? progressTitle   : 'Ready to query'
   const displaySummary = phases.length > 0 ? progressSummary : null
   const displayMeta    = phases.length > 0 ? progressMeta    : null
+  const liveChainSnapshot = (
+    <div className="grid gap-3 sm:grid-cols-3">
+      <div className="metric-card metric-card-left-cyan">
+        <p className="metric-label">Live Era</p>
+        <p className="metric-value text-cyan">{chainInfo.loading ? '…' : (chainInfo.era != null ? chainInfo.era.toLocaleString() : '—')}</p>
+      </div>
+      <div className="metric-card metric-card-left-primary">
+        <p className="metric-label">Live Block</p>
+        <p className="metric-value text-text">{chainInfo.loading ? '…' : (chainInfo.block != null ? chainInfo.block.toLocaleString() : '—')}</p>
+      </div>
+      <div className="metric-card metric-card-left-warning">
+        <p className="metric-label">RPC Time (UTC)</p>
+        <p className="mt-3 text-sm font-mono text-text">{chainInfo.loading ? '…' : (chainInfo.timestamp != null ? new Date(chainInfo.timestamp).toUTCString().replace(' GMT', ' UTC') : '—')}</p>
+      </div>
+    </div>
+  )
 
   async function handleFetch() {
     let effStart = startBlock
@@ -426,6 +488,7 @@ export default function BalanceExplorer() {
     setStartDate(toDateInput(from))
     setEndDate(toDateInput(now))
     setActivePreset(label)
+    clearResolvedRange()
   }
 
   function handleImport(text, ext, fname) {
@@ -449,22 +512,16 @@ export default function BalanceExplorer() {
   }
 
   // Estimate RPC calls
-  const { estCalls, estTimeLabel } = (() => {
-    // require a filled step input before estimating
-    if (step === '' || step == null) return { estCalls: null, estTimeLabel: null }
-    const s  = parseInt(startBlock, 10)
-    const e  = parseInt(endBlock,   10)
-    const st = parseInt(step, 10)
-    if (!Number.isFinite(s) || !Number.isFinite(e) || s > e || !Number.isFinite(st) || st <= 0) return { estCalls: null, estTimeLabel: null }
-    const calls = Math.min(Math.ceil((e - s) / st) + 1, MAX_RPC_CALLS + 1)
-    const secs = Math.round(calls * 0.60 + 2.5)
-    let label
-    if (secs < 5)         label = '< 5s'
-    else if (secs < 60)   label = `~${secs}s`
-    else if (secs < 3600) label = `~${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, '0')}s`
-    else                  label = `~${Math.floor(secs / 3600)}h ${String(Math.floor((secs % 3600) / 60)).padStart(2, '0')}m`
-    return { estCalls: calls, estTimeLabel: label }
-  })()
+  const { estCalls, estTimeLabel } = estimateRangeCalls({
+    rangeMode,
+    startBlock,
+    endBlock,
+    startEraNum,
+    endEraNum,
+    startDate,
+    endDate,
+    step,
+  })
 
   const blks    = hasResults ? records.map(d => d.block) : []
   const minBlk  = hasResults ? Math.min(...blks) : null
@@ -522,6 +579,11 @@ export default function BalanceExplorer() {
   const stepPlaceholder = rangeMode === 'date' ? '1' :
                           rangeMode === 'era'  ? '1' : '14400'
   const rangeModeLabel = rangeMode === 'date' ? 'Date Range' : rangeMode === 'era' ? 'Era Range' : 'Block Range'
+  const rangeModeOptions = [
+    { key: 'block', badge: 'BLK', title: 'Block Range', description: 'Query exact archive block heights.' },
+    { key: 'era', badge: 'ERA', title: 'Era Range', description: 'Resolve the window through staking eras.' },
+    { key: 'date', badge: 'DAY', title: 'Date Range', description: 'Pick dates and let the app resolve blocks.' },
+  ]
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -594,117 +656,140 @@ export default function BalanceExplorer() {
         {/* ── Query pane ───────────────────────────────────────── */}
         {tab === 'query' && (
           <div role="tabpanel" className="p-4 sm:p-6">
-          <div className="lg:grid lg:grid-cols-[minmax(0,36rem)_1fr] lg:gap-6 lg:items-start">
-          <div className="space-y-4">
+            <div className="space-y-4">
+              <div className="xl:hidden">{liveChainSnapshot}</div>
 
-            {/* Section heading */}
-            {/* ── Live chain snapshot ──────────────────────────────── */}
-            <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-[1.25rem] bg-card px-4 py-3 text-[11px] font-mono shadow-inset-soft">
-              <span className="text-text-secondary">Era:&nbsp;
-                <span className="text-cyan">{chainInfo.loading ? '…' : (chainInfo.era != null ? chainInfo.era.toLocaleString() : '—')}</span>
-              </span>
-              <span className="text-text-secondary">Block:&nbsp;
-                <span className="text-text">{chainInfo.loading ? '…' : (chainInfo.block != null ? chainInfo.block.toLocaleString() : '—')}</span>
-              </span>
-              <span className="text-text-secondary">Time:&nbsp;
-                <span className="text-text">{chainInfo.loading ? '…' : (chainInfo.timestamp != null ? new Date(chainInfo.timestamp).toUTCString().replace(' GMT', ' UTC') : '—')}</span>
-              </span>
-            </div>
+              <div className="xl:grid xl:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)] xl:gap-6 xl:items-start">
+                <div className="rounded-[1.5rem] bg-card/75 p-5 shadow-inset-soft xl:self-start">
+                  <div>
+                    <p className="section-label">RPC Configuration</p>
+                    <h3 className="mt-2 font-headline text-2xl font-bold text-text">Query archive node</h3>
+                    <p className="mt-2 max-w-2xl section-subtitle">
+                      Pick an archive network, enter a wallet address, then choose how the history window should be resolved.
+                    </p>
+                  </div>
 
-            <div>
-              <p className="section-label">RPC Configuration</p>
-              <h3 className="mt-2 font-headline text-2xl font-bold text-text">Query archive node</h3>
-            </div>
+                  <div className="mt-5 grid gap-3">
+                    <div className="rounded-[1.25rem] bg-surface px-4 py-4">
+                      <p className="text-sm font-semibold text-text">Archive Network</p>
+                      <p className="mt-2 text-sm leading-6 text-text-secondary">
+                        Select one of the bundled archive endpoints for the network you want to inspect.
+                      </p>
+                      <div className="relative mt-4">
+                        <select
+                          id="bal-rpc-net"
+                          value={networkKey}
+                          onChange={e => {
+                            setNetworkKey(e.target.value)
+                            clearResolvedRange()
+                          }}
+                          disabled={isLoading}
+                          className="w-full select-field appearance-none pr-8"
+                        >
+                          {PRESET_NETWORKS.map(n => (
+                            <option key={n.key} value={n.key}>{n.label}</option>
+                          ))}
+                        </select>
+                        <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-text-secondary" />
+                      </div>
+                      <p className="section-label mt-4">Endpoint</p>
+                      <p className="mt-2 break-all rounded-xl bg-card px-3 py-3 font-mono text-sm text-text-secondary" title={activeNetwork.endpoint}>
+                        {activeNetwork.endpoint}
+                      </p>
+                    </div>
 
-            {/* Network dropdown + address */}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label htmlFor="bal-rpc-net" className="input-label">
-                  Archive Node WS Endpoint
-                </label>
-                <div className="relative">
-                  <select
-                    id="bal-rpc-net"
-                    value={networkKey}
-                    onChange={e => setNetworkKey(e.target.value)}
-                    disabled={isLoading}
-                    className="w-full select-field appearance-none pr-8"
-                  >
-                    {PRESET_NETWORKS.map(n => (
-                      <option key={n.key} value={n.key}>{n.label}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-text-secondary" />
+                    <div className="rounded-[1.25rem] bg-surface px-4 py-4">
+                      <p className="text-sm font-semibold text-text">Wallet Address</p>
+                      <p className="mt-2 text-sm leading-6 text-text-secondary">
+                        Enter the SS58 address you want to inspect.
+                      </p>
+                      <input
+                        id="bal-addr"
+                        type="text"
+                        maxLength={64}
+                        autoComplete="off"
+                        spellCheck="false"
+                        placeholder={`${ADDR_PREFIX_MAP[activeNetwork.key]?.prefix ?? ''}...`}
+                        value={address}
+                        onChange={e => setAddress(e.target.value)}
+                        disabled={isLoading}
+                        className={`mt-4 ${inputField} ${addressNote?.type === 'error' ? 'border-danger/50 focus:border-danger/70' : ''}`}
+                      />
+                      {addressNote?.type === 'error' && (
+                        <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-danger">
+                          <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
+                          <span>{addressNote.msg}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    {isDateRangeSupported && (
+                      <div className="rounded-[1.25rem] bg-surface px-4 py-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="max-w-xl">
+                            <p className="text-sm font-semibold text-text">Query Range</p>
+                            <p className="mt-2 text-sm leading-6 text-text-secondary">
+                              Choose whether the history window should be resolved from blocks, eras, or dates.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="range-mode-grid mt-4 sm:grid-cols-3">
+                          {rangeModeOptions.map(option => {
+                            const isActive = rangeMode === option.key
+                            return (
+                              <button
+                                key={option.key}
+                                type="button"
+                                onClick={() => {
+                                  if (option.key === 'block') setStep('')
+                                  else setStep('1')
+                                  setRangeMode(option.key)
+                                  clearResolvedRange()
+                                }}
+                                disabled={isLoading}
+                                className={`range-mode-option ${isActive ? 'range-mode-option-active' : 'range-mode-option-idle'}`}
+                              >
+                                <span className="range-mode-badge" aria-hidden="true">{option.badge}</span>
+                                <span className="min-w-0">
+                                  <span className={`block text-sm font-semibold ${isActive ? 'text-text' : 'text-text-secondary'}`}>
+                                    {option.title}
+                                  </span>
+                                  <span className={`mt-1 block text-xs leading-5 ${isActive ? 'text-text-secondary' : 'text-muted'}`}>
+                                    {option.description}
+                                  </span>
+                                </span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <p className="mt-1.5 text-[11px] font-mono text-muted truncate" title={activeNetwork.endpoint}>
-                  {activeNetwork.endpoint}
-                </p>
-              </div>
-              <div>
-                <label htmlFor="bal-addr" className="input-label">
-                  Wallet Address (SS58)
-                </label>
-                <input
-                  id="bal-addr"
-                  type="text"
-                  maxLength={64}
-                  autoComplete="off"
-                  spellCheck="false"
-                  placeholder={`${ADDR_PREFIX_MAP[activeNetwork.key]?.prefix ?? ''}...`}
-                  value={address}
-                  onChange={e => setAddress(e.target.value)}
-                  disabled={isLoading}
-                  className={`${inputField} ${addressNote?.type === 'error' ? 'border-danger/50 focus:border-danger/70' : ''}`}
-                />
-                {addressNote?.type === 'error' && (
-                  <p className="mt-1.5 flex items-start gap-1 text-[11px] font-mono text-danger leading-snug">
-                    <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" />
-                    <span>{addressNote.msg}</span>
-                  </p>
-                )}
-              </div>
-            </div>
 
-            {/* ── Range mode toggle ─────────────────────────────────────── */}
-            {isDateRangeSupported && (
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary">Query Range</span>
-                <div className="flex rounded-xl bg-card p-1 overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => { setRangeMode('block'); setStep('') }}
-                    disabled={isLoading}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors
-                      ${rangeMode === 'block' ? 'bg-primary/15 text-primary' : 'text-muted hover:text-text'}`}
-                  >
-                    Block Range
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setRangeMode('era'); setStep('1') }}
-                    disabled={isLoading}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors
-                      ${rangeMode === 'era' ? 'bg-primary/15 text-primary' : 'text-muted hover:text-text'}`}
-                  >
-                    Era Range
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setRangeMode('date'); setStep('1') }}
-                    disabled={isLoading}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors
-                      ${rangeMode === 'date' ? 'bg-primary/15 text-primary' : 'text-muted hover:text-text'}`}
-                  >
-                    <Calendar size={12} />
-                    Date Range
-                  </button>
+                <div className="mt-4 space-y-4 xl:mt-0 xl:self-start">
+                  <div className="hidden xl:block">{liveChainSnapshot}</div>
+                  <PhaseProgressCards
+                    eyebrow="Query Progress"
+                    indexLabel="Phase"
+                    title={displayTitle}
+                    summary={displaySummary}
+                    meta={displayMeta}
+                    phases={displayPhases}
+                    ariaLabel="Balance query progress"
+                  />
                 </div>
               </div>
-            )}
 
-            {/* ── Era range inputs (Relaychain era mode) ──────────── */}
-            {rangeMode === 'era' && (
-              <div className="space-y-3">
+              {/* ── Era range inputs (Relaychain era mode) ──────────── */}
+              {rangeMode === 'era' && (
+                <div className="range-params-card space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="section-label">Range Parameters</p>
+                    <h4 className="mt-1 text-base font-semibold text-text">Era Range Inputs</h4>
+                  </div>
+                </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div>
                     <label htmlFor="bal-start-era" className="input-label">
@@ -716,7 +801,10 @@ export default function BalanceExplorer() {
                       placeholder="1000"
                       min={1} max={chainInfo.era ?? undefined} step={1}
                       value={startEraNum}
-                      onChange={e => setStartEraNum(e.target.value)}
+                      onChange={e => {
+                        setStartEraNum(e.target.value)
+                        clearResolvedRange()
+                      }}
                       disabled={isLoading}
                       className={inputField}
                     />
@@ -731,7 +819,10 @@ export default function BalanceExplorer() {
                       placeholder="1010"
                       min={1} max={chainInfo.era ?? undefined} step={1}
                       value={endEraNum}
-                      onChange={e => setEndEraNum(e.target.value)}
+                      onChange={e => {
+                        setEndEraNum(e.target.value)
+                        clearResolvedRange()
+                      }}
                       disabled={isLoading}
                       className={inputField}
                     />
@@ -770,12 +861,18 @@ export default function BalanceExplorer() {
                     <span className="text-cyan">{Number(endBlock).toLocaleString('en')}</span>
                   </p>
                 )}
-              </div>
-            )}
+                </div>
+              )}
 
-            {/* ── Block range inputs ─────────────────────────── */}
-            {rangeMode === 'block' && (
-              <div className="space-y-2">
+              {/* ── Block range inputs ─────────────────────────── */}
+              {rangeMode === 'block' && (
+                <div className="range-params-card space-y-2">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="section-label">Range Parameters</p>
+                    <h4 className="mt-1 text-base font-semibold text-text">Block Range Inputs</h4>
+                  </div>
+                </div>
                 <div className="grid gap-3 sm:grid-cols-3">
                 <div>
                   <label htmlFor="bal-start" className="input-label">
@@ -828,12 +925,18 @@ export default function BalanceExplorer() {
                     <AlertTriangle size={11} className="flex-shrink-0" />{blockErr}
                   </p>
                 )}
-              </div>
-            )}
+                </div>
+              )}
 
-            {/* ── Date range inputs ─────────────────────────── */}
-            {rangeMode === 'date' && (
-              <div className="space-y-3">
+              {/* ── Date range inputs ─────────────────────────── */}
+              {rangeMode === 'date' && (
+                <div className="range-params-card space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="section-label">Range Parameters</p>
+                    <h4 className="mt-1 text-base font-semibold text-text">Date Range Inputs</h4>
+                  </div>
+                </div>
                 {/* Quick presets */}
                 <div>
                   <span className="input-label">Quick Range</span>
@@ -844,10 +947,9 @@ export default function BalanceExplorer() {
                         type="button"
                         onClick={() => applyDatePreset(days, label)}
                         disabled={isLoading}
-                        className={`px-2.5 py-1 rounded-md text-[11px] transition-colors disabled:opacity-50
-                          ${activePreset === label
-                            ? 'bg-primary/15 text-primary font-semibold'
-                            : 'bg-card text-text-secondary hover:text-text'}`}
+                        className={`range-preset-button ${
+                          activePreset === label ? 'range-preset-button-active' : 'range-preset-button-idle'
+                        }`}
                       >
                         {label} ago
                       </button>
@@ -867,7 +969,11 @@ export default function BalanceExplorer() {
                       placeholder="2026-03-01"
                       max={toDateInput(new Date())}
                       value={startDate}
-                      onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
+                      onChange={e => {
+                        setStartDate(e.target.value)
+                        setActivePreset(null)
+                        clearResolvedRange()
+                      }}
                       disabled={isLoading}
                       className={`${inputField} [color-scheme:dark]`}
                     />
@@ -882,7 +988,11 @@ export default function BalanceExplorer() {
                       placeholder="2026-03-04"
                       max={toDateInput(new Date())}
                       value={endDate}
-                      onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
+                      onChange={e => {
+                        setEndDate(e.target.value)
+                        setActivePreset(null)
+                        clearResolvedRange()
+                      }}
                       disabled={isLoading}
                       className={`${inputField} [color-scheme:dark]`}
                     />
@@ -924,93 +1034,84 @@ export default function BalanceExplorer() {
                     <span className="text-cyan">{Number(endBlock).toLocaleString('en')}</span>
                   </p>
                 )}
+                </div>
+              )}
+
+              <div className="rounded-[1.25rem] border border-cyan/10 bg-card/75 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-2xl bg-cyan/10 text-cyan">
+                    <Info size={16} />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="section-label text-cyan">Query Notes</p>
+                    <p className="text-sm leading-6 text-text-secondary">
+                      Archive RPC queries take longer over wide ranges. Narrowing the window or increasing the step reduces query time and sample count.
+                    </p>
+                  </div>
+                </div>
               </div>
-            )}
 
-            {/* ── Disclaimer — Archive RPC ─────────────────── */}
-            <div className="flex gap-2.5 p-3 rounded-lg bg-card border border-surface-bright text-[11px] leading-relaxed">
-              <Info size={13} className="text-text-secondary flex-shrink-0 mt-0.5" />
-              <p className="text-text-secondary">
-                Balance data is fetched directly from the Archive RPC endpoint — queries may
-                take time, especially over a wide range. Narrowing the range or increasing the
-                step will reduce query time.
-              </p>
-            </div>
-
-            {/* Error banner */}
-            {status === STATUS.ERROR && errorMsg && (
-              <div
-                role="alert"
-                className="flex gap-3 px-4 py-3 rounded-xl bg-danger/10 animate-fade-in"
-              >
-                <AlertTriangle size={16} className="text-danger flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-danger leading-relaxed">{errorMsg}</p>
-              </div>
-            )}
-
-            {/* Action row */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-              {isLoading ? (
-                <button onClick={cancel} className="btn-stop w-full sm:w-auto sm:min-w-[200px]">
-                  <Square size={14} />
-                  STOP
-                </button>
-              ) : hasResults ? (
-                <button onClick={() => { reset(); setQueriedAddress('') }} className="btn-primary w-full sm:w-auto sm:min-w-[200px]">
-                  <RotateCcw size={14} />
-                  RESET
-                </button>
-              ) : (
-                <button
-                  onClick={handleFetch}
-                  className="btn-primary w-full sm:w-auto sm:min-w-[200px]"
-                  disabled={
-                    !address.trim() ||
-                    addressNote?.type === 'error' ||
-                    (step === '' || step == null) ||
-                    (rangeMode === 'block' ? (!startBlock || !endBlock || !!blockErr) :
-                     rangeMode === 'era'   ? (!startEraNum || !endEraNum || !!eraValidErr) :
-                                            (!startDate || !endDate || !!dateValidErr))
-                  }
+              {/* Error banner */}
+              {status === STATUS.ERROR && errorMsg && (
+                <div
+                  role="alert"
+                  className="flex gap-3 px-4 py-3 rounded-xl bg-danger/10 animate-fade-in"
                 >
-                  <Activity size={14} />
-                  Fetch Balance
-                </button>
+                  <AlertTriangle size={16} className="text-danger flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-danger leading-relaxed">{errorMsg}</p>
+                </div>
               )}
-              {estCalls != null && addressNote?.type !== 'error' && step !== '' && step != null && !(rangeMode === 'block' ? !!blockErr : rangeMode === 'era' ? !!eraValidErr : !!dateValidErr) && (
-                <span className="text-xs font-mono text-text-secondary">
-                  {estCalls > MAX_RPC_CALLS
-                    ? (
-                      <span className="text-warning flex items-center gap-1">
-                        <AlertTriangle size={11} />
-                        {estCalls.toLocaleString('en')}+ calls — exceeds {MAX_RPC_CALLS.toLocaleString('en')} limit
-                      </span>
-                    )
-                    : (
-                      <span className="flex items-center gap-2">
-                        <span>~{estCalls.toLocaleString('en')} RPC calls</span>
-                        <span className="text-muted">·</span>
-                        <span className="text-cyan/80">{estTimeLabel}</span>
-                      </span>
-                    )
-                  }
-                </span>
-              )}
-            </div>
 
-          </div>
-          <div className="mt-4 lg:mt-0">
-            <PhaseProgressCards
-              eyebrow="Query Progress"
-              indexLabel="Phase"
-              title={displayTitle}
-              summary={displaySummary}
-              meta={displayMeta}
-              phases={displayPhases}
-              ariaLabel="Balance query progress"
-            />
-          </div>
-          </div>
+              {/* Action row */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                {isLoading ? (
+                  <button onClick={cancel} className="btn-stop w-full sm:w-auto sm:min-w-[200px]">
+                    <Square size={14} />
+                    STOP
+                  </button>
+                ) : hasResults ? (
+                  <button onClick={() => { reset(); setQueriedAddress('') }} className="btn-primary w-full sm:w-auto sm:min-w-[200px]">
+                    <RotateCcw size={14} />
+                    RESET
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleFetch}
+                    className="btn-primary w-full sm:w-auto sm:min-w-[200px]"
+                    disabled={
+                      !address.trim() ||
+                      addressNote?.type === 'error' ||
+                      (step === '' || step == null) ||
+                      (rangeMode === 'block' ? (!startBlock || !endBlock || !!blockErr) :
+                       rangeMode === 'era'   ? (!startEraNum || !endEraNum || !!eraValidErr) :
+                                              (!startDate || !endDate || !!dateValidErr))
+                    }
+                  >
+                    <Activity size={14} />
+                    Fetch Balance
+                  </button>
+                )}
+                {estCalls != null && addressNote?.type !== 'error' && step !== '' && step != null && !(rangeMode === 'block' ? !!blockErr : rangeMode === 'era' ? !!eraValidErr : !!dateValidErr) && (
+                  <span className="text-xs font-mono text-text-secondary">
+                    {estCalls > MAX_RPC_CALLS
+                      ? (
+                        <span className="text-warning flex items-center gap-1">
+                          <AlertTriangle size={11} />
+                          {estCalls.toLocaleString('en')}+ calls — exceeds {MAX_RPC_CALLS.toLocaleString('en')} limit
+                        </span>
+                      )
+                      : (
+                        <span className="flex items-center gap-2">
+                          <span>~{estCalls.toLocaleString('en')} RPC calls</span>
+                          <span className="text-muted">·</span>
+                          <span className="text-cyan/80">{estTimeLabel}</span>
+                        </span>
+                      )
+                    }
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -1127,7 +1228,7 @@ export default function BalanceExplorer() {
 
           <BalanceTable records={records} isLoading={isLoading} />
 
-          {dataSource === 'query' && hasResults && (
+          {dataSource === 'query' && hasResults && !isLoading && (
             <BalanceExportPanel records={records} rpcMeta={rpcMetaRef.current} />
           )}
         </>
