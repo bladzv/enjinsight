@@ -170,6 +170,52 @@
     box-shadow: 0 0 14px rgba(142, 255, 113, 0.55);
   }
 
+  .pointer-aura {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 18rem;
+    height: 18rem;
+    opacity: 0;
+    border-radius: 9999px;
+    transform: translate3d(50vw, 32vh, 0) translate(-50%, -50%);
+    transition: opacity 220ms ease-out;
+    will-change: transform, opacity;
+    filter: blur(8px);
+    background:
+      radial-gradient(circle at 35% 35%, rgba(255,255,255,0.12), transparent 16%),
+      radial-gradient(circle at center, rgba(0, 238, 252, 0.14), rgba(182, 160, 255, 0.12) 34%, rgba(128, 81, 255, 0.05) 56%, transparent 74%);
+  }
+
+  .pointer-aura::before,
+  .pointer-aura::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+
+  .pointer-aura::before {
+    inset: -16%;
+    background: radial-gradient(circle, rgba(0, 238, 252, 0.12), transparent 68%);
+    filter: blur(30px);
+    opacity: 0.85;
+  }
+
+  .pointer-aura::after {
+    inset: 20%;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.08), transparent 62%);
+    filter: blur(10px);
+    opacity: 0.75;
+  }
+
+  @media (pointer: coarse), (prefers-reduced-motion: reduce) {
+    .pointer-aura {
+      display: none;
+    }
+  }
+
   /* Scale helper: enlarge element by 60% (scale 1.6) */
   .enlarge-60 {
     transform: scale(1.6);
@@ -185,22 +231,30 @@
     @apply font-headline font-bold tracking-tight text-text;
     font-size: clamp(1.6rem, 3vw, 2.8rem);
     line-height: 1.05;
+    text-wrap: balance;
+    overflow-wrap: anywhere;
   }
 
   .hero-copy {
     @apply max-w-2xl text-xs leading-6 text-text-secondary sm:text-sm;
+    overflow-wrap: anywhere;
   }
 
   .section-label {
     @apply text-[10px] font-bold uppercase tracking-[0.24em] text-text-secondary;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .section-title {
     @apply font-headline text-2xl font-bold tracking-tight text-text sm:text-3xl;
+    text-wrap: balance;
+    overflow-wrap: anywhere;
   }
 
   .section-subtitle {
     @apply text-sm leading-6 text-text-secondary;
+    overflow-wrap: anywhere;
   }
 
   .metric-card {
@@ -223,13 +277,19 @@
 
   .metric-value {
     @apply mt-3 font-headline font-bold leading-none text-text;
-    font-size: 34.5px; /* 15% larger than 30px (text-3xl) */
-    line-height: 1;
+    font-size: clamp(1.75rem, 4.2vw, 34.5px); /* responsive large value sizing */
+    line-height: 1.02;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    text-wrap: balance;
   }
 
   .metric-label {
     @apply font-bold uppercase tracking-[0.24em] text-text-secondary;
     font-size: 11.5px; /* 15% larger than 10px */
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .editorial-divider {
@@ -268,6 +328,7 @@
 
   .input-label {
     @apply block text-[0.6rem] font-bold tracking-widest uppercase text-text-secondary mb-2;
+    overflow-wrap: anywhere;
   }
 
   .data-panel {
@@ -281,9 +342,86 @@
   }
 
   .mini-chip {
-    @apply inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em];
+    @apply inline-flex max-w-full flex-wrap items-center gap-2 rounded-full px-3 py-1 text-left text-[10px] font-semibold uppercase tracking-[0.22em];
     background: rgba(23, 25, 36, 0.9);
     color: theme('colors.text-secondary');
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .range-mode-grid {
+    @apply grid gap-2;
+  }
+
+  .range-mode-option {
+    @apply flex min-w-0 items-start gap-3 rounded-[1rem] border px-4 py-3 text-left transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50;
+    background: rgba(23, 25, 36, 0.9);
+  }
+
+  .range-mode-option:hover:not(:disabled) {
+    background: rgba(28, 31, 43, 0.98);
+    transform: translateY(-1px);
+  }
+
+  .range-mode-option-active {
+    border-color: rgba(0, 238, 252, 0.22);
+    background:
+      linear-gradient(180deg, rgba(0, 238, 252, 0.08), transparent 72%),
+      rgba(20, 24, 36, 0.98);
+    box-shadow:
+      inset 0 0 0 1px rgba(182, 160, 255, 0.10),
+      0 10px 24px rgba(5, 8, 18, 0.22);
+  }
+
+  .range-mode-option-idle {
+    border-color: rgba(70, 71, 82, 0.16);
+  }
+
+  .range-mode-badge {
+    @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border text-[11px] font-bold uppercase tracking-[0.22em];
+    border-color: rgba(70, 71, 82, 0.16);
+    background: rgba(12, 14, 23, 0.65);
+  }
+
+  .range-mode-option-active .range-mode-badge {
+    border-color: rgba(0, 238, 252, 0.28);
+    background: rgba(0, 238, 252, 0.08);
+    color: theme('colors.cyan');
+  }
+
+  .range-mode-option-idle .range-mode-badge {
+    color: theme('colors.text-secondary');
+  }
+
+  .range-params-card {
+    @apply rounded-[1.25rem] p-4;
+    border: 1px solid rgba(70, 71, 82, 0.12);
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.02), transparent 68%),
+      rgba(23, 25, 36, 0.82);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+
+  .range-preset-button {
+    @apply rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-all duration-150 disabled:opacity-50;
+  }
+
+  .range-preset-button-active {
+    border-color: rgba(182, 160, 255, 0.26);
+    background: rgba(182, 160, 255, 0.12);
+    color: theme('colors.primary');
+    box-shadow: inset 0 0 0 1px rgba(182, 160, 255, 0.08);
+  }
+
+  .range-preset-button-idle {
+    border-color: rgba(70, 71, 82, 0.16);
+    background: rgba(23, 25, 36, 0.9);
+    color: theme('colors.text-secondary');
+  }
+
+  .range-preset-button-idle:hover:not(:disabled) {
+    background: rgba(28, 31, 43, 0.98);
+    color: theme('colors.text');
   }
 
   .nav-link-pill {
@@ -352,6 +490,21 @@
     }
   }
 
+  @keyframes staking-scan-hover-glow {
+    0% {
+      box-shadow:
+        0 14px 34px rgba(128, 81, 255, 0.20),
+        0 0 0 rgba(0, 238, 252, 0),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+    100% {
+      box-shadow:
+        0 18px 40px rgba(128, 81, 255, 0.30),
+        0 0 24px rgba(0, 238, 252, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    }
+  }
+
   .hero-dot {
     @apply h-2 w-2 rounded-full bg-success;
     box-shadow: 0 0 14px rgba(142, 255, 113, 0.55);
@@ -371,6 +524,18 @@
   .btn-primary:active:not(:disabled) {
     transform: scale(0.97);
     filter: brightness(0.98);
+  }
+
+  .staking-scan-button {
+    border: 1px solid rgba(240, 240, 253, 0.14);
+    box-shadow:
+      0 14px 34px rgba(128, 81, 255, 0.20),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+
+  .staking-scan-button:hover:not(:disabled) {
+    border-color: rgba(0, 238, 252, 0.42);
+    animation: staking-scan-hover-glow 1.7s ease-in-out infinite alternate;
   }
 
   .btn-stop,

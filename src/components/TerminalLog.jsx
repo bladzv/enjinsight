@@ -88,7 +88,7 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
 
           <div className="hidden min-w-0 items-center gap-2 lg:flex">
             <Waves size={13} className="shrink-0 text-cyan" />
-            <span className="truncate text-[11px] text-text-secondary">
+            <span className="text-[11px] leading-5 text-text-secondary whitespace-normal break-words">
               {lastLog
                 ? (
                   <>

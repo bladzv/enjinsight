@@ -4,9 +4,7 @@ import { findConsecutiveGroups, getSeverity } from '../utils/eraAnalysis.js'
 import { poolExplorerUrl, poolLabel } from '../utils/format.js'
 
 const GAP_PAGE_SIZES = [5, 10, 20]
-const MAX_POOL_LABEL_LEN = 40
-
-export default function PoolSummarySection({ pools, eraCount }) {
+export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
   const [showClean, setShowClean] = useState(false)
   const [gapPage, setGapPage]     = useState(0)
   const [gapPageSize, setGapPageSize] = useState(10)
@@ -102,13 +100,26 @@ export default function PoolSummarySection({ pools, eraCount }) {
               const missed   = p.missedEras.length
               const rewarded = Math.max(0, eraCount - missed)
               return (
-                <article key={`m-${p.poolId}`} className="rounded-lg bg-card p-3">
+                <article
+                  key={`m-${p.poolId}`}
+                  className="rounded-lg bg-card p-3 transition-colors hover:bg-surface-high cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onPoolSelect?.(p.poolId)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      onPoolSelect?.(p.poolId)
+                    }
+                  }}
+                >
                   <div className="flex items-center gap-2">
-                    <p className="font-medium text-sm text-text truncate">{poolLabel(p)}</p>
+                    <p className="font-medium text-sm text-text break-words">{poolLabel(p)}</p>
                     <a
                       href={poolExplorerUrl(p.poolId)}
                       target="_blank"
                       rel="noopener noreferrer"
+                      onClick={event => event.stopPropagation()}
                       className="ml-auto text-text-secondary hover:text-cyan"
                       aria-label="Open on Subscan"
                     >
@@ -126,7 +137,7 @@ export default function PoolSummarySection({ pools, eraCount }) {
                     </p>
                   )}
                   <div className="mt-2 flex items-center justify-between gap-2">
-                    <p className="font-mono text-[11px] text-muted truncate">
+                    <p className="font-mono text-[11px] text-muted break-all">
                       {p.missedEras.slice(0, 8).join(', ')}{p.missedEras.length > 8 ? '…' : ''}
                     </p>
                     <SeverityBadge sev={sev} />
@@ -154,17 +165,30 @@ export default function PoolSummarySection({ pools, eraCount }) {
                   const missed   = p.missedEras.length
                   const rewarded = Math.max(0, eraCount - missed)
                   return (
-                    <tr key={p.poolId} className="hover:bg-surface-bright transition-colors">
+                    <tr
+                      key={p.poolId}
+                      className="cursor-pointer hover:bg-surface-bright transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onPoolSelect?.(p.poolId)}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          onPoolSelect?.(p.poolId)
+                        }
+                      }}
+                    >
                       <td className="px-4 py-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="font-medium text-text truncate flex-1 min-w-0" title={poolLabel(p)}>
-                              {trimPoolLabel(poolLabel(p))}
+                            <span className="min-w-0 flex-1 whitespace-normal break-words font-medium text-text" title={poolLabel(p)}>
+                              {poolLabel(p)}
                             </span>
                             <a
                               href={poolExplorerUrl(p.poolId)}
                               target="_blank"
                               rel="noopener noreferrer"
+                              onClick={event => event.stopPropagation()}
                               className="ml-auto text-text-secondary hover:text-cyan flex-shrink-0"
                               aria-label="Open on Subscan"
                             >
@@ -172,7 +196,7 @@ export default function PoolSummarySection({ pools, eraCount }) {
                             </a>
                           </div>
                           {hasNoNominatedValidators(p) && (
-                            <p className="mt-0.5 text-[11px] text-cyan lg:hidden truncate">
+                            <p className="mt-0.5 text-[11px] text-cyan lg:hidden break-words">
                               Reason: No validators nominated
                             </p>
                           )}
@@ -181,7 +205,7 @@ export default function PoolSummarySection({ pools, eraCount }) {
                       <td className="px-3 py-3 text-center text-text-secondary">{eraCount}</td>
                       <td className="px-3 py-3 text-center text-success">{rewarded}</td>
                       <td className="px-3 py-3 text-center text-danger font-semibold">{missed}</td>
-                      <td className="px-3 py-3 font-mono text-muted text-[11px] hidden sm:table-cell max-w-[160px] truncate">
+                      <td className="hidden max-w-[220px] whitespace-normal break-all px-3 py-3 font-mono text-[11px] text-muted sm:table-cell">
                         {p.missedEras.slice(0, 8).join(', ')}
                         {p.missedEras.length > 8 ? '…' : ''}
                       </td>
@@ -283,7 +307,7 @@ export default function PoolSummarySection({ pools, eraCount }) {
               {cleanPreview.map(p => (
                 <span key={p.poolId} className="mini-chip" title={poolLabel(p)}>
                   <CheckCircle2 size={11} className="text-success" />
-                  #{p.poolId} {trimPoolLabel(poolLabel(p))}
+                  #{p.poolId} {poolLabel(p)}
                 </span>
               ))}
               {clean.length > cleanPreview.length && (
@@ -294,13 +318,25 @@ export default function PoolSummarySection({ pools, eraCount }) {
           {showClean && (
             <div className="grid grid-cols-1 gap-3 px-5 py-5 animate-fade-in sm:grid-cols-2 xl:grid-cols-3 sm:px-6">
               {clean.map(p => (
-                <div key={p.poolId} className="rounded-[1.25rem] bg-card px-4 py-4 transition-colors hover:bg-surface-high">
+                <div
+                  key={p.poolId}
+                  className="rounded-[1.25rem] bg-card px-4 py-4 transition-colors hover:bg-surface-high cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onPoolSelect?.(p.poolId)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      onPoolSelect?.(p.poolId)
+                    }
+                  }}
+                >
                   <div className="flex items-start gap-3">
                     <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-success/10 font-mono text-sm font-bold text-success">
                       #{p.poolId}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-text" title={poolLabel(p)}>
+                      <p className="break-words font-medium text-text" title={poolLabel(p)}>
                         {poolLabel(p)}
                       </p>
                       <p className="mt-1 text-[11px] text-text-secondary">
@@ -320,6 +356,7 @@ export default function PoolSummarySection({ pools, eraCount }) {
                     href={poolExplorerUrl(p.poolId)}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={event => event.stopPropagation()}
                     className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-text-secondary transition-colors hover:text-cyan"
                     aria-label="Open on Subscan"
                   >
@@ -334,12 +371,6 @@ export default function PoolSummarySection({ pools, eraCount }) {
       )}
     </section>
   )
-}
-
-function trimPoolLabel(label) {
-  const safe = String(label ?? '')
-  if (safe.length <= MAX_POOL_LABEL_LEN) return safe
-  return `${safe.slice(0, MAX_POOL_LABEL_LEN - 1)}…`
 }
 
 function hasNoNominatedValidators(pool) {

@@ -42,7 +42,7 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
           <article key={`m-${n.address || i}`} className="rounded-xl bg-card p-3">
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted">#{page * pageSize + i + 1}</span>
-              <span className="font-mono text-text-secondary text-xs truncate">{truncateAddress(n.address)}</span>
+              <span className="font-mono text-text-secondary text-xs break-all">{truncateAddress(n.address)}</span>
               <button
                 onClick={() => copyAddr(n.address)}
                 className="btn-icon"
