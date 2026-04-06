@@ -96,6 +96,13 @@ function reducer(state, action) {
     case 'PROGRESS':
       return { ...state, progress: action.payload }
 
+    case 'SET_RECORDS':
+      return {
+        ...state,
+        records: action.records,
+        dataSource: action.dataSource ?? state.dataSource,
+      }
+
     case 'LOG': {
       // Keep at most 500 log entries to cap memory
       const next = [...state.logs, action.payload]
@@ -344,6 +351,11 @@ export default function useBalanceExplorer() {
         }
 
         queriedBlocks = i + 1
+        dispatch({
+          type: 'SET_RECORDS',
+          records: [...results],
+          dataSource: 'query',
+        })
         dispatch({
           type: 'PROGRESS',
           payload: buildPhaseProgress({

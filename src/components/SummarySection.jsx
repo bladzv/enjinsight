@@ -111,7 +111,7 @@ export default function SummarySection({ validators, eraCount }) {
               return (
                 <article key={`m-${v.address}`} className="rounded-lg bg-card p-3">
                   <div className="flex items-center gap-2">
-                    <p className="font-medium text-sm text-text truncate">
+                    <p className="font-medium text-sm text-text break-words">
                       {v.display || truncateAddress(v.address)}
                     </p>
                     <a
@@ -130,7 +130,7 @@ export default function SummarySection({ validators, eraCount }) {
                     <p className="text-text-secondary">Missed <span className="text-danger font-semibold">{missed}</span></p>
                   </div>
                   <div className="mt-2 flex items-center justify-between gap-2">
-                    <p className="font-mono text-[11px] text-muted truncate">
+                    <p className="font-mono text-[11px] text-muted break-all">
                       {v.missedEras.slice(0, 8).join(', ')}{v.missedEras.length > 8 ? '…' : ''}
                     </p>
                     <SeverityBadge sev={sev} />
@@ -160,7 +160,7 @@ export default function SummarySection({ validators, eraCount }) {
                     <tr key={v.address} className="hover:bg-surface-bright transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-medium text-text truncate max-w-[140px]">
+                          <span className="max-w-[220px] whitespace-normal break-words font-medium text-text">
                             {v.display || truncateAddress(v.address)}
                           </span>
                           <a
@@ -177,7 +177,7 @@ export default function SummarySection({ validators, eraCount }) {
                       <td className="px-3 py-3 text-center text-text-secondary">{eraCount}</td>
                       <td className="px-3 py-3 text-center text-success">{rewarded}</td>
                       <td className="px-3 py-3 text-center text-danger font-semibold">{missed}</td>
-                      <td className="px-3 py-3 font-mono text-muted text-[11px] hidden sm:table-cell max-w-[160px] truncate">
+                      <td className="hidden max-w-[220px] whitespace-normal break-all px-3 py-3 font-mono text-[11px] text-muted sm:table-cell">
                         {v.missedEras.slice(0, 8).join(', ')}
                         {v.missedEras.length > 8 ? '…' : ''}
                       </td>
@@ -293,8 +293,8 @@ export default function SummarySection({ validators, eraCount }) {
                       <CheckCircle2 size={16} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-text">{v.display || truncateAddress(v.address)}</p>
-                      <p className="mt-1 truncate font-mono text-[11px] text-muted">{truncateAddress(v.address)}</p>
+                      <p className="break-words font-medium text-text">{v.display || truncateAddress(v.address)}</p>
+                      <p className="mt-1 break-all font-mono text-[11px] text-muted">{truncateAddress(v.address)}</p>
                     </div>
                   </div>
 

@@ -18,9 +18,8 @@ export default function ControlPanel({
   const isResetState = status === 'done' || status === 'stopped' || status === 'error'
   const isPoolMode = mode === 'pools'
   const title = isPoolMode ? 'Nomination pool cadence scan' : 'Validator cadence scan'
-  const helper = isPoolMode
-    ? 'Inspect recent pool payout eras and highlight where rewards were missed or expected to be absent.'
-    : 'Inspect recent validator payout eras and highlight where rewards were missed across the selected window.'
+  const helper = 'Set how many recent eras to check.'
+  const modeLabel = isPoolMode ? 'Pool diagnostics' : 'Validator diagnostics'
 
   function validate(raw) {
     const trimmed = String(raw).trim()
@@ -64,90 +63,95 @@ export default function ControlPanel({
 
   const disableAction = !isLoading && !isResetState && !!error
   const showWarning = !error && parseInt(value, 10) > 30
-  const helperTone = error ? 'text-danger' : showWarning ? 'text-warning' : 'text-text-secondary'
+  const helperTone = error ? 'text-danger' : 'text-warning'
+  const helperMessage = error
+    ? error
+    : 'Longer range selected. Expect a slower scan.'
+  const actionButtonClass = 'w-full min-h-[3.5rem] text-sm sm:min-h-[3.75rem]'
+  const actionButton = isLoading ? (
+    <button onClick={handleAction} className={`btn-stop ${actionButtonClass}`} aria-label="Stop running scan">
+      <Square size={15} className="fill-white stroke-white" />
+      Stop Scan
+    </button>
+  ) : isResetState ? (
+    <button onClick={handleAction} className={`btn-secondary ${actionButtonClass}`} aria-label="Reset scan results">
+      <RotateCcw size={15} />
+      Reset View
+    </button>
+  ) : (
+    <button onClick={handleAction} disabled={disableAction} className={`btn-primary staking-scan-button ${actionButtonClass}`} aria-label="Start scan">
+      <Play size={15} />
+      Run Scan
+    </button>
+  )
 
   return (
     <div id="scan-controls" className="rounded-[1.5rem] bg-card px-5 py-5 shadow-ambient sm:px-6 sm:py-6">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-        <div className="space-y-5">
-          <div className="space-y-2">
-            <p className="section-label">Cadence Controls</p>
-            <h3 className="font-headline text-3xl font-bold tracking-tight text-text">{title}</h3>
-            <p className="max-w-2xl text-sm leading-6 text-text-secondary">{helper}</p>
-          </div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-2">
+          <p className="section-label">Cadence Controls</p>
+          <h3 className="font-headline text-3xl font-bold tracking-tight text-text">{title}</h3>
+          <p className="max-w-xl section-subtitle">{helper}</p>
+        </div>
+        <span className="mini-chip">{modeLabel}</span>
+      </div>
 
-          <div className="grid gap-4 md:grid-cols-[minmax(176px,224px)_minmax(0,1fr)] md:items-end">
-            <div className="rounded-[1.25rem] bg-surface px-4 py-4">
-              <label htmlFor="reward-count" className="section-label block">
-                Scan Range (Eras)
-              </label>
-              <div className="mt-3 flex items-end gap-3">
-                <input
-                  id="reward-count"
-                  type="text"
-                  inputMode="numeric"
-                  value={value}
-                  onChange={handleChange}
-                  onKeyDown={handleKeyDown}
-                  disabled={isLoading}
-                  placeholder={String(DEFAULT_ERA_COUNT)}
-                  aria-describedby={error ? 'reward-count-error' : undefined}
-                  aria-invalid={!!error}
-                  maxLength={3}
-                  className={`w-28 border-none bg-transparent px-0 py-0 font-headline text-5xl font-bold tracking-tight text-primary focus:outline-none disabled:opacity-50 ${error ? 'text-danger' : ''}`}
-                />
-                <span className="pb-2 text-sm uppercase tracking-[0.18em] text-text-secondary">eras</span>
-              </div>
+      <div className="mt-5 rounded-[1.5rem] bg-surface px-5 py-5 shadow-inset-soft sm:px-6 sm:py-6">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(220px,240px)] xl:items-start">
+          <div className="rounded-[1.35rem] bg-card/90 px-5 py-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="section-label">Scan Range (Eras)</p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="metric-card">
-                <p className="metric-label">Range Limits</p>
-                <p className="metric-value text-2xl text-text">{MIN_ERA_COUNT}-{MAX_ERA_COUNT}</p>
-              </div>
-              <div className="metric-card">
-                <p className="metric-label">Approx Length</p>
-                <p className="metric-value text-2xl text-cyan">1 era ~= 24h</p>
-              </div>
-              <div className="metric-card">
-                <p className="metric-value text-2xl text-text">{isPoolMode ? 'Pools' : 'Validators'}</p>
-              </div>
+            <div className="mt-5 flex flex-wrap items-end gap-3">
+              <label htmlFor="reward-count" className="sr-only">
+                Scan Range (Eras)
+              </label>
+              <input
+                id="reward-count"
+                type="text"
+                inputMode="numeric"
+                value={value}
+                onChange={handleChange}
+                onKeyDown={handleKeyDown}
+                disabled={isLoading}
+                placeholder={String(DEFAULT_ERA_COUNT)}
+                aria-describedby="reward-count-error"
+                aria-invalid={!!error}
+                maxLength={3}
+                className={`w-28 border-none bg-transparent px-0 py-0 font-headline text-5xl font-bold tracking-tight text-primary focus:outline-none disabled:opacity-50 ${error ? 'text-danger' : ''}`}
+              />
+              <span className="pb-2 text-sm uppercase tracking-[0.18em] text-text-secondary">eras</span>
+            </div>
+
+            {(error || showWarning) && (
+              <p
+                id="reward-count-error"
+                role={error ? 'alert' : undefined}
+                className={`mt-4 flex items-start gap-2 text-sm leading-6 ${helperTone}`}
+              >
+                <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+                <span>{helperMessage}</span>
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-[1.35rem] border border-primary/10 bg-[#05070f] p-4 shadow-inset-soft sm:p-5 xl:self-center">
+            <div className="w-full">
+              {actionButton}
             </div>
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 xl:min-w-[220px] xl:items-stretch">
-          {isLoading ? (
-            <button onClick={handleAction} className="btn-stop w-full" aria-label="Stop running scan">
-              <Square size={15} className="fill-white stroke-white" />
-              Stop Scan
-            </button>
-          ) : isResetState ? (
-            <button onClick={handleAction} className="btn-secondary w-full" aria-label="Reset scan results">
-              <RotateCcw size={15} />
-              Reset View
-            </button>
-          ) : (
-            <button onClick={handleAction} disabled={disableAction} className="btn-primary w-full" aria-label="Start scan">
-              <Play size={15} />
-              Run Scan
-            </button>
-          )}
-          <p className={`min-h-[1.25rem] text-xs leading-5 ${helperTone}`} id="reward-count-error" role={error ? 'alert' : undefined}>
-            {error ? (
-              <span className="inline-flex items-center gap-1.5">
-                <AlertCircle size={12} />
-                {error}
-              </span>
-            ) : showWarning ? (
-              <span className="inline-flex items-center gap-1.5">
-                <AlertCircle size={12} />
-                Larger windows take longer, but scanning is still batched automatically.
-              </span>
-            ) : (
-              'Use recent eras for a faster health snapshot, or expand the range for broader cadence analysis.'
-            )}
-          </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="metric-card metric-card-left-primary">
+            <p className="metric-label">Range Limits</p>
+            <p className="metric-value text-2xl text-text">{MIN_ERA_COUNT}-{MAX_ERA_COUNT}</p>
+          </div>
+          <div className="metric-card metric-card-left-cyan">
+            <p className="metric-label">Approx Length</p>
+            <p className="metric-value text-2xl text-cyan">1 era ~= 24h</p>
+          </div>
         </div>
       </div>
     </div>
