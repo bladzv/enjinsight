@@ -16,7 +16,6 @@
 import { useReducer, useCallback, useRef } from 'react'
 import {
   WS_CONNECT_TIMEOUT_MS,
-  WS_CALL_TIMEOUT_MS,
   PLANCK_PER_ENJ,
   API_DELAY_MS,
 } from '../constants.js'
@@ -24,6 +23,8 @@ import { WsProvider, ApiPromise } from '@polkadot/api'
 import { validateWsEndpoint, buildTokenAccountKey, buildTokenKey, decodeCompactFirst, buildBondedPoolsPrefix, poolIdFromBondedPoolsKey, computePoolBondedAccountId, buildStakingLedgerKey, decodeStakingLedgerActive } from '../utils/substrate.js'
 import { fetchHistoricalPoolIds, fetchAllPools, delay, enqueueRequest } from '../utils/api.js'
 import { nowHHMMSS } from '../utils/format.js'
+import { SubstrateRPC } from '../utils/rpc.js'
+import { loadEraCsvRows } from '../utils/eraCache.js'
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const ARCHIVE_WSS    = 'wss://archive.relay.blockchain.enjin.io'
@@ -137,68 +138,6 @@ function reducer(state, action) {
   }
 }
 
-// ── Tiny WS-RPC client (same pattern as useBalanceExplorer's EnjinRPC) ─────
-class ArchiveRPC {
-  constructor(ep) {
-    this.ep   = ep
-    this.ws   = null
-    this.pend = new Map()
-    this.id   = 0
-    this.dead = false
-  }
-
-  connect() {
-    return new Promise((res, rej) => {
-      let ws
-      try { ws = new WebSocket(this.ep) }
-      catch (e) { return rej(new Error(`Cannot open WebSocket: ${e.message}`)) }
-      this.ws = ws
-      const tout = setTimeout(() => rej(new Error(`Connection timed out (${WS_CONNECT_TIMEOUT_MS / 1000}s)`)), WS_CONNECT_TIMEOUT_MS)
-      ws.onopen  = () => { clearTimeout(tout); res() }
-      ws.onerror = () => { clearTimeout(tout); rej(new Error('WebSocket connection failed — check archive endpoint')) }
-      ws.onclose = () => {
-        this.pend.forEach(p => p.rej(new Error('Connection closed')))
-        this.pend.clear()
-      }
-      ws.onmessage = ev => {
-        let msg
-        try { msg = JSON.parse(ev.data) } catch { return }
-        if (!msg?.id) return
-        const p = this.pend.get(msg.id)
-        if (!p) return
-        this.pend.delete(msg.id)
-        if (msg.error) p.rej(new Error(String(msg.error?.message ?? 'RPC error')))
-        else           p.res(msg.result)
-      }
-    })
-  }
-
-  call(method, params = []) {
-    return new Promise((res, rej) => {
-      if (this.dead || !this.ws || this.ws.readyState !== WebSocket.OPEN)
-        return rej(new Error('Not connected'))
-      const id = ++this.id
-      const t = setTimeout(() => {
-        this.pend.delete(id)
-        rej(new Error(`Timeout: ${method}`))
-      }, WS_CALL_TIMEOUT_MS)
-      this.pend.set(id, {
-        res: v => { clearTimeout(t); res(v) },
-        rej: e => { clearTimeout(t); rej(e) },
-      })
-      this.ws.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }))
-    })
-  }
-
-  close() {
-    this.dead = true
-    this.pend.forEach(p => p.rej(new Error('Closed')))
-    this.pend.clear()
-    try { this.ws?.close(1000, 'done') } catch {}
-    this.ws = null
-  }
-}
-
 // ── Hook ───────────────────────────────────────────────────────────────────
 export function useRewardHistory() {
   const [state, dispatch] = useReducer(reducer, initialState)
@@ -208,37 +147,23 @@ export function useRewardHistory() {
     dispatch({ type: 'LOG', payload: { id: Date.now() + Math.random(), ts: nowHHMMSS(), level, message } })
   }, [])
 
-  // ── Load era CSV ──────────────────────────────────────────────────────
+  // ── Load era CSV (localStorage-cached via eraCache) ──────────────────
   async function loadEraCSV() {
-    const candidates = []
-    for (const p of CSV_PATHS) {
-      candidates.push(p)
-      candidates.push(p.replace(/^\//, ''))
-    }
-    for (const path of candidates) {
+    for (const path of CSV_PATHS) {
       try {
-        const resp = await fetch(path, { credentials: 'same-origin' })
-        if (!resp.ok) continue
-        const text = await resp.text()
-        if (!text.trimStart().startsWith('era,')) continue
-        const lines = text.trim().split(/\r?\n/)
-        if (lines.length < 2) continue
-        const header = lines[0].split(',').map(s => s.trim().replace(/^\uFEFF/, ''))
+        const rows = await loadEraCsvRows(path)
         const cache = {}
         let count = 0
-        for (let i = 1; i < lines.length; i++) {
-          const cols  = lines[i].split(',')
-          if (cols.length < 2) continue
-          const row   = {}; header.forEach((h, j) => { row[h] = (cols[j] ?? '').trim() })
-          const era   = parseInt(row.era, 10); if (isNaN(era)) continue
-          const sb    = parseInt(row.start_block, 10); if (isNaN(sb)) continue
-          const eb    = row.end_block ? parseInt(row.end_block, 10) : NaN
+        for (const row of rows) {
+          const era = parseInt(row.era, 10);        if (isNaN(era)) continue
+          const sb  = parseInt(row.start_block, 10); if (isNaN(sb)) continue
+          const eb  = row.end_block ? parseInt(row.end_block, 10) : NaN
           cache[era] = {
-            startBlock:      sb,
-            endBlock:        isNaN(eb) ? null : eb,
-            startBlockHash:  row.start_block_hash   || null,
-            startDateUtc:    row.start_datetime_utc || null,
-            endDateUtc:      row.end_datetime_utc   || null,
+            startBlock:     sb,
+            endBlock:       isNaN(eb) ? null : eb,
+            startBlockHash: row.start_block_hash   || null,
+            startDateUtc:   row.start_datetime_utc || null,
+            endDateUtc:     row.end_datetime_utc   || null,
           }
           count++
         }
@@ -598,7 +523,7 @@ export function useRewardHistory() {
 
       // ── Phase 1: Connect to archive ──────────────────────────────────
       logPhase('connect', 'INFO', `(${resolvedEndpoint})`)
-      rpc = new ArchiveRPC(resolvedEndpoint)
+      rpc = new SubstrateRPC(resolvedEndpoint, { concurrency: 3 })
       await rpc.connect()
       logFn('OK', 'Archive node connected.')
 

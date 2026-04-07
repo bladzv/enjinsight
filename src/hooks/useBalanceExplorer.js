@@ -7,6 +7,14 @@
  *  - Activity log messages (info / ok / warn / err)
  *  - Import from JSON / CSV / XML (with optional AES-256-GCM decryption)
  *
+ * Performance optimisations vs. the original sequential implementation:
+ *  1. SubstrateRPC with concurrency=3: up to 3 RPC calls in-flight simultaneously
+ *     instead of one. Block queries are dispatched via Promise.all and the semaphore
+ *     manages back-pressure, giving ~3× throughput for large block ranges.
+ *  2. Era hash pre-lookup: for relay/canary-relay networks the era reference CSV is
+ *     loaded (from localStorage cache when available) and era start-block hashes are
+ *     used directly, skipping the chain_getBlockHash RPC call for those blocks.
+ *
  * Security:
  *  - Endpoint validated with validateWsEndpoint() before any WS connection open
  *  - Block range inputs clamped with clampInt() before use
@@ -16,8 +24,6 @@
 import { useReducer, useCallback, useRef } from 'react'
 import {
   WS_DEFAULT_ENDPOINT,
-  WS_CONNECT_TIMEOUT_MS,
-  WS_CALL_TIMEOUT_MS,
   MAX_RPC_CALLS,
 } from '../constants.js'
 import {
@@ -28,6 +34,8 @@ import {
   isValidBlockHash,
 } from '../utils/substrate.js'
 import { parseImport, aesDecrypt } from '../utils/balanceExport.js'
+import { SubstrateRPC } from '../utils/rpc.js'
+import { loadEraCsvRows, buildEraHashMap } from '../utils/eraCache.js'
 
 // ── Status values ─────────────────────────────────────────────────────────
 export const STATUS = {
@@ -129,73 +137,13 @@ function reducer(state, action) {
   }
 }
 
-// ── EnjinRPC WebSocket client ────────────────────────────────────────────
-
-class EnjinRPC {
-  constructor(ep) {
-    this.ep   = ep
-    this.ws   = null
-    this.pend = new Map()
-    this.id   = 0
-    this.dead = false
-  }
-
-  connect() {
-    return new Promise((res, rej) => {
-      try { this.ws = new WebSocket(this.ep) }
-      catch (e) { return rej(new Error(`Cannot open WebSocket: ${e.message}`)) }
-
-      const tout = setTimeout(
-        () => rej(new Error(`Connection timed out (${WS_CONNECT_TIMEOUT_MS / 1000} s)`)),
-        WS_CONNECT_TIMEOUT_MS,
-      )
-
-      this.ws.onopen  = () => { clearTimeout(tout); res() }
-      this.ws.onerror = () => {
-        clearTimeout(tout)
-        rej(new Error('WebSocket connection failed — check endpoint'))
-      }
-      this.ws.onclose = () => {
-        this.pend.forEach(p => p.rej(new Error('Connection closed')))
-        this.pend.clear()
-      }
-      this.ws.onmessage = ev => {
-        let msg
-        try { msg = JSON.parse(ev.data) } catch { return }
-        if (typeof msg !== 'object' || msg === null) return
-        const p = this.pend.get(msg.id)
-        if (!p) return
-        this.pend.delete(msg.id)
-        msg.error
-          ? p.rej(new Error(String(msg.error?.message || 'RPC error')))
-          : p.res(msg.result)
-      }
-    })
-  }
-
-  call(method, params = []) {
-    return new Promise((res, rej) => {
-      if (this.dead) return rej(new Error('Cancelled'))
-      const id   = ++this.id
-      const tout = setTimeout(() => {
-        this.pend.delete(id)
-        rej(new Error(`RPC timeout: ${method}`))
-      }, WS_CALL_TIMEOUT_MS)
-      this.pend.set(id, {
-        res: v => { clearTimeout(tout); res(v) },
-        rej: e => { clearTimeout(tout); rej(e) },
-      })
-      this.ws.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }))
-    })
-  }
-
-  cancel() {
-    this.dead = true
-    this.pend.forEach(p => p.rej(new Error('Cancelled')))
-    this.pend.clear()
-  }
-
-  close() { try { this.ws?.close() } catch {} }
+// ── Network → era-reference CSV mapping ──────────────────────────────────
+// Only relay and canary-relay have era reference CSVs with block hashes.
+// Pattern matching on the archive WS endpoint is sufficient for known networks.
+function detectEraRefCsv(endpoint) {
+  if (/archive\.relay\.blockchain\.enjin/i.test(endpoint)) return '/relay-era-reference.csv'
+  if (/archive\.relay\.canary\.enjin/i.test(endpoint))    return '/canary-relay-era-reference.csv'
+  return null
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────
@@ -281,6 +229,24 @@ export default function useBalanceExplorer() {
     for (let b = start; b <= end; b += stepN) blocks.push(b)
     if (blocks[blocks.length - 1] !== end) blocks.push(end)
 
+    // ── Era hash pre-lookup (relay/canary-relay only) ───────────────────
+    // Load the era reference CSV (from localStorage cache when available) and
+    // build a Map<blockNumber, blockHash> so that era start-block hash lookups
+    // skip the chain_getBlockHash RPC call entirely.
+    let eraHashMap = null
+    const csvPath = detectEraRefCsv(ep)
+    if (csvPath) {
+      try {
+        const rows = await loadEraCsvRows(csvPath)
+        eraHashMap = buildEraHashMap(rows)
+        if (eraHashMap.size > 0) {
+          log('info', `Era hash map loaded: ${eraHashMap.size} era boundary hashes available for pre-lookup`)
+        }
+      } catch {
+        // Non-fatal — fall back to querying every block hash via RPC
+      }
+    }
+
     // ── Query ────────────────────────────────────────────────────────────
     dispatch({ type: 'STATUS', payload: STATUS.CONNECTING })
     dispatch({
@@ -297,11 +263,14 @@ export default function useBalanceExplorer() {
     log('info', 'Session started')
     log('info', `Endpoint: ${ep}`)
     log('info', `Range: block ${start.toLocaleString('en')} → ${end.toLocaleString('en')}, step=${stepN}`)
-    log('info', `Planned RPC calls: ${blocks.length.toLocaleString('en')}`)
+    log('info', `Planned block queries: ${blocks.length.toLocaleString('en')} (concurrency: 3)`)
 
-    const rpc = new EnjinRPC(ep)
+    // SubstrateRPC with concurrency=3: at most 3 calls in-flight simultaneously.
+    // The semaphore manages back-pressure across all parallel block fetches.
+    const rpc = new SubstrateRPC(ep, { concurrency: 3 })
     rpcRef.current = rpc
-    const results = []
+    // Pre-allocate results array so parallel writes by index are safe.
+    const results = new Array(blocks.length).fill(null)
     let connected = false
     let queriedBlocks = 0
 
@@ -312,7 +281,7 @@ export default function useBalanceExplorer() {
       log('ok', 'WebSocket connected')
 
       dispatch({ type: 'STATUS', payload: STATUS.QUERYING })
-      log('info', `Querying ${blocks.length.toLocaleString('en')} blocks…`)
+      log('info', `Querying ${blocks.length.toLocaleString('en')} blocks in parallel (cap 3)…`)
       dispatch({
         type: 'PROGRESS',
         payload: buildPhaseProgress({
@@ -325,35 +294,47 @@ export default function useBalanceExplorer() {
         }),
       })
 
-      for (let i = 0; i < blocks.length; i++) {
-        const blk = blocks[i]
+      // Fan-out: all blocks are started at once; the SubstrateRPC semaphore (cap=3)
+      // ensures at most 3 RPC calls are in-flight at any given time.
+      // Results are stored by index so the final array is in block order.
+      await Promise.all(blocks.map(async (blk, i) => {
+        try {
+          // Use pre-loaded hash for era boundary blocks; fall back to RPC otherwise.
+          const hash = eraHashMap?.get(blk) ?? await rpc.call('chain_getBlockHash', [blk])
 
-        const hash = await rpc.call('chain_getBlockHash', [blk])
-        if (!hash || !isValidBlockHash(hash) || /^0x0{64}$/.test(hash)) {
-          log('warn', `Block #${blk.toLocaleString('en')}: no valid hash returned — block may not exist in the archive (skipped)`)
-          results.push({
+          if (!hash || !isValidBlockHash(hash) || /^0x0{64}$/.test(hash)) {
+            log('warn', `Block #${blk.toLocaleString('en')}: no valid hash returned — block may not exist in the archive (skipped)`)
+            results[i] = {
+              block: blk, blockHash: '', free: 0n, reserved: 0n,
+              miscFrozen: 0n, feeFrozen: 0n, nonce: 0, newFormat: false,
+            }
+          } else {
+            const raw = await rpc.call('state_getStorage', [storKey, hash])
+            if (!raw || raw === '0x') {
+              log('warn', `Block #${blk.toLocaleString('en')}: no account storage at this block — account may not exist yet or has zero balance`)
+              results[i] = {
+                block: blk, blockHash: hash, free: 0n, reserved: 0n,
+                miscFrozen: 0n, feeFrozen: 0n, nonce: 0, newFormat: false,
+              }
+            } else {
+              const dec = decodeAccountInfo(raw)
+              log('info', `Block #${blk.toLocaleString('en')} → free=${dec.free} res=${dec.reserved}${dec.newFormat ? ' [new-fmt]' : ''}`)
+              results[i] = { block: blk, blockHash: hash, ...dec }
+            }
+          }
+        } catch (e) {
+          if (e.message === 'Cancelled') throw e   // propagate cancel to Promise.all
+          log('warn', `Block #${blk.toLocaleString('en')}: RPC error — ${e.message}`)
+          results[i] = {
             block: blk, blockHash: '', free: 0n, reserved: 0n,
             miscFrozen: 0n, feeFrozen: 0n, nonce: 0, newFormat: false,
-          })
-        } else {
-          const raw = await rpc.call('state_getStorage', [storKey, hash])
-          if (!raw || raw === '0x') {
-            log('warn', `Block #${blk.toLocaleString('en')}: no account storage at this block — account may not exist yet or has zero balance`)
-            results.push({
-              block: blk, blockHash: hash, free: 0n, reserved: 0n,
-              miscFrozen: 0n, feeFrozen: 0n, nonce: 0, newFormat: false,
-            })
-          } else {
-            const dec = decodeAccountInfo(raw)
-            log('info', `Block #${blk.toLocaleString('en')} → free=${dec.free} res=${dec.reserved}${dec.newFormat ? ' [new-fmt]' : ''}`)
-            results.push({ block: blk, blockHash: hash, ...dec })
           }
         }
 
-        queriedBlocks = i + 1
+        queriedBlocks++
         dispatch({
           type: 'SET_RECORDS',
-          records: [...results],
+          records: results.filter(Boolean),
           dataSource: 'query',
         })
         dispatch({
@@ -367,12 +348,15 @@ export default function useBalanceExplorer() {
             text: `Block ${blk.toLocaleString('en')} (${queriedBlocks} / ${blocks.length})`,
           }),
         })
-      }
+      }))
 
-      log('ok', `Fetch complete — ${results.length.toLocaleString('en')} records`)
+      // Sort final results by block number (parallel completion may reorder)
+      const sorted = results.filter(Boolean).sort((a, b) => a.block - b.block)
+
+      log('ok', `Fetch complete — ${sorted.length.toLocaleString('en')} records`)
       dispatch({
         type: 'DONE',
-        records: results,
+        records: sorted,
         dataSource: 'query',
         progress: buildPhaseProgress({
           totalBlocks: blocks.length,
@@ -380,7 +364,7 @@ export default function useBalanceExplorer() {
           connectStatus: 'completed',
           queryStatus: 'completed',
           finalizeStatus: 'completed',
-          text: `✓ ${results.length} records loaded.`,
+          text: `✓ ${sorted.length} records loaded.`,
         }),
       })
 
