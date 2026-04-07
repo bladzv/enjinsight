@@ -767,7 +767,8 @@ export default function BalanceExplorer() {
                   </div>
                 </div>
 
-                <div className="mt-4 space-y-4 xl:mt-0 xl:self-start">
+                <div className="hidden xl:block xl:self-start">
+                  <div className="space-y-4">
                   <div className="hidden xl:block">{liveChainSnapshot}</div>
                   <PhaseProgressCards
                     eyebrow="Query Progress"
@@ -778,6 +779,7 @@ export default function BalanceExplorer() {
                     phases={displayPhases}
                     ariaLabel="Balance query progress"
                   />
+                  </div>
                 </div>
               </div>
 
@@ -1111,6 +1113,18 @@ export default function BalanceExplorer() {
                   </span>
                 )}
               </div>
+
+              <div className="xl:hidden">
+                <PhaseProgressCards
+                  eyebrow="Query Progress"
+                  indexLabel="Phase"
+                  title={displayTitle}
+                  summary={displaySummary}
+                  meta={displayMeta}
+                  phases={displayPhases}
+                  ariaLabel="Balance query progress"
+                />
+              </div>
             </div>
           </div>
         )}
@@ -1228,7 +1242,7 @@ export default function BalanceExplorer() {
 
           <BalanceTable records={records} isLoading={isLoading} />
 
-          {dataSource === 'query' && hasResults && !isLoading && (
+          {dataSource === 'query' && hasResults && (status === STATUS.DONE || status === STATUS.CANCELLED) && (
             <BalanceExportPanel records={records} rpcMeta={rpcMetaRef.current} />
           )}
         </>

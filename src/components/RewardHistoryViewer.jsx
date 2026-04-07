@@ -1709,7 +1709,7 @@ export default function RewardHistoryViewer() {
             <PoolBondedPieChart data={filteredRows} />
             <PoolRewardPieChart data={filteredRows} />
           </div>
-          {!importedResults && !isLoading && <RewardExportPanel results={activeResults} address={address} />}
+          {!importedResults && (isDone || isStopped) && <RewardExportPanel results={activeResults} address={address} />}
           {importedResults && <RewardExportPanel results={activeResults} address={importedAddress} />}
           {importedResults && (
             <div className="flex items-center gap-2 text-xs text-text-secondary px-1">

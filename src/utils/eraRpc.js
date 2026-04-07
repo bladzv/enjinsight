@@ -6,78 +6,22 @@
  * for UTC date strings. Used when the CSV is outdated and recent eras
  * are not yet included.
  *
+ * Performance: era binary searches and per-era timestamp fetches are run in
+ * parallel (bounded by SubstrateRPC's concurrency semaphore, cap=3) rather than
+ * the previous fully-sequential approach.  For N missing eras this cuts wall-clock
+ * time from O(N × log(chainHead)) to roughly O(log(chainHead)) for the dominant
+ * era while the others interleave.
+ *
  * Security: caller must validate archiveWss with validateWsEndpoint() before use.
  *           No user-supplied data flows into storage key construction here;
  *           all keys are hardcoded Substrate well-known keys.
  */
-import { WS_CONNECT_TIMEOUT_MS, WS_CALL_TIMEOUT_MS } from '../constants.js'
+import { SubstrateRPC } from './rpc.js'
 
 // twox128("Staking") + twox128("ActiveEra") — verified on Enjin relay chain
 const STAKING_ACTIVE_ERA_KEY = '0x5f3e4907f716ac89b6347d15ececedca487df464e44a534ba6b0cbb32407b587'
 // twox128("Timestamp") + twox128("Now")
 const TIMESTAMP_NOW_KEY = '0xf0c365c3cf59d671eb72da0e7a4113c49f1f0515f462cdcf84e0f1d6045dfcbb'
-
-// ── Minimal one-shot WS-RPC client ─────────────────────────────────────────
-class MinRPC {
-  constructor(ep) {
-    this.ep   = ep
-    this.ws   = null
-    this.pend = new Map()
-    this.id   = 0
-    this.dead = false
-  }
-
-  connect() {
-    return new Promise((res, rej) => {
-      let ws
-      try { ws = new WebSocket(this.ep) }
-      catch (e) { return rej(new Error(`Cannot open WebSocket: ${e.message}`)) }
-      this.ws = ws
-      const tout = setTimeout(() => {
-        try { ws.close() } catch {}
-        rej(new Error('Connection timed out'))
-      }, WS_CONNECT_TIMEOUT_MS)
-      ws.onopen  = () => { clearTimeout(tout); res() }
-      ws.onerror = () => { clearTimeout(tout); rej(new Error('WebSocket connection failed')) }
-      ws.onclose = () => {
-        this.pend.forEach(p => p.rej(new Error('Connection closed')))
-        this.pend.clear()
-      }
-      ws.onmessage = ev => {
-        let msg; try { msg = JSON.parse(ev.data) } catch { return }
-        if (!msg?.id) return
-        const p = this.pend.get(msg.id)
-        if (!p) return
-        this.pend.delete(msg.id)
-        msg.error ? p.rej(new Error(String(msg.error?.message ?? 'RPC error'))) : p.res(msg.result)
-      }
-    })
-  }
-
-  call(method, params = []) {
-    return new Promise((res, rej) => {
-      if (this.dead || !this.ws || this.ws.readyState !== WebSocket.OPEN)
-        return rej(new Error('Not connected'))
-      const id = ++this.id
-      const t = setTimeout(() => {
-        this.pend.delete(id)
-        rej(new Error(`Timeout: ${method}`))
-      }, WS_CALL_TIMEOUT_MS)
-      this.pend.set(id, {
-        res: v => { clearTimeout(t); res(v) },
-        rej: e => { clearTimeout(t); rej(e) },
-      })
-      this.ws.send(JSON.stringify({ jsonrpc: '2.0', id, method, params }))
-    })
-  }
-
-  close() {
-    this.dead = true
-    this.pend.forEach(p => p.rej(new Error('Closed')))
-    this.pend.clear()
-    try { this.ws?.close(1000, 'done') } catch {}
-  }
-}
 
 // ── SCALE decoders ─────────────────────────────────────────────────────────
 
@@ -124,7 +68,7 @@ async function binarySearchEraStart(rpc, targetEra, chainHead, signal) {
   while (lo <= hi) {
     if (signal?.aborted) throw new Error('Aborted')
     const mid = Math.floor((lo + hi) / 2)
-    const bh = await rpc.call('chain_getBlockHash', [mid]).catch(() => null)
+    const bh  = await rpc.call('chain_getBlockHash', [mid]).catch(() => null)
     if (!bh || /^0x0+$/.test(bh)) { lo = mid + 1; continue }
     const raw = await rpc.call('state_getStorage', [STAKING_ACTIVE_ERA_KEY, bh]).catch(() => null)
     const midEra = decodeActiveEra(raw)
@@ -139,7 +83,7 @@ async function binarySearchEraStart(rpc, targetEra, chainHead, signal) {
     if (signal?.aborted) throw new Error('Aborted')
     const pbh = await rpc.call('chain_getBlockHash', [result - 1]).catch(() => null)
     if (!pbh) break
-    const pv = await rpc.call('state_getStorage', [STAKING_ACTIVE_ERA_KEY, pbh]).catch(() => null)
+    const pv  = await rpc.call('state_getStorage', [STAKING_ACTIVE_ERA_KEY, pbh]).catch(() => null)
     if (decodeActiveEra(pv) !== targetEra) break
     result -= 1
   }
@@ -151,8 +95,9 @@ async function binarySearchEraStart(rpc, targetEra, chainHead, signal) {
 /**
  * Fetch block boundaries for eras not covered by relay-era-reference.csv.
  *
- * Opens a temporary WebSocket to archiveWss, binary-searches Staking.ActiveEra
- * for each requested era, fetches Timestamp.Now for UTC dates, then closes.
+ * Opens a temporary WebSocket to archiveWss using a SubstrateRPC client
+ * (concurrency cap = 3), runs binary searches for all requested eras in
+ * parallel, then fetches block hashes and timestamps in parallel.
  *
  * The caller should also request era N+1 implicitly so that era N's endBlock
  * can be derived; this is handled internally.
@@ -169,7 +114,7 @@ async function binarySearchEraStart(rpc, targetEra, chainHead, signal) {
  */
 export async function fetchEraBoundariesFromRpc(archiveWss, eras, signal) {
   if (!eras.length) return {}
-  const rpc = new MinRPC(archiveWss)
+  const rpc = new SubstrateRPC(archiveWss, { concurrency: 3 })
   try {
     await rpc.connect()
     if (signal?.aborted) throw new Error('Aborted')
@@ -179,35 +124,46 @@ export async function fetchEraBoundariesFromRpc(archiveWss, eras, signal) {
     if (!Number.isFinite(chainHead) || chainHead <= 0)
       throw new Error('Could not determine chain head from archive node')
 
-    // Resolve start blocks for requested eras + the one after the last (to derive endBlock)
-    const toFind = [...new Set([...eras, Math.max(...eras) + 1])]
+    // Resolve start blocks for requested eras + the one after the last (to derive endBlock).
+    // All binary searches run concurrently — the semaphore (cap=3) keeps the node responsive.
+    const toFind     = [...new Set([...eras, Math.max(...eras) + 1])]
     const startBlocks = {}
-    for (const era of toFind) {
+
+    await Promise.all(toFind.map(async era => {
       if (signal?.aborted) throw new Error('Aborted')
       const sb = await binarySearchEraStart(rpc, era, chainHead, signal)
       if (sb != null) startBlocks[era] = sb
-    }
+    }))
 
+    // For each requested era, fetch the block hashes and timestamps for both the
+    // start and end blocks concurrently — within an era, hash→storage is sequential
+    // but start and end can overlap; across eras everything is parallelised.
     const result = {}
-    for (const era of eras) {
-      const sb = startBlocks[era]
-      if (sb == null) continue
 
-      const hash = await rpc.call('chain_getBlockHash', [sb]).catch(() => null)
-      const tsRaw = hash
-        ? await rpc.call('state_getStorage', [TIMESTAMP_NOW_KEY, hash]).catch(() => null)
-        : null
-      const tsMs = tsRaw ? decodeTimestampMs(tsRaw) : null
+    await Promise.all(eras.map(async era => {
+      const sb = startBlocks[era]
+      if (sb == null) return
 
       const endBlock = startBlocks[era + 1] != null ? startBlocks[era + 1] - 1 : null
-      let endTsMs = null
-      if (endBlock != null) {
-        const eh = await rpc.call('chain_getBlockHash', [endBlock]).catch(() => null)
-        const etsRaw = eh
-          ? await rpc.call('state_getStorage', [TIMESTAMP_NOW_KEY, eh]).catch(() => null)
-          : null
-        endTsMs = etsRaw ? decodeTimestampMs(etsRaw) : null
-      }
+
+      // Fetch start-block hash and end-block hash in parallel
+      const [hash, eh] = await Promise.all([
+        rpc.call('chain_getBlockHash', [sb]).catch(() => null),
+        endBlock != null
+          ? rpc.call('chain_getBlockHash', [endBlock]).catch(() => null)
+          : Promise.resolve(null),
+      ])
+
+      // Fetch both timestamps in parallel (each depends on its hash, not each other)
+      const [tsRaw, etsRaw] = await Promise.all([
+        hash ? rpc.call('state_getStorage', [TIMESTAMP_NOW_KEY, hash]).catch(() => null)
+             : Promise.resolve(null),
+        eh   ? rpc.call('state_getStorage', [TIMESTAMP_NOW_KEY, eh]).catch(() => null)
+             : Promise.resolve(null),
+      ])
+
+      const tsMs    = tsRaw    ? decodeTimestampMs(tsRaw)  : null
+      const endTsMs = etsRaw   ? decodeTimestampMs(etsRaw) : null
 
       result[era] = {
         startBlock:     sb,
@@ -218,7 +174,8 @@ export async function fetchEraBoundariesFromRpc(archiveWss, eras, signal) {
         startDateUtc:   tsMs    != null ? msToUtcString(tsMs)    : null,
         endDateUtc:     endTsMs != null ? msToUtcString(endTsMs) : null,
       }
-    }
+    }))
+
     return result
   } finally {
     rpc.close()
