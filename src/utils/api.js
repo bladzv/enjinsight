@@ -27,6 +27,23 @@ function buildUrl(path) {
 
 const delay = ms => new Promise(r => setTimeout(r, ms))
 
+// ── In-flight request deduplication ──────────────────────────────────────────
+// If two callers request the exact same Subscan endpoint + body simultaneously,
+// the second call joins the first Promise rather than issuing a duplicate HTTP
+// request.  This is especially important when multiple components (e.g. pool list
+// + reward history) both trigger the same fetches within the same render cycle,
+// and protects the shared API key on free-tier plans.
+// The Map is keyed on path + serialised body so different queries are never merged.
+const _inflight = new Map()
+
+function deduplicated(path, body, fn) {
+  const key = path + '\x00' + JSON.stringify(body)
+  if (_inflight.has(key)) return _inflight.get(key)
+  const p = fn().finally(() => _inflight.delete(key))
+  _inflight.set(key, p)
+  return p
+}
+
 // Simple FIFO request queue to serialize top-level requests and enforce a
 // delay between them to avoid hitting rate limits when manual retries are invoked.
 class RequestQueue {
@@ -79,6 +96,19 @@ export const enqueueRequest = (fn) => requestQueue.add(fn)
  * - Input body values are serialised as JSON (no eval, no injection)
  */
 export async function subscanPost(path, body, _proxyUrl, options = {}) {
+  // Abort signals are caller-specific and must not be shared across deduplicated
+  // requests, so we dedup only when there is no signal (or the signal is the same
+  // reference across callers, which never happens in practice for different users).
+  // We also skip dedup when options has a custom onRetry callback since those callers
+  // expect private state.  The common high-frequency paths (pool lists, era stats)
+  // are signal-free and benefit most from deduplication.
+  if (!options.signal && !options.onRetry) {
+    return deduplicated(path, body, () => _subscanPost(path, body, options))
+  }
+  return _subscanPost(path, body, options)
+}
+
+async function _subscanPost(path, body, options = {}) {
   const url = buildUrl(path)
   const external = options.signal
   const serialisedBody = JSON.stringify(body)
