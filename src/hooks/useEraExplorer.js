@@ -9,6 +9,7 @@
  *     WS to binary-search the new era start.
  */
 import { useReducer, useCallback, useRef, useEffect } from 'react'
+import { loadEraCsvRows } from '../utils/eraCache.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const WSS            = 'wss://rpc.relay.blockchain.enjin.io'
@@ -455,43 +456,35 @@ class EraExplorerController {
     }
   }
 
-  // Load relay-era-reference.csv for instant past-era lookup
+  // Load relay-era-reference.csv for instant past-era lookup (localStorage-cached)
   async loadCsv() {
-    for (const path of [CSV_PATH, CSV_PATH.replace(/^\//, '')]) {
-      try {
-        const resp = await fetch(path, { credentials: 'same-origin' })
-        if (!resp.ok) continue
-        const text = await resp.text()
-        if (!text.trimStart().startsWith('era,')) continue
-        const lines = text.trim().split(/\r?\n/)
-        if (lines.length < 2) continue
-        const header = lines[0].split(',').map(s => s.trim())
-        let count = 0
-        for (let i = 1; i < lines.length; i++) {
-          const cols = lines[i].split(',')
-          if (cols.length < 2) continue
-          const row = {}; header.forEach((h, j) => { row[h] = (cols[j] ?? '').trim() })
-          const era = parseInt(row.era, 10); if (isNaN(era)) continue
-          const sb  = parseInt(row.start_block, 10); if (isNaN(sb)) continue
-          const eb  = row.end_block ? parseInt(row.end_block, 10) : NaN
-          this.csvCache[era] = {
-            start_block:        sb,
-            end_block:          isNaN(eb) ? null : eb,
-            start_block_hash:   row.start_block_hash   || null,
-            start_datetime_utc: row.start_datetime_utc || null,
-            end_datetime_utc:   row.end_datetime_utc   || null,
-          }
-          this.eraBlockCache[era] = sb
-          if (!isNaN(eb)) this.eraBlockCache[era + 1] = eb + 1
-          count++
+    try {
+      const rows = await loadEraCsvRows(CSV_PATH)
+      let count = 0
+      for (const row of rows) {
+        const era = parseInt(row.era, 10);        if (isNaN(era)) continue
+        const sb  = parseInt(row.start_block, 10); if (isNaN(sb)) continue
+        const eb  = row.end_block ? parseInt(row.end_block, 10) : NaN
+        this.csvCache[era] = {
+          start_block:        sb,
+          end_block:          isNaN(eb) ? null : eb,
+          start_block_hash:   row.start_block_hash   || null,
+          start_datetime_utc: row.start_datetime_utc || null,
+          end_datetime_utc:   row.end_datetime_utc   || null,
         }
-        if (count === 0) continue
-        this.log('ok', `Preloaded ${count} eras from relay-era-reference.csv`)
-        this.dispatch({ type: 'CSV_LOADED', count })
+        this.eraBlockCache[era] = sb
+        if (!isNaN(eb)) this.eraBlockCache[era + 1] = eb + 1
+        count++
+      }
+      if (count === 0) {
+        this.log('info', 'No relay-era-reference.csv — RPC / math fallback')
         return
-      } catch {}
+      }
+      this.log('ok', `Preloaded ${count} eras from relay-era-reference.csv`)
+      this.dispatch({ type: 'CSV_LOADED', count })
+    } catch {
+      this.log('info', 'No relay-era-reference.csv — RPC / math fallback')
     }
-    this.log('info', 'No relay-era-reference.csv — RPC / math fallback')
   }
 
   // Phase 2: connect to live node for block subscriptions only

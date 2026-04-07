@@ -23,11 +23,12 @@
 EnjinSight is a static-frontend monitoring suite for the Enjin Blockchain. It bundles four independent on-chain tools that require no wallet, no account, and no backend database. All data is fetched directly from Enjin's public infrastructure — archive-node WebSocket RPC for balance and reward data, and the Subscan API (via a same-origin serverless proxy) for staking analytics.
 
 | Tool | Description |
-|------|-------------|
+|------|-----------|
 | **Era Block Explorer** | Real-time era/session/block metrics + historical era lookup with UTC/local time toggle |
 | **Staking Rewards Cadence** | Scans validators and nomination pools for missing reward payouts |
 | **Historical Balance Viewer** | Queries any address balance over a block or date range via archive-node WebSocket RPC |
 | **Reward History Viewer** | Computes per-era staking rewards across all nomination pools for a given address |
+| **EnjinSight CLI** | Offline Python CLI with all four tools, SSL fallback, and web-compatible JSON / CSV / XML export |
 
 ---
 
@@ -126,6 +127,7 @@ EnjinSight is a static-frontend monitoring suite for the Enjin Blockchain. It bu
 │   ├── era-explorer.html        # Standalone era explorer (no React)
 │   └── site.webmanifest
 ├── scripts/
+│   ├── enjinsight_cli.py           # Full-featured CLI: all four tools, SSL fallback, web-compatible export
 │   ├── staking-rewards-rpc.py      # CLI: per-era pool reward computation via archive RPC
 │   ├── relay-era-range-fetch.py    # Builds / updates relay-era-reference.csv
 │   ├── canary-era-range-fetch.py   # Builds / updates canary-relay-era-reference.csv
@@ -218,21 +220,50 @@ npm run lint     # ESLint
 
 ## Python Scripts
 
-The `scripts/` directory contains standalone Python utilities for data maintenance and two **educational explorer scripts** that mirror the web app's Substrate storage query logic step-by-step.
+The `scripts/` directory contains the **EnjinSight CLI** (`enjinsight_cli.py`) — a full Python port of the web app's four tools — plus standalone data-maintenance utilities and two **educational explorer scripts**.
 
 ### Requirements
 
 ```bash
-pip install websockets          # required by both explorer scripts
-pip install certifi             # optional — improves TLS cert handling on macOS
-pip install substrate-interface # required by staking-rewards-rpc.py
+pip install requests websockets python-dotenv rich  # required by enjinsight_cli.py
+pip install certifi                                  # optional — improves TLS cert handling on macOS
+pip install cryptography                             # optional — enables encrypted export in the CLI
+pip install substrate-interface                      # required by staking-rewards-rpc.py (legacy)
 ```
+
+### EnjinSight CLI
+
+`scripts/enjinsight_cli.py` is a full-featured, offline-capable Python CLI that mirrors the four web-app tools:
+
+| Tool | CLI Equivalent |
+|------|----------------|
+| Era Block Explorer | Real-time era/session/block metrics + historical era lookup |
+| Validator Reward Cadence | Missed-era detection for validators (Subscan API) |
+| Pool Reward Cadence | Missed-era detection for nomination pools (Subscan API) |
+| Historical Balance Viewer | Archive-node balance history with block-range or era-range query |
+| Reward History Viewer | Per-era staking reward computation across all pools |
+
+**Key features:**
+- **Web-compatible export** — JSON / CSV / XML output exactly matches the web app's import format so exports from the CLI can be loaded directly into the Balance Viewer or Reward History Viewer in the browser
+- **SSL fallback** — automatically retries with unverified SSL on `CERTIFICATE_VERIFY_FAILED`, printing a fix hint (macOS `Install Certificates` and `pip install certifi`)
+- **Graceful cancellation** — press `q` + Enter at any time during a scan; partial results are preserved and can still be exported
+- **Rich terminal UI** — formatted tables, coloured log lines, and progress panels via `rich` (falls back to plain text if not installed)
+- **Dependency auto-installer** — detects missing packages and offers to install them automatically
+
+```bash
+python scripts/enjinsight_cli.py
+# → Interactive menu: choose a tool and follow the prompts
+# → Set SUBSCAN_API_KEY in .env for staking tools
+```
+
+Set `SUBSCAN_API_KEY` in `.env` (or as an environment variable) before running the staking tools.
 
 ### Data maintenance
 
 | Script | Command | Output |
 |--------|---------|--------|
-| `staking-rewards-rpc.py` | `python scripts/staking-rewards-rpc.py` | Interactive CLI → per-era reward table for an address |
+| `enjinsight_cli.py` | `python scripts/enjinsight_cli.py` | Interactive CLI → all four tools with web-compatible export |
+| `staking-rewards-rpc.py` | `python scripts/staking-rewards-rpc.py` | Interactive CLI → per-era reward table for an address (legacy) |
 | `relay-era-range-fetch.py` | `python scripts/relay-era-range-fetch.py` | Updates `public/relay-era-reference.csv` |
 | `canary-era-range-fetch.py` | `python scripts/canary-era-range-fetch.py` | Updates `public/canary-relay-era-reference.csv` |
 
