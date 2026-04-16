@@ -72,12 +72,12 @@ export default function BalanceTable({ records, isLoading = false }) {
   }
 
   return (
-    <div className="animate-fade-in rounded-[1.5rem] bg-surface p-5 shadow-ambient">
+    <div className="animate-fade-in rounded-[1.35rem] bg-surface p-5 shadow-ambient">
       {/* Header */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="data-toolbar">
         <div>
           <p className="section-label">Ledger View</p>
-          <h3 className="mt-2 font-headline text-2xl font-bold text-text">Block-by-block log</h3>
+          <h3 className="mt-2 font-headline text-xl font-bold text-text sm:text-[1.6rem]">Block-by-block log</h3>
           {isLoading && (
             <span className="mt-2 inline-block text-[10px] text-cyan animate-pulse font-mono">Populating…</span>
           )}
@@ -130,8 +130,8 @@ export default function BalanceTable({ records, isLoading = false }) {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-[1.25rem] bg-card/70 p-1">
-        <table className={`w-full border-collapse ${textSize}`}>
+      <div className="data-table-wrap">
+        <table className={`data-table ${textSize}`}>
           <thead className="sticky top-0 z-10">
             <tr>
               {COLS.map(col => {
@@ -140,7 +140,7 @@ export default function BalanceTable({ records, isLoading = false }) {
                   <th
                     key={col.key}
                     onClick={() => handleSort(col.key)}
-                    className={`bg-surface-high px-3 py-3 font-bold tracking-widest
+                    className={`data-table-head px-3 py-3
                                 uppercase cursor-pointer select-none whitespace-nowrap transition-colors
                                 text-[calc(1em*0.79)] ${col.align === 'right' ? 'text-right' : 'text-left'}
                                 ${isSorted ? 'text-cyan' : 'text-muted hover:text-cyan'}`}
@@ -163,7 +163,7 @@ export default function BalanceTable({ records, isLoading = false }) {
             ) : pageSlice.map((d, idx) => {
               const safeHash = isValidBlockHash(d.blockHash) ? d.blockHash : ''
               return (
-                <tr key={`${d.block}-${idx}`} className="hover:bg-surface-bright/80 transition-colors">
+                <tr key={`${d.block}-${idx}`} className={`data-table-row ${idx % 2 ? 'data-table-row-alt' : ''}`}>
                   <td className="px-3 py-2 font-semibold text-text whitespace-nowrap font-mono">
                     {d.block.toLocaleString('en')}
                   </td>

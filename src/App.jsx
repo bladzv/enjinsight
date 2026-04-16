@@ -35,7 +35,7 @@ const POOL_PREVIEW_PHASES = [
   { key: 'ranges', label: 'Resolve Era Ranges', total: 1, completed: 0, status: 'pending' },
   { key: 'rewards', label: 'Confirm Rewards', total: 1, completed: 0, status: 'pending' },
 ]
-const STAKING_RESULTS_PAGE_SIZE = 9
+const STAKING_RESULTS_PAGE_SIZE = 10
 
 export default function App() {
   // Persist active view in URL hash so page refresh stays on current tool
@@ -109,9 +109,7 @@ export default function App() {
     : status === 'stopped'
       ? 'The scan was stopped before every phase completed.'
       : null
-  const displayProgressTitle = phases.length > 0
-    ? topLabel
-    : `${isValidatorMode ? 'Validator' : 'Pool'} scan ready`
+  const displayProgressTitle = 'Scan Progress'
   const displayProgressMeta = phases.length > 0 ? progressMeta : null
   const displayProgressSummary = phases.length > 0
     ? progressSummary
@@ -119,12 +117,6 @@ export default function App() {
 
   const validatorLatestEra = resolveLatestEra(validators)
   const activeRecords = isValidatorMode ? validators : pools
-  const gapCount = activeRecords.filter(item => item.missedEras?.length > 0).length
-  const errorCount = activeRecords.filter(item => item.fetchStatus === 'error' || item.fetchStatus === 'failed').length
-  const cleanCount = activeRecords.filter(item =>
-    (isValidatorMode ? Array.isArray(item.eraStat) : Array.isArray(item.eraRewards)) &&
-    (item.missedEras?.length ?? 0) === 0
-  ).length
   const validatorPages = Math.max(1, Math.ceil(validators.length / STAKING_RESULTS_PAGE_SIZE))
   const safeValidatorPage = Math.min(validatorPage, validatorPages)
   const visibleValidators = validators.slice(
@@ -228,84 +220,64 @@ export default function App() {
 
       {/* ── Balance Viewer ──────────────────────────────────────────── */}
       {view === 'balance' && (
-        <main className="relative z-10 mx-auto max-w-[92rem] px-4 py-6 sm:px-6 sm:py-8 pb-24 sm:pb-28">
+        <main className="relative z-10 mx-auto max-w-[104rem] px-4 py-6 sm:px-6 sm:py-8 pb-24 sm:pb-28">
           <BalanceExplorer />
         </main>
       )}
 
       {/* ── Reward History Viewer ─────────────────────────────────────────── */}
       {view === 'reward-history' && (
-        <main className="relative z-10 mx-auto max-w-[92rem] px-4 py-6 sm:px-6 sm:py-8 pb-24 sm:pb-28">
+        <main className="relative z-10 mx-auto max-w-[104rem] px-4 py-6 sm:px-6 sm:py-8 pb-24 sm:pb-28">
           <RewardHistoryViewer />
         </main>
       )}
 
       {/* ── Home / Landing ──────────────────────────────────────────── */}
       {view === 'home' && (
-        <main className="relative z-10 mx-auto max-w-[92rem] px-4 py-6 sm:px-6 sm:py-8 pb-16 sm:pb-20">
+        <main className="relative z-10 mx-auto max-w-[104rem] px-4 py-6 sm:px-6 sm:py-8 pb-16 sm:pb-20">
           <LandingPage onNavigate={handleNavigate} />
         </main>
       )}
 
       {/* ── Staking view ────────────────────────────────────────────── */}
       {view === 'staking' && (
-      <main className="relative z-10 mx-auto max-w-[92rem] px-4 py-6 sm:px-6 sm:py-8 pb-32 space-y-6">
+      <main className="relative z-10 mx-auto max-w-[104rem] px-4 py-5 sm:px-6 sm:py-7 pb-32 space-y-5">
 
         <section className="page-hero">
-          <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)] lg:items-start">
-            <div className="space-y-5">
+          <div className="relative z-10 grid gap-6 xl:grid-cols-[minmax(0,1.18fr)_minmax(320px,0.82fr)] xl:items-end">
+            <div className="space-y-4">
               <div className="hero-kicker">
                 <span className="hero-dot" />
                 STAKING DIAGNOSTICS
               </div>
-              <div className="space-y-4">
+              <div className="max-w-3xl space-y-3">
                 <h1 className="hero-title text-balance">
                   Staking rewards cadence with live operator context.
                 </h1>
                 <p className="hero-copy">
-                  Run the staking reward scan workflow to review missing rewards and risk severity.
+                  Scan validator or pool reward cadence, then inspect the raw detail tables below without burning space on duplicate summary blocks.
                 </p>
               </div>
+
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="metric-card metric-card-left-cyan">
-                <p className="metric-label">Scanned Records</p>
-                <p className="metric-value text-cyan">{activeRecords.length}</p>
-              </div>
-              <div className="metric-card metric-card-left-danger">
-                <p className="metric-label">Gaps Detected</p>
-                <p className={`metric-value ${gapCount > 0 ? 'text-danger' : 'text-success'}`}>{gapCount}</p>
-              </div>
-              <div className="metric-card metric-card-left-success">
-                <p className="metric-label">Clean Results</p>
-                <p className="metric-value text-success">{cleanCount}</p>
-              </div>
-              <div className="metric-card metric-card-left-warning">
-                <p className="metric-label">Fetch Errors</p>
-                <p className={`metric-value ${errorCount > 0 ? 'text-warning' : 'text-text'}`}>{errorCount}</p>
-              </div>
-            </div>
           </div>
         </section>
 
         {/* Mode selector tabs + scan controls */}
-        <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
-          <div className="space-y-4">
-            <ModeSelector mode={mode} onModeChange={handleModeChange} disabled={isLoading} />
-            <ControlPanel
-              mode={mode}
-              status={status}
-              onRun={handleRun}
-              onStop={handleStop}
-              onReset={handleReset}
-            />
-          </div>
+        <div className="grid gap-4 xl:grid-cols-3 xl:items-stretch">
+          <ModeSelector mode={mode} onModeChange={handleModeChange} disabled={isLoading} />
+          <ControlPanel
+            mode={mode}
+            status={status}
+            onRun={handleRun}
+            onStop={handleStop}
+            onReset={handleReset}
+          />
 
           <PhaseProgressCards
             className="h-full"
             ariaLabel="Scan progress"
-            eyebrow="Scan Progress"
             indexLabel="Step"
             title={displayProgressTitle}
             summary={displayProgressSummary}
@@ -317,32 +289,44 @@ export default function App() {
         {/* ── Validator mode content ──────────────────────────────── */}
         {isValidatorMode && validators.length > 0 && (
           <section id="validators-panel" aria-labelledby="validators-heading">
-            <div className="overflow-hidden rounded-[1.5rem] bg-surface shadow-ambient">
+            <div className="overflow-hidden rounded-[1.35rem] bg-surface shadow-ambient">
               <button
                 type="button"
                 onClick={() => setShowValidatorResults(open => !open)}
-                className="flex w-full flex-wrap items-center gap-3 bg-card px-5 py-4 text-left transition-colors hover:bg-surface-high sm:px-6"
+                className="flex w-full flex-wrap items-center gap-3 bg-card px-4 py-3.5 text-left transition-colors hover:bg-surface-high sm:px-5"
                 aria-expanded={showValidatorResults}
               >
                 <div>
                   <p className="section-label">Results</p>
                   <h2 id="validators-heading" className="section-title">Validators</h2>
                 </div>
-                <span className="text-xs font-mono text-muted">{validators.length} total</span>
-                <span className="mini-chip">{safeValidatorPage} / {validatorPages}</span>
                 {isLoading && (
-                  <span className="ml-auto text-xs text-text-secondary">
+                  <span className="text-xs text-text-secondary">
                     {validators.filter(v => v.fetchStatus === 'done').length} / {validators.length} loaded
                   </span>
                 )}
-                <span className="ml-auto text-text-secondary" aria-hidden="true">
+                <div className="ml-auto flex flex-wrap items-center gap-3">
+                  <span className="text-xs font-mono text-muted">
+                    {validators.length} validator{validators.length !== 1 ? 's' : ''} scanned
+                  </span>
+                  {validatorPages > 1 && (
+                    <div className="flex items-center gap-1 text-xs" onClick={e => e.stopPropagation()}>
+                      <button type="button" onClick={() => setValidatorPage(1)} disabled={safeValidatorPage === 1} className="btn-ghost disabled:opacity-30" aria-label="First page">«</button>
+                      <button type="button" onClick={() => setValidatorPage(Math.max(1, safeValidatorPage - 1))} disabled={safeValidatorPage === 1} className="btn-ghost disabled:opacity-30" aria-label="Previous page">‹ Prev</button>
+                      <span className="px-2">{safeValidatorPage} / {validatorPages}</span>
+                      <button type="button" onClick={() => setValidatorPage(Math.min(validatorPages, safeValidatorPage + 1))} disabled={safeValidatorPage === validatorPages} className="btn-ghost disabled:opacity-30" aria-label="Next page">Next ›</button>
+                      <button type="button" onClick={() => setValidatorPage(validatorPages)} disabled={safeValidatorPage === validatorPages} className="btn-ghost disabled:opacity-30" aria-label="Last page">»</button>
+                    </div>
+                  )}
+                </div>
+                <span className="text-text-secondary" aria-hidden="true">
                   {showValidatorResults ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </span>
               </button>
 
               {showValidatorResults && (
-                <div className="space-y-4 px-5 py-5 sm:px-6">
-                  <div className="grid gap-3 xl:grid-cols-3">
+                <div className="space-y-4 px-4 py-4 sm:px-5">
+                  <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-4">
                     {visibleValidators.map(v => (
                       <ValidatorCard
                         key={v.address}
@@ -378,32 +362,44 @@ export default function App() {
         {/* ── Pool mode content ───────────────────────────────────── */}
         {!isValidatorMode && pools.length > 0 && (
           <section id="pools-panel" aria-labelledby="pools-heading">
-            <div className="overflow-hidden rounded-[1.5rem] bg-surface shadow-ambient">
+            <div className="overflow-hidden rounded-[1.35rem] bg-surface shadow-ambient">
               <button
                 type="button"
                 onClick={() => setShowPoolResults(open => !open)}
-                className="flex w-full flex-wrap items-center gap-3 bg-card px-5 py-4 text-left transition-colors hover:bg-surface-high sm:px-6"
+                className="flex w-full flex-wrap items-center gap-3 bg-card px-4 py-3.5 text-left transition-colors hover:bg-surface-high sm:px-5"
                 aria-expanded={showPoolResults}
               >
                 <div>
                   <p className="section-label">Results</p>
                   <h2 id="pools-heading" className="section-title">Nomination Pools</h2>
                 </div>
-                <span className="text-xs font-mono text-muted">{pools.length} total</span>
-                <span className="mini-chip">{safePoolPage} / {poolPages}</span>
                 {isLoading && (
-                  <span className="ml-auto text-xs text-text-secondary">
+                  <span className="text-xs text-text-secondary">
                     {pools.filter(p => p.fetchStatus === 'done').length} / {pools.length} loaded
                   </span>
                 )}
-                <span className="ml-auto text-text-secondary" aria-hidden="true">
+                <div className="ml-auto flex flex-wrap items-center gap-3">
+                  <span className="text-xs font-mono text-muted">
+                    {pools.length} pool{pools.length !== 1 ? 's' : ''} scanned
+                  </span>
+                  {poolPages > 1 && (
+                    <div className="flex items-center gap-1 text-xs" onClick={e => e.stopPropagation()}>
+                      <button type="button" onClick={() => setPoolPage(1)} disabled={safePoolPage === 1} className="btn-ghost disabled:opacity-30" aria-label="First page">«</button>
+                      <button type="button" onClick={() => setPoolPage(Math.max(1, safePoolPage - 1))} disabled={safePoolPage === 1} className="btn-ghost disabled:opacity-30" aria-label="Previous page">‹ Prev</button>
+                      <span className="px-2">{safePoolPage} / {poolPages}</span>
+                      <button type="button" onClick={() => setPoolPage(Math.min(poolPages, safePoolPage + 1))} disabled={safePoolPage === poolPages} className="btn-ghost disabled:opacity-30" aria-label="Next page">Next ›</button>
+                      <button type="button" onClick={() => setPoolPage(poolPages)} disabled={safePoolPage === poolPages} className="btn-ghost disabled:opacity-30" aria-label="Last page">»</button>
+                    </div>
+                  )}
+                </div>
+                <span className="text-text-secondary" aria-hidden="true">
                   {showPoolResults ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </span>
               </button>
 
               {showPoolResults && (
-                <div className="space-y-4 px-5 py-5 sm:px-6">
-                  <div className="grid gap-3 xl:grid-cols-3">
+                <div className="space-y-4 px-4 py-4 sm:px-5">
+                  <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-4">
                     {visiblePools.map(p => (
                       <PoolCard
                         key={p.poolId}
@@ -444,7 +440,7 @@ export default function App() {
 
         {/* ── Empty / error states ────────────────────────────────── */}
         {status === 'idle' && activeRecords.length > 0 && (
-          <div className="rounded-[1.5rem] bg-surface px-6 py-16 text-center shadow-ambient sm:py-24">
+          <div className="rounded-[1.35rem] bg-surface px-6 py-12 text-center shadow-ambient sm:py-16">
             <div className="w-16 h-16 mx-auto mb-5 rounded-xl bg-card
                             flex items-center justify-center">
               <svg viewBox="0 0 32 32" className="w-8 h-8 fill-primary/60">
@@ -464,7 +460,7 @@ export default function App() {
         )}
 
         {status === 'error' && (
-          <div className="rounded-[1.5rem] bg-surface px-6 py-12 text-center shadow-ambient">
+          <div className="rounded-[1.35rem] bg-surface px-6 py-10 text-center shadow-ambient">
             <p className="text-sm text-danger mb-3">
               {isValidatorMode ? 'Failed to fetch validator list.' : 'Failed to fetch nomination pools.'}
             </p>
@@ -502,7 +498,7 @@ export default function App() {
 
 function ResultsPagination({ page, totalPages, totalItems, itemLabel, onPageChange }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.25rem] bg-card px-4 py-3 text-xs text-text-secondary">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.15rem] bg-card px-4 py-3 text-xs text-text-secondary">
       <span>
         {totalItems.toLocaleString('en')} {itemLabel}
       </span>

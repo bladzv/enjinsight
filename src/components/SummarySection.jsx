@@ -29,14 +29,14 @@ export default function SummarySection({ validators, eraCount }) {
   }, [safeGapPage, gapPage])
 
   return (
-    <section aria-labelledby="summary-heading" className="space-y-6 animate-fade-in">
+    <section aria-labelledby="summary-heading" className="space-y-5 animate-fade-in">
       <div>
         <p className="section-label">Summary</p>
         <h2 id="summary-heading" className="section-title mt-2">Validator Overview</h2>
       </div>
 
       {/* ── Overview stat chips (bento grid) ────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatChip
           value={validators.length}
           label="Total Scanned"
@@ -95,8 +95,8 @@ export default function SummarySection({ validators, eraCount }) {
 
       {/* ── Reward gap table ──────────────────────────────────────── */}
       {withGaps.length > 0 ? (
-        <div className="overflow-hidden rounded-[1.5rem] bg-surface shadow-ambient">
-          <div className="px-5 py-3 bg-card flex items-center gap-2">
+        <div className="overflow-hidden rounded-[1.35rem] bg-surface shadow-ambient">
+          <div className="flex items-center gap-2 bg-card px-4 py-3 sm:px-5">
             <XCircle size={14} className="text-warning" />
             <h3 className="text-sm font-semibold font-headline text-text">Validators with Missing Rewards</h3>
             <span className="ml-auto px-2 py-0.5 rounded text-[10px] font-bold bg-warning/15 text-warning">
@@ -139,10 +139,10 @@ export default function SummarySection({ validators, eraCount }) {
               )
             })}
           </div>
-          <div className="hidden sm:block scroll-x">
-            <table className="w-full text-xs min-w-[520px]">
+          <div className="hidden sm:block data-table-wrap">
+            <table className="data-table min-w-[520px]">
               <thead>
-                <tr className="bg-surface-high text-[10px] uppercase text-muted font-bold">
+                <tr className="data-table-head">
                   <th className="text-left px-4 py-3">Validator</th>
                   <th className="text-center px-3 py-3">Checked</th>
                   <th className="text-center px-3 py-3">Rewarded</th>
@@ -157,7 +157,7 @@ export default function SummarySection({ validators, eraCount }) {
                   const missed   = v.missedEras.length
                   const rewarded = Math.max(0, eraCount - missed)
                   return (
-                    <tr key={v.address} className="hover:bg-surface-bright transition-colors">
+                    <tr key={v.address} className="data-table-row">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           <span className="max-w-[220px] whitespace-normal break-words font-medium text-text">
@@ -193,7 +193,7 @@ export default function SummarySection({ validators, eraCount }) {
 
           {/* Gap table pagination */}
           {gapPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-2.5 bg-card text-xs text-text-secondary">
+            <div className="flex items-center justify-between bg-card px-4 py-2.5 text-xs text-text-secondary">
               <div className="flex items-center gap-2">
                 <span>{withGaps.length} validators</span>
                 <select
@@ -244,10 +244,10 @@ export default function SummarySection({ validators, eraCount }) {
 
       {/* ── Clean validators (collapsed) ─────────────────────────── */}
       {clean.length > 0 && (
-        <div className="overflow-hidden rounded-[1.5rem] bg-surface shadow-ambient ring-1 ring-success/10">
+        <div className="overflow-hidden rounded-[1.35rem] bg-surface shadow-ambient ring-1 ring-success/10">
           <button
             onClick={() => setShowClean(s => !s)}
-            className="w-full px-5 py-5 text-left transition-colors hover:bg-card/50 sm:px-6"
+            className="w-full px-4 py-4 text-left transition-colors hover:bg-card/50 sm:px-5"
             aria-expanded={showClean}
           >
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
@@ -258,7 +258,7 @@ export default function SummarySection({ validators, eraCount }) {
                 <div className="space-y-2">
                   <p className="section-label text-success">Validator Review</p>
                   <div>
-                    <h3 className="font-headline text-2xl font-bold text-text">Perfect Record</h3>
+                    <h3 className="font-headline text-xl font-bold text-text sm:text-[1.6rem]">Perfect Record</h3>
                     <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
                       Validators in this group received rewards in every era across the current scan window.
                     </p>
@@ -285,9 +285,9 @@ export default function SummarySection({ validators, eraCount }) {
             </div>
           </button>
           {showClean && (
-            <div className="grid grid-cols-1 gap-3 px-5 py-5 animate-fade-in sm:grid-cols-2 xl:grid-cols-3 sm:px-6">
+            <div className="grid grid-cols-1 gap-3 px-4 py-4 animate-fade-in sm:grid-cols-2 2xl:grid-cols-4 sm:px-5">
               {clean.map(v => (
-                <div key={v.address} className="rounded-[1.25rem] bg-card px-4 py-4 transition-colors hover:bg-surface-high">
+                <div key={v.address} className="rounded-[1.15rem] bg-card px-4 py-4 transition-colors hover:bg-surface-high">
                   <div className="flex items-start gap-3">
                     <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-success/10 text-success">
                       <CheckCircle2 size={16} />
@@ -305,7 +305,7 @@ export default function SummarySection({ validators, eraCount }) {
                     className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-text-secondary transition-colors hover:text-cyan"
                     aria-label="Open on Subscan"
                   >
-                    Open on Subscan
+                    Subscan
                     <ExternalLink size={12} />
                   </a>
                 </div>
@@ -322,7 +322,7 @@ function StatChip({ value, label, colour }) {
   return (
     <div className="metric-card">
       <span className="metric-label">{label}</span>
-      <div className={`metric-value text-4xl ${colour}`}>{value}</div>
+      <div className={`metric-value text-3xl ${colour}`}>{value}</div>
     </div>
   )
 }

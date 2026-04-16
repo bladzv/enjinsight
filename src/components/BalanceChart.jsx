@@ -20,10 +20,10 @@ function decimateForChart(data) {
   return data.filter((_, i) => i % step === 0 || i === data.length - 1)
 }
 
-// ── Chart height zoom levels (% of base 340 px) ───────────────────────────
+// ── Chart height zoom levels (% of base 300 px) ───────────────────────────
 const ZOOM_STEPS = [60, 75, 100, 130, 160, 200]
 const DEFAULT_ZOOM_IDX = 2
-const BASE_HEIGHT_PX = 340
+const BASE_HEIGHT_PX = 300
 
 // ── Crosshair plugin ───────────────────────────────────────────────────────
 const crosshairPlugin = {
@@ -274,12 +274,12 @@ export default function BalanceChart({ records }) {
   ]
 
   return (
-    <div className="animate-fade-in rounded-[1.5rem] bg-surface p-5 shadow-ambient">
+    <div className="animate-fade-in rounded-[1.35rem] bg-surface p-5 shadow-ambient">
       {/* Card header */}
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="data-toolbar">
         <div>
           <p className="section-label">Visualization</p>
-          <h3 className="mt-2 font-headline text-2xl font-bold text-text">Aggregated Asset Flow</h3>
+          <h3 className="mt-2 font-headline text-xl font-bold text-text sm:text-[1.6rem]">Aggregated Asset Flow</h3>
           <p className="mt-2 text-sm text-text-secondary">Archive snapshots across the selected balance range.</p>
         </div>
         <div className="flex items-center gap-3">
@@ -316,7 +316,7 @@ export default function BalanceChart({ records }) {
       </div>
 
       {/* Mode toggles */}
-      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Chart mode">
+      <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Chart mode">
         {modeButtons.map(({ key, label, activeColour }) => (
           <button
             key={key}
@@ -333,7 +333,7 @@ export default function BalanceChart({ records }) {
 
       {/* Canvas wrapper */}
       <div
-        className="relative rounded-[1.25rem] bg-card/90 p-4 transition-all duration-200"
+        className="chart-frame relative transition-all duration-200"
         style={{ height: `${heightPx}px` }}
       >
         <canvas ref={canvasRef} />
