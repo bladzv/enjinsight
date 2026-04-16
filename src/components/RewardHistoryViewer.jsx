@@ -805,10 +805,7 @@ function RewardTableV2({ results, onFilter }) {
         </table>
       </div>
 
-      {/* APY footnote */}
-      <p className="text-[0.6rem] text-text-secondary font-mono mt-1.5">
-        * APY: per-era estimate — (1 + reinvested÷poolSupply)^365 − 1. APY 15d: 15-era rolling window, same formula compounded. Actual returns vary with era length and pool fees.
-      </p>
+
 
       {/* Pagination */}
       {filtered.length > pageSize && (
@@ -1293,7 +1290,7 @@ export default function RewardHistoryViewer() {
   const displayMeta     = phases.length > 0 ? progressMeta    : null
   const rangeModeLabel = rangeMode === 'era' ? 'Era Range' : 'Date Range'
   const liveChainSnapshot = (
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2">
       <div className="metric-card metric-card-left-cyan">
         <p className="metric-label">Live Era</p>
         <p className="metric-value text-cyan">{chainInfo.loading ? '…' : (chainInfo.era != null ? chainInfo.era.toLocaleString() : '—')}</p>
@@ -1301,10 +1298,6 @@ export default function RewardHistoryViewer() {
       <div className="metric-card metric-card-left-primary">
         <p className="metric-label">Live Block</p>
         <p className="metric-value text-text">{chainInfo.loading ? '…' : (chainInfo.block != null ? chainInfo.block.toLocaleString() : '—')}</p>
-      </div>
-      <div className="metric-card metric-card-left-warning">
-        <p className="metric-label">RPC Time (UTC)</p>
-        <p className="mt-3 text-sm font-mono text-text">{chainInfo.loading ? '…' : (chainInfo.timestamp != null ? new Date(chainInfo.timestamp).toUTCString().replace(' GMT', ' UTC') : '—')}</p>
       </div>
     </div>
   )
@@ -1363,97 +1356,78 @@ export default function RewardHistoryViewer() {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="metric-card metric-card-left-cyan">
-              <p className="metric-label">Range Mode</p>
-              <p className="metric-value text-cyan">{rangeMode === 'era' ? 'Era Range' : 'Date Range'}</p>
-            </div>
-            <div className="metric-card metric-card-left-success">
-              <p className="metric-label">Result Rows</p>
-              <p className="metric-value text-success">{activeResults.length}</p>
-            </div>
-            <div className="metric-card metric-card-left-primary">
-              <p className="metric-label">Source</p>
-              <p className="metric-value text-text">{importedResults ? 'Imported Data' : 'Archive RPC'}</p>
-            </div>
-            <div className="metric-card metric-card-left-warning">
-              <p className="metric-label">Pool Scope</p>
-              <p className="metric-value text-text">{includeHistory ? 'Historic + Active' : 'Active Only'}</p>
-            </div>
+          <div className="flex flex-col gap-3">
+            {[
+              { key: 'compute', label: 'Compute Rewards', icon: Server },
+              { key: 'import',  label: 'Import Data',     icon: Upload },
+            ].map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setTab(key)}
+                className={`flex items-center gap-3.5 rounded-[1.15rem] border px-4 py-3.5 text-left transition-all ${
+                  tab === key
+                    ? 'border-primary/30 bg-primary/10 shadow-primary-glow'
+                    : 'border-white/8 bg-card hover:border-cyan/20 hover:bg-surface-bright'
+                }`}
+              >
+                <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl ${
+                  tab === key ? 'bg-primary text-on-primary' : 'bg-surface text-text-secondary'
+                }`}>
+                  <Icon size={16} />
+                </div>
+                <span className={`font-headline text-base font-bold ${tab === key ? 'text-text' : 'text-text-secondary'}`}>{label}</span>
+              </button>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* ── Tabs ── */}
-      <div className="overflow-hidden rounded-[1.75rem] bg-surface shadow-ambient">
-        <div role="tablist" className="m-4 mb-0 flex rounded-full bg-card p-2">
-          {[
-            { key: 'compute', label: 'Compute Rewards', icon: Server },
-            { key: 'import',  label: 'Import Data',     icon: Upload },
-          ].map(({ key, label, icon: Icon }) => (
-            <button key={key} role="tab" aria-selected={tab===key}
-              disabled={isLoading}
-              onClick={() => setTab(key)}
-              className={`flex items-center justify-center gap-1.5 flex-1 px-4 py-3
-                text-xs sm:text-sm font-medium rounded-full transition-colors disabled:opacity-50
-                ${tab===key?'bg-primary text-on-primary shadow-primary-glow':'text-muted hover:text-text'}`}>
-              <Icon size={14} />{label}
-            </button>
-          ))}
-        </div>
-
-        {/* ── Compute pane ── */}
-        {tab === 'compute' && (
-          <div role="tabpanel" className="p-4 sm:p-5">
-          <div className="xl:grid xl:grid-cols-2 xl:gap-6 xl:items-start">
-          <div className="space-y-4">
-            {/* Notes box */}
-            <div className="rounded-[1.5rem] bg-card/75 p-5 shadow-inset-soft">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-warning/10 text-warning">
-                  <AlertCircle size={16} />
-                </div>
-                <div className="space-y-2">
-                  <p className="section-label text-warning">Important Notes</p>
-                  <h3 className="font-headline text-2xl font-bold text-text">Reward history is an estimate</h3>
-                  <p className="section-subtitle">
-                    Archive snapshots reconstruct pool-level rewards and member share over time, so the output is best used for investigation and planning.
-                  </p>
-                </div>
+      {/* ── Compute pane — 3 separate cards ── */}
+      {tab === 'compute' && (
+        <div>
+          {/* Important Notes — full-width above the 3-column grid */}
+          <div className="mb-4 rounded-[1.25rem] bg-card/75 p-4 shadow-inset-soft">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-warning/10 text-warning">
+                <AlertCircle size={16} />
               </div>
-
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                <div className="rounded-[1.25rem] bg-surface px-4 py-4">
-                  <p className="text-sm font-semibold text-text">Pool-level payouts</p>
-                  <p className="mt-2 text-sm leading-6 text-text-secondary">
-                    The pool gets daily rewards, not the user, so these values are estimations rather than wallet-level settlement records.
-                  </p>
-                </div>
-                <div className="rounded-[1.25rem] bg-surface px-4 py-4">
-                  <p className="text-sm font-semibold text-text">Tax note</p>
-                  <p className="mt-2 text-sm leading-6 text-text-secondary">
-                    Tax treatment depends on your jurisdiction and activity history. Use this tool as a research aid, not tax advice.
-                  </p>
+              <div className="flex-1 space-y-2">
+                <p className="section-label text-warning">Important Notes</p>
+                <h3 className="font-headline text-2xl font-bold text-text">Reward history is an estimate</h3>
+                <p className="section-subtitle">
+                  Archive snapshots reconstruct pool-level rewards and member share over time, so the output is best used for investigation and planning.
+                </p>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <div className="rounded-[1.25rem] bg-surface/60 px-4 py-4">
+                    <p className="text-sm font-semibold text-text">Pool-level payouts</p>
+                    <p className="mt-2 text-sm leading-6 text-text-secondary">
+                      The pool gets daily rewards, not the user, so these values are estimations rather than wallet-level settlement records.
+                    </p>
+                  </div>
+                  <div className="rounded-[1.25rem] bg-surface/60 px-4 py-4">
+                    <p className="text-sm font-semibold text-text">Tax note</p>
+                    <p className="mt-2 text-sm leading-6 text-text-secondary">
+                      Tax treatment depends on your jurisdiction and activity history. Use this tool as a research aid, not tax advice.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* ── Live chain snapshot ──────────────────────────────── */}
-            <div className="xl:hidden">{liveChainSnapshot}</div>
-
-            <div className="rounded-[1.5rem] bg-card/75 p-5 shadow-inset-soft">
+          <div className="grid gap-4 xl:grid-cols-3 xl:items-start">
+          {/* Col 1: RPC Config */}
+          <div className="rounded-[1.35rem] bg-surface shadow-ambient p-4 sm:p-5">
+            <div className="rounded-[1.25rem] bg-card/75 p-4 shadow-inset-soft">
               <div>
                 <div>
-                  <p className="section-label">RPC Configuration</p>
-                  <h3 className="mt-2 font-headline text-2xl font-bold text-text">Archive node query</h3>
-                  <p className="mt-2 max-w-2xl section-subtitle">
-                    Enter a relaychain address, decide whether to include historical pool activity, and choose the era window to compute.
-                  </p>
+                  <h3 className="mt-2 font-headline text-2xl font-bold text-text">RPC Configuration</h3>
                 </div>
               </div>
 
             {/* Address */}
-            <div className="mt-5 rounded-[1.25rem] bg-surface px-4 py-4">
+          <div className="mt-4 rounded-[1.25rem] bg-surface/60 px-4 py-4">
               <p className="text-sm font-semibold text-text">Relaychain Wallet Address</p>
               <p className="mt-2 text-sm leading-6 text-text-secondary">
                 Enter the relaychain account you want to analyze.
@@ -1471,7 +1445,7 @@ export default function RewardHistoryViewer() {
             </div>
 
             {/* Pool scope toggle */}
-            <div className="mt-5 rounded-[1.25rem] bg-surface px-4 py-4 space-y-2">
+          <div className="mt-4 rounded-[1.25rem] bg-surface/60 px-4 py-4 space-y-2">
               <div className="flex items-center gap-2.5">
                 <button
                   type="button"
@@ -1493,8 +1467,17 @@ export default function RewardHistoryViewer() {
               </p>
             </div>
 
+            </div>  {/* close RPC card */}
+            </div>  {/* close Col 1 */}
+
+          {/* Col 2: Query Mode + Range Params + action */}
+            <div className="rounded-[1.35rem] bg-surface shadow-ambient p-4 sm:p-5 space-y-4">
+
+            {/* Live chain snapshot */}
+            {liveChainSnapshot}
+
             {/* Range mode toggle */}
-            <div className="mt-5 rounded-[1.25rem] bg-surface px-4 py-4">
+            <div className="rounded-[1.25rem] bg-card px-4 py-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="max-w-xl">
                   <p className="text-sm font-semibold text-text">Query Mode</p>
@@ -1503,7 +1486,7 @@ export default function RewardHistoryViewer() {
                   </p>
                 </div>
               </div>
-              <div className="range-mode-grid mt-4 sm:grid-cols-2">
+              <div className="range-mode-grid mt-4">
                 {REWARD_RANGE_MODE_OPTIONS.map(option => {
                   const isActive = rangeMode === option.key
                   return (
@@ -1528,33 +1511,31 @@ export default function RewardHistoryViewer() {
                 })}
               </div>
             </div>
-            </div>
 
             {/* Era range inputs */}
             {rangeMode === 'era' && (
               <div className="range-params-card space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="section-label">Range Parameters</p>
-                    <h4 className="mt-1 text-base font-semibold text-text">Era Range Inputs</h4>
+                    <h4 className="mt-1 text-base font-semibold text-text">Range Parameters</h4>
                   </div>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <label className="input-label">Start Era</label>
-                  <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
-                    onChange={e => setStartEra(e.target.value)}
-                    placeholder="e.g. 980" disabled={isLoading}
-                    className="w-full input-field font-mono" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="input-label">End Era</label>
-                  <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
-                    onChange={e => setEndEra(e.target.value)}
-                    placeholder="e.g. 1000" disabled={isLoading}
-                    className="w-full input-field font-mono" />
-                </div>
-                {eraValidErr && <p className="col-span-2 flex items-center gap-1 text-xs text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{eraValidErr}</p>}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <label className="input-label w-28 flex-shrink-0">Start Era</label>
+                    <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
+                      onChange={e => setStartEra(e.target.value)}
+                      placeholder="e.g. 980" disabled={isLoading}
+                      className="flex-1 input-field font-mono" />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="input-label w-28 flex-shrink-0">End Era</label>
+                    <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
+                      onChange={e => setEndEra(e.target.value)}
+                      placeholder="e.g. 1000" disabled={isLoading}
+                      className="flex-1 input-field font-mono" />
+                  </div>
+                  {eraValidErr && <p className="flex items-center gap-1 text-xs text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{eraValidErr}</p>}
                 </div>
               </div>
             )}
@@ -1564,8 +1545,7 @@ export default function RewardHistoryViewer() {
               <div className="range-params-card space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="section-label">Range Parameters</p>
-                    <h4 className="mt-1 text-base font-semibold text-text">Date Range Inputs</h4>
+                    <h4 className="mt-1 text-base font-semibold text-text">Range Parameters</h4>
                   </div>
                 </div>
                 {/* Quick presets */}
@@ -1584,20 +1564,20 @@ export default function RewardHistoryViewer() {
                     ))}
                   </div>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <label className="input-label">Start Date</label>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <label className="input-label w-28 flex-shrink-0">Start Date</label>
                     <input type="date" placeholder="2026-03-01" max={toDateInput(new Date())} value={startDate}
                       onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
-                      className="w-full input-field font-mono [color-scheme:dark]" />
+                      className="flex-1 input-field font-mono [color-scheme:dark]" />
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="input-label">End Date</label>
+                  <div className="flex items-center gap-3">
+                    <label className="input-label w-28 flex-shrink-0">End Date</label>
                     <input type="date" placeholder="2026-03-04" max={toDateInput(new Date())} value={endDate}
                       onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
-                      className="w-full input-field font-mono [color-scheme:dark]" />
+                      className="flex-1 input-field font-mono [color-scheme:dark]" />
                   </div>
                 </div>
                 {dateValidErr && <p className="flex items-center gap-1 text-xs text-danger"><AlertTriangle size={11} className="flex-shrink-0"/>{dateValidErr}</p>}
@@ -1605,7 +1585,7 @@ export default function RewardHistoryViewer() {
             )}
 
             {/* Action button — single slot: Stop → Reset → Compute Rewards */}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col items-center gap-2">
               {isLoading ? (
                 <button onClick={stop} className="btn-danger gap-1.5 px-5">
                   <Square size={14} />Stop
@@ -1628,25 +1608,39 @@ export default function RewardHistoryViewer() {
                 </span>
               )}
             </div>
-          </div>
-          <div className="mt-4 space-y-4 xl:mt-0">
-            <div className="hidden xl:block">{liveChainSnapshot}</div>
+          </div>  {/* close Col 2 */}
+
+            {/* Col 3: Scan Progress */}
+            <div className="hidden xl:block">
+              <PhaseProgressCards
+                eyebrow=""
+                indexLabel="Phase"
+                title="Computation Progress"
+                summary={displaySummary}
+                meta={displayMeta}
+                phases={displayPhases}
+                ariaLabel="Reward history progress"
+              />
+            </div>
+          </div>  {/* close 3-col grid */}
+
+          <div className="xl:hidden mt-4">
             <PhaseProgressCards
-              eyebrow="Computation Progress"
+              eyebrow=""
               indexLabel="Phase"
-              title={displayTitle}
+              title="Computation Progress"
               summary={displaySummary}
               meta={displayMeta}
               phases={displayPhases}
               ariaLabel="Reward history progress"
             />
           </div>
-          </div>
-          </div>
-        )}
+        </div>
+      )}
 
-        {/* ── Import pane ── */}
-        {tab === 'import' && (
+      {/* ── Import pane ── */}
+      {tab === 'import' && (
+        <div className="overflow-hidden rounded-[1.75rem] bg-surface shadow-ambient">
           <div role="tabpanel" className="p-4 sm:p-5 space-y-3">
             <div>
               <p className="section-label">Import</p>
@@ -1661,8 +1655,8 @@ export default function RewardHistoryViewer() {
             </div>
             <RewardImportPanel onImport={handleImportResults} />
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Error ── */}
       {isError && errorMsg && (
@@ -1709,8 +1703,8 @@ export default function RewardHistoryViewer() {
             <PoolBondedPieChart data={filteredRows} />
             <PoolRewardPieChart data={filteredRows} />
           </div>
-          {!importedResults && (isDone || isStopped) && <RewardExportPanel results={activeResults} address={address} />}
-          {importedResults && <RewardExportPanel results={activeResults} address={importedAddress} />}
+          {!importedResults && (isDone || isStopped) && <div className="md:w-1/2"><RewardExportPanel results={activeResults} address={address} /></div>}
+          {importedResults && <div className="md:w-1/2"><RewardExportPanel results={activeResults} address={importedAddress} /></div>}
           {importedResults && (
             <div className="flex items-center gap-2 text-xs text-text-secondary px-1">
               <span>Showing imported data.</span>

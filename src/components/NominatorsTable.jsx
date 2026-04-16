@@ -30,7 +30,7 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
         <div className="flex items-center justify-end mb-2">
           <button
             onClick={() => onRetry?.(validatorAddress)}
-            className="text-xs bg-yellow-600 text-white px-2 py-1 rounded"
+            className="btn-secondary px-3 py-1.5 text-xs"
             aria-label={`Retry fetching nominators for ${validatorAddress}`}
           >
             Retry nominators
@@ -61,10 +61,10 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
           </article>
         ))}
       </div>
-      <div className="hidden sm:block scroll-x rounded-xl">
-        <table className="w-full text-xs min-w-[480px]">
+      <div className="hidden sm:block data-table-wrap">
+        <table className="data-table min-w-[480px]">
           <thead>
-            <tr className="bg-surface-high">
+            <tr className="data-table-head">
               <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-8">#</th>
               <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Address</th>
               <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Display Name</th>
@@ -75,7 +75,7 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
             {pageItems.map((n, i) => (
               <tr
                 key={n.address || i}
-                className="hover:bg-surface-bright transition-colors"
+                className="data-table-row"
               >
                 <td className="px-3 py-2.5 text-muted">{page * pageSize + i + 1}</td>
                 <td className="px-3 py-2.5">
@@ -109,7 +109,7 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
 
       {/* Pagination */}
       {pages > 1 && (
-        <div className="flex items-center justify-between mt-3 text-xs text-text-secondary">
+        <div className="mt-3 flex items-center justify-between text-xs text-text-secondary">
           <div className="flex items-center gap-2">
             <span>{nominators.length} nominators</span>
             <select

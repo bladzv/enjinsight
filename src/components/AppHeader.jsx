@@ -28,7 +28,7 @@ export default function AppHeader({ status, view, onBack, onNavigate, onAbout })
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/5 bg-ink/80 backdrop-blur-2xl">
-      <div className="mx-auto flex max-w-[92rem] flex-col gap-3 px-4 py-4 sm:px-6">
+      <div className="mx-auto flex max-w-[104rem] flex-col gap-3 px-4 py-3 sm:px-6">
         <div className="flex items-center justify-between gap-4">
           <button
             type="button"
@@ -97,7 +97,7 @@ export default function AppHeader({ status, view, onBack, onNavigate, onAbout })
         </div>
 
         {/* Desktop pill row — only shown at lg+ where all pills fit */}
-        <div className="hidden lg:flex items-center gap-3">
+        <div className="hidden lg:flex items-center gap-2.5">
           {NAV_ITEMS.map(item => {
             const isActive = view === item.key
             return (
