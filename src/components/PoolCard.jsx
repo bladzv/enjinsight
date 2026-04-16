@@ -63,7 +63,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
         <button
           type="button"
           onClick={copyAddress}
-          className="btn-icon bg-card"
+          className="btn-icon bg-card/75"
           aria-label={`Copy stash address of ${displayName}`}
         >
           {copied ? <CheckCircle2 size={14} className="text-success" /> : <Copy size={14} />}
@@ -72,7 +72,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
           href={poolExplorerUrl(poolId)}
           target="_blank"
           rel="noopener noreferrer"
-          className="btn-icon bg-card"
+          className="btn-icon bg-card/75"
           aria-label={`Open ${displayName} on Subscan`}
         >
           <ExternalLink size={14} />
@@ -93,54 +93,49 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
             setOpen(true)
           }
         }}
-        className={`group relative overflow-hidden rounded-[1.5rem] bg-surface p-5 shadow-ambient transition-all duration-200 hover:-translate-y-1 hover:bg-card sm:p-6 ${
-          hasMissed ? 'border-l-2 border-l-warning' : ''
-        } ${hasError ? 'border-l-2 border-l-danger' : ''}`}
-        style={{
-          borderColor: !hasMissed && !hasError ? 'rgba(70,71,82,0.10)' : undefined,
-          borderWidth: !hasMissed && !hasError ? '1px' : undefined,
-          borderStyle: !hasMissed && !hasError ? 'solid' : undefined,
-        }}
+        className={`group relative overflow-hidden rounded-[1.35rem] border bg-surface px-4 py-4 shadow-ambient transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan/20 hover:bg-card sm:px-5 sm:py-5 ${
+          hasError ? 'border-danger/35' : hasMissed ? 'border-warning/30' : 'border-white/6'
+        }`}
         aria-label={`Open details for pool ${displayName}`}
       >
-        <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-card font-mono text-sm font-bold text-primary">
-            {loading ? <Loader2 size={16} className="animate-spin text-dim" /> : `#${poolId}`}
+        <div className="flex items-start gap-3.5">
+          <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-card font-mono text-xs font-bold text-primary sm:text-sm">
+              {loading ? <Loader2 size={16} className="animate-spin text-dim" /> : `#${poolId}`}
+            </div>
+            {poolState && (
+              <span className={`text-[9px] font-bold uppercase tracking-[0.15em] px-2 py-0.5 rounded-full ${
+                poolState === 'Open' ? 'bg-success/10 text-success' :
+                poolState === 'Blocked' ? 'bg-warning/10 text-warning' :
+                poolState === 'Destroying' ? 'bg-danger/10 text-danger' :
+                'bg-surface-high text-text-secondary'
+              }`}>{poolState}</span>
+            )}
+            {hasMissed && <span className="sev-high">{missedEras.length} missed</span>}
+            {loading && !hasMissed && <span className="badge-waiting">Loading</span>}
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="break-words font-headline text-lg font-bold text-text" title={displayName}>{displayName}</h3>
-              {hasMissed && <span className="sev-high">{missedEras.length} missed</span>}
-              {!loading && !hasMissed && poolState === 'Open' && <span className="badge-active">Open</span>}
-              {!loading && !hasMissed && poolState && poolState !== 'Open' && <span className="badge-waiting">{poolState}</span>}
-              {loading && !hasMissed && <span className="badge-waiting">Loading</span>}
-            </div>
+            <h3 className="break-words font-headline text-base font-bold text-text sm:text-lg" title={displayName}>{displayName}</h3>
             <p className="mt-1 break-all font-mono text-[11px] text-text-secondary">{stashAddress}</p>
           </div>
 
-          <div className="flex items-center gap-1.5" onClick={event => event.stopPropagation()}>
+          <div className="flex flex-col items-center gap-1" onClick={event => event.stopPropagation()}>
             {renderActions()}
           </div>
         </div>
 
-        <div className="mt-4 space-y-2 border-t border-white/6 pt-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="mini-chip">{poolState || 'Unknown state'}</span>
-            {commission > 0 ? <span className="mini-chip">Commission: {commission}%</span> : null}
-          </div>
+        <div className="mt-4 divide-y divide-white/5 rounded-[1rem] bg-card/85 overflow-hidden">
+          <MetricRow label="Members" value={memberCountLabel} accent="text-text" />
+          <MetricRow label="Validators" value={validatorCountLabel} accent="text-primary" />
+          <MetricRow label="Bonded" value={bondedLabel} accent="text-cyan" />
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/6 pt-3">
           <p className={`text-sm ${hasError ? 'text-danger' : hasMissed ? 'text-warning' : 'text-text-secondary'}`}>
             {latestStatus}
           </p>
-          <div className="grid gap-2">
-            <PreviewMetric label="Members" value={memberCountLabel} accent="text-text" />
-            <PreviewMetric label="Validators" value={validatorCountLabel} accent="text-primary" />
-            <PreviewMetric label="Bonded" value={bondedLabel} accent="text-cyan" />
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-text-secondary">View rewards and validator details</p>
-            <span className="mini-chip group-hover:text-text">View details</span>
-          </div>
+          <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.15em] text-primary group-hover:bg-primary/20 transition-colors">View Details</span>
         </div>
       </article>
 
@@ -225,11 +220,20 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
   )
 }
 
+function MetricRow({ label, value, accent = 'text-text' }) {
+  return (
+    <div className="flex items-center justify-between px-3 py-2.5">
+      <span className="text-xs text-text-secondary">{label}</span>
+      <span className={`text-sm font-bold font-headline ${accent}`}>{value}</span>
+    </div>
+  )
+}
+
 function PreviewMetric({ label, value, accent = 'text-text' }) {
   return (
-    <div className="rounded-[1.15rem] bg-card/85 px-4 py-3">
-      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-text-secondary">{label}</p>
-      <p className={`mt-2 font-headline text-xl font-bold ${accent}`}>{value}</p>
+    <div className="rounded-[1rem] bg-card/85 px-3 py-2.5">
+      <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-text-secondary">{label}</p>
+      <p className={`mt-1.5 font-headline text-lg font-bold ${accent}`}>{value}</p>
     </div>
   )
 }

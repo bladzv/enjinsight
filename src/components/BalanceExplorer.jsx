@@ -398,7 +398,7 @@ export default function BalanceExplorer() {
   const displaySummary = phases.length > 0 ? progressSummary : null
   const displayMeta    = phases.length > 0 ? progressMeta    : null
   const liveChainSnapshot = (
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2">
       <div className="metric-card metric-card-left-cyan">
         <p className="metric-label">Live Era</p>
         <p className="metric-value text-cyan">{chainInfo.loading ? '…' : (chainInfo.era != null ? chainInfo.era.toLocaleString() : '—')}</p>
@@ -406,10 +406,6 @@ export default function BalanceExplorer() {
       <div className="metric-card metric-card-left-primary">
         <p className="metric-label">Live Block</p>
         <p className="metric-value text-text">{chainInfo.loading ? '…' : (chainInfo.block != null ? chainInfo.block.toLocaleString() : '—')}</p>
-      </div>
-      <div className="metric-card metric-card-left-warning">
-        <p className="metric-label">RPC Time (UTC)</p>
-        <p className="mt-3 text-sm font-mono text-text">{chainInfo.loading ? '…' : (chainInfo.timestamp != null ? new Date(chainInfo.timestamp).toUTCString().replace(' GMT', ' UTC') : '—')}</p>
       </div>
     </div>
   )
@@ -603,74 +599,55 @@ export default function BalanceExplorer() {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="metric-card metric-card-left-cyan">
-              <p className="metric-label">Network</p>
-              <p className="metric-value text-cyan">{activeNetwork.label}</p>
-            </div>
-            <div className="metric-card metric-card-left-primary">
-              <p className="metric-label">Range Mode</p>
-              <p className="metric-value text-text">{rangeModeLabel}</p>
-            </div>
-            <div className="metric-card metric-card-left-success">
-              <p className="metric-label">Records Loaded</p>
-              <p className="metric-value text-success">{records.length}</p>
-            </div>
-            <div className="metric-card metric-card-left-warning">
-              <p className="metric-label">Data Source</p>
-              <p className="metric-value text-text">{dataSource === 'import' ? 'Imported' : 'Archive RPC'}</p>
-            </div>
+          <div className="flex flex-col gap-3">
+            {TABS.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => { setTab(key); if (key === 'query') setShowImportResults(false) }}
+                className={`flex items-center gap-3.5 rounded-[1.15rem] border px-4 py-3.5 text-left transition-all ${
+                  tab === key
+                    ? 'border-primary/30 bg-primary/10 shadow-primary-glow'
+                    : 'border-white/8 bg-card hover:border-cyan/20 hover:bg-surface-bright'
+                }`}
+              >
+                <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl ${
+                  tab === key ? 'bg-primary text-on-primary' : 'bg-surface text-text-secondary'
+                }`}>
+                  <Icon size={16} />
+                </div>
+                <span className={`font-headline text-base font-bold ${tab === key ? 'text-text' : 'text-text-secondary'}`}>{label}</span>
+              </button>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* ── Unified input card (tab bar + pane) ────────────────────── */}
-      <div className="overflow-hidden rounded-[1.75rem] bg-surface shadow-ambient">
+      {/* ── Query pane — 3 separate cards ── */}
+      {tab === 'query' && (
+        <div>
+          <div className="grid gap-4 xl:grid-cols-3 xl:items-stretch">
+              <div className="rounded-[1.35rem] bg-surface shadow-ambient p-4 sm:p-5">
+                <div>
+                    <h3 className="font-headline text-2xl font-bold text-text">Scan Configuration</h3>
+                  </div>
 
-        {/* Tab bar */}
-        <div
-          role="tablist"
-          aria-label="Balance explorer mode"
-          className="m-4 mb-0 flex rounded-full bg-card p-2"
-        >
-          {TABS.map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              role="tab"
-              aria-selected={tab === key}
-              disabled={isLoading}
-              onClick={() => { setTab(key); if (key === 'query') setShowImportResults(false) }}
-              className={`flex items-center justify-center gap-1.5 flex-1 px-4 py-2.5
-                          text-xs sm:text-sm font-medium rounded-full transition-colors
-                          disabled:opacity-50 disabled:cursor-not-allowed
-                          ${tab === key
-                            ? 'bg-primary text-on-primary shadow-primary-glow'
-                            : 'text-muted hover:text-text'}`}
-            >
-              <Icon size={14} />
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* ── Query pane ───────────────────────────────────────── */}
-        {tab === 'query' && (
-          <div role="tabpanel" className="p-4 sm:p-6">
-            <div className="space-y-4">
-              <div className="xl:hidden">{liveChainSnapshot}</div>
-
-              <div className="xl:grid xl:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)] xl:gap-6 xl:items-start">
-                <div className="rounded-[1.5rem] bg-card/75 p-5 shadow-inset-soft xl:self-start">
-                  <div>
-                    <p className="section-label">RPC Configuration</p>
-                    <h3 className="mt-2 font-headline text-2xl font-bold text-text">Query archive node</h3>
-                    <p className="mt-2 max-w-2xl section-subtitle">
-                      Pick an archive network, enter a wallet address, then choose how the history window should be resolved.
-                    </p>
+                  <div className="mt-4 rounded-[1.25rem] border border-cyan/10 bg-card/75 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-2xl bg-cyan/10 text-cyan">
+                        <Info size={16} />
+                      </div>
+                      <div className="space-y-2">
+                        <p className="section-label text-cyan">Query Notes</p>
+                        <p className="text-sm leading-6 text-text-secondary">
+                          Archive RPC queries take longer over wide ranges. Narrowing the window or increasing the step reduces query time and sample count.
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="mt-5 grid gap-3">
-                    <div className="rounded-[1.25rem] bg-surface px-4 py-4">
+                    <div className="rounded-[1.25rem] bg-card px-4 py-4">
                       <p className="text-sm font-semibold text-text">Archive Network</p>
                       <p className="mt-2 text-sm leading-6 text-text-secondary">
                         Select one of the bundled archive endpoints for the network you want to inspect.
@@ -698,7 +675,7 @@ export default function BalanceExplorer() {
                       </p>
                     </div>
 
-                    <div className="rounded-[1.25rem] bg-surface px-4 py-4">
+                    <div className="rounded-[1.25rem] bg-card px-4 py-4">
                       <p className="text-sm font-semibold text-text">Wallet Address</p>
                       <p className="mt-2 text-sm leading-6 text-text-secondary">
                         Enter the SS58 address you want to inspect.
@@ -723,78 +700,64 @@ export default function BalanceExplorer() {
                       )}
                     </div>
 
-                    {isDateRangeSupported && (
-                      <div className="rounded-[1.25rem] bg-surface px-4 py-4">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="max-w-xl">
-                            <p className="text-sm font-semibold text-text">Query Range</p>
-                            <p className="mt-2 text-sm leading-6 text-text-secondary">
-                              Choose whether the history window should be resolved from blocks, eras, or dates.
-                            </p>
-                          </div>
-                        </div>
-                        <div className="range-mode-grid mt-4 sm:grid-cols-3">
-                          {rangeModeOptions.map(option => {
-                            const isActive = rangeMode === option.key
-                            return (
-                              <button
-                                key={option.key}
-                                type="button"
-                                onClick={() => {
-                                  if (option.key === 'block') setStep('')
-                                  else setStep('1')
-                                  setRangeMode(option.key)
-                                  clearResolvedRange()
-                                }}
-                                disabled={isLoading}
-                                className={`range-mode-option ${isActive ? 'range-mode-option-active' : 'range-mode-option-idle'}`}
-                              >
-                                <span className="range-mode-badge" aria-hidden="true">{option.badge}</span>
-                                <span className="min-w-0">
-                                  <span className={`block text-sm font-semibold ${isActive ? 'text-text' : 'text-text-secondary'}`}>
-                                    {option.title}
-                                  </span>
-                                  <span className={`mt-1 block text-xs leading-5 ${isActive ? 'text-text-secondary' : 'text-muted'}`}>
-                                    {option.description}
-                                  </span>
-                                </span>
-                              </button>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )}
+                    {isDateRangeSupported && null}
                   </div>
                 </div>
 
-                <div className="hidden xl:block xl:self-start">
-                  <div className="space-y-4">
-                  <div className="hidden xl:block">{liveChainSnapshot}</div>
-                  <PhaseProgressCards
-                    eyebrow="Query Progress"
-                    indexLabel="Phase"
-                    title={displayTitle}
-                    summary={displaySummary}
-                    meta={displayMeta}
-                    phases={displayPhases}
-                    ariaLabel="Balance query progress"
-                  />
+              {/* Col 2: Query Range + Live chain + Range Parameters + action */}
+              <div className="rounded-[1.35rem] bg-surface shadow-ambient p-4 sm:p-5 space-y-4">
+              {liveChainSnapshot}
+
+              {/* ── Query Range selector (Relaychain / Canary Relaychain) ── */}
+              {isDateRangeSupported && (
+                <div className="rounded-[1.25rem] bg-card px-4 py-4">
+                  <p className="text-sm font-semibold text-text">Query Range</p>
+                  <p className="mt-2 text-sm leading-6 text-text-secondary">
+                    Choose whether the history window should be resolved from blocks, eras, or dates.
+                  </p>
+                  <div className="range-mode-grid mt-3">
+                    {rangeModeOptions.map(option => {
+                      const isActive = rangeMode === option.key
+                      return (
+                        <button
+                          key={option.key}
+                          type="button"
+                          onClick={() => {
+                            if (option.key === 'block') setStep('')
+                            else setStep('1')
+                            setRangeMode(option.key)
+                            clearResolvedRange()
+                          }}
+                          disabled={isLoading}
+                          className={`range-mode-option ${isActive ? 'range-mode-option-active' : 'range-mode-option-idle'}`}
+                        >
+                          <span className="range-mode-badge" aria-hidden="true">{option.badge}</span>
+                          <span className="min-w-0">
+                            <span className={`block text-sm font-semibold ${isActive ? 'text-text' : 'text-text-secondary'}`}>
+                              {option.title}
+                            </span>
+                            <span className={`mt-1 block text-xs leading-5 ${isActive ? 'text-text-secondary' : 'text-muted'}`}>
+                              {option.description}
+                            </span>
+                          </span>
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* ── Era range inputs (Relaychain era mode) ──────────── */}
               {rangeMode === 'era' && (
                 <div className="range-params-card space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="section-label">Range Parameters</p>
-                    <h4 className="mt-1 text-base font-semibold text-text">Era Range Inputs</h4>
+                    <h4 className="text-base font-semibold text-text">Range Parameters</h4>
                   </div>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div>
-                    <label htmlFor="bal-start-era" className="input-label">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <label htmlFor="bal-start-era" className="input-label w-40 flex-shrink-0">
                       Start Era
                     </label>
                     <input
@@ -811,8 +774,8 @@ export default function BalanceExplorer() {
                       className={inputField}
                     />
                   </div>
-                  <div>
-                    <label htmlFor="bal-end-era" className="input-label">
+                  <div className="flex items-center gap-3">
+                    <label htmlFor="bal-end-era" className="input-label w-40 flex-shrink-0">
                       End Era
                     </label>
                     <input
@@ -829,8 +792,8 @@ export default function BalanceExplorer() {
                       className={inputField}
                     />
                   </div>
-                  <div>
-                    <label htmlFor="bal-step-era" className="input-label">
+                  <div className="flex items-center gap-3">
+                    <label htmlFor="bal-step-era" className="input-label w-40 flex-shrink-0">
                       {stepLabel}
                     </label>
                     <input
@@ -871,13 +834,12 @@ export default function BalanceExplorer() {
                 <div className="range-params-card space-y-2">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="section-label">Range Parameters</p>
-                    <h4 className="mt-1 text-base font-semibold text-text">Block Range Inputs</h4>
+                    <h4 className="text-base font-semibold text-text">Range Parameters</h4>
                   </div>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                <div>
-                  <label htmlFor="bal-start" className="input-label">
+                <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <label htmlFor="bal-start" className="input-label w-40 flex-shrink-0">
                     Start Block
                   </label>
                   <input
@@ -891,8 +853,8 @@ export default function BalanceExplorer() {
                     className={inputField}
                   />
                 </div>
-                <div>
-                  <label htmlFor="bal-end" className="input-label">
+                <div className="flex items-center gap-3">
+                  <label htmlFor="bal-end" className="input-label w-40 flex-shrink-0">
                     End Block
                   </label>
                   <input
@@ -906,8 +868,8 @@ export default function BalanceExplorer() {
                     className={inputField}
                   />
                 </div>
-                <div>
-                  <label htmlFor="bal-step" className="input-label">
+                <div className="flex items-center gap-3">
+                  <label htmlFor="bal-step" className="input-label w-40 flex-shrink-0">
                     {stepLabel}
                   </label>
                   <input
@@ -935,8 +897,7 @@ export default function BalanceExplorer() {
                 <div className="range-params-card space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="section-label">Range Parameters</p>
-                    <h4 className="mt-1 text-base font-semibold text-text">Date Range Inputs</h4>
+                    <h4 className="text-base font-semibold text-text">Range Parameters</h4>
                   </div>
                 </div>
                 {/* Quick presets */}
@@ -960,9 +921,9 @@ export default function BalanceExplorer() {
                 </div>
 
                 {/* Start / End date + step */}
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div>
-                    <label htmlFor="bal-start-date" className="input-label">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <label htmlFor="bal-start-date" className="input-label w-40 flex-shrink-0">
                       Start Date
                     </label>
                     <input
@@ -977,11 +938,11 @@ export default function BalanceExplorer() {
                         clearResolvedRange()
                       }}
                       disabled={isLoading}
-                      className={`${inputField} [color-scheme:dark]`}
+                      className={`flex-1 ${inputField} [color-scheme:dark]`}
                     />
                   </div>
-                  <div>
-                    <label htmlFor="bal-end-date" className="input-label">
+                  <div className="flex items-center gap-3">
+                    <label htmlFor="bal-end-date" className="input-label w-40 flex-shrink-0">
                       End Date
                     </label>
                     <input
@@ -996,11 +957,11 @@ export default function BalanceExplorer() {
                         clearResolvedRange()
                       }}
                       disabled={isLoading}
-                      className={`${inputField} [color-scheme:dark]`}
+                      className={`flex-1 ${inputField} [color-scheme:dark]`}
                     />
                   </div>
-                  <div>
-                    <label htmlFor="bal-step-date" className="input-label">
+                  <div className="flex items-center gap-3">
+                    <label htmlFor="bal-step-date" className="input-label w-40 flex-shrink-0">
                       {stepLabel}
                     </label>
                     <input
@@ -1011,7 +972,7 @@ export default function BalanceExplorer() {
                       value={step}
                       onChange={e => setStep(e.target.value)}
                       disabled={isLoading}
-                      className={inputField}
+                      className={`flex-1 ${inputField}`}
                     />
                   </div>
                 </div>
@@ -1039,20 +1000,6 @@ export default function BalanceExplorer() {
                 </div>
               )}
 
-              <div className="rounded-[1.25rem] border border-cyan/10 bg-card/75 p-4">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-2xl bg-cyan/10 text-cyan">
-                    <Info size={16} />
-                  </div>
-                  <div className="space-y-2">
-                    <p className="section-label text-cyan">Query Notes</p>
-                    <p className="text-sm leading-6 text-text-secondary">
-                      Archive RPC queries take longer over wide ranges. Narrowing the window or increasing the step reduces query time and sample count.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
               {/* Error banner */}
               {status === STATUS.ERROR && errorMsg && (
                 <div
@@ -1065,7 +1012,7 @@ export default function BalanceExplorer() {
               )}
 
               {/* Action row */}
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+              <div className="flex flex-col items-center gap-3">
                 {isLoading ? (
                   <button onClick={cancel} className="btn-stop w-full sm:w-auto sm:min-w-[200px]">
                     <Square size={14} />
@@ -1114,24 +1061,40 @@ export default function BalanceExplorer() {
                 )}
               </div>
 
-              <div className="xl:hidden">
+              </div>
+
+              {/* Col 3: Scan Progress */}
+              <div className="hidden xl:flex xl:flex-col">
                 <PhaseProgressCards
-                  eyebrow="Query Progress"
+                  eyebrow=""
                   indexLabel="Phase"
-                  title={displayTitle}
+                  title="Scan Progress"
                   summary={displaySummary}
                   meta={displayMeta}
                   phases={displayPhases}
                   ariaLabel="Balance query progress"
                 />
               </div>
-            </div>
           </div>
-        )}
 
-        {/* ── Import pane ───────────────────────────────────────── */}
-        {tab === 'import' && (
-            <div role="tabpanel" className="p-4 sm:p-6">
+          <div className="xl:hidden mt-4">
+            <PhaseProgressCards
+              eyebrow=""
+              indexLabel="Phase"
+              title="Scan Progress"
+              summary={displaySummary}
+              meta={displayMeta}
+              phases={displayPhases}
+              ariaLabel="Balance query progress"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Import pane ── */}
+      {tab === 'import' && (
+        <div className="overflow-hidden rounded-[1.75rem] bg-surface shadow-ambient">
+          <div role="tabpanel" className="p-4 sm:p-6">
               {!showImportResults ? (
                 <div className="space-y-3">
                 <div>
@@ -1174,8 +1137,8 @@ export default function BalanceExplorer() {
               </div>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Results (shown for any data source; also visible DURING query) ── */}
       {(hasResults || isLoading) && (
@@ -1243,7 +1206,7 @@ export default function BalanceExplorer() {
           <BalanceTable records={records} isLoading={isLoading} />
 
           {dataSource === 'query' && hasResults && (status === STATUS.DONE || status === STATUS.CANCELLED) && (
-            <BalanceExportPanel records={records} rpcMeta={rpcMetaRef.current} />
+            <div className="md:w-1/2"><BalanceExportPanel records={records} rpcMeta={rpcMetaRef.current} /></div>
           )}
         </>
       )}

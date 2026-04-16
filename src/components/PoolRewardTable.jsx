@@ -54,7 +54,7 @@ export default function PoolRewardTable({
   return (
     <div>
       {/* Pagination controls */}
-      <div className="flex items-center justify-between mb-2 text-xs text-text-secondary">
+      <div className="data-toolbar">
         <div className="flex items-center gap-1">
           <span>Per page:</span>
           <select
@@ -88,10 +88,10 @@ export default function PoolRewardTable({
         )}
       </div>
 
-      <div className="scroll-x rounded-xl">
-        <table className="w-full text-xs min-w-[400px]">
+      <div className="data-table-wrap">
+        <table className="data-table min-w-[400px]">
           <thead>
-            <tr className="bg-surface-high">
+            <tr className="data-table-head">
               <th className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-16">Era</th>
               <th className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-10">Reward</th>
               <th className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold hidden md:table-cell w-20">Rewarded</th>
@@ -143,7 +143,7 @@ function RewardedRow({ era, rewardTotal, bd, hasBreakdown, isExpanded, onToggle 
 
   return (
     <>
-      <tr className="hover:bg-surface-bright transition-colors">
+      <tr className="data-table-row">
         <td className="px-3 py-2.5 font-mono text-text-secondary text-center w-16">{era}</td>
         <td className="px-3 py-2.5 text-right font-mono text-text w-10">
           {rewardTotal && rewardTotal > 0n ? formatENJ(rewardTotal, 4) : '—'}
@@ -198,7 +198,7 @@ function MissedRow({ era, bd, hasBreakdown, isExpanded, onToggle }) {
 
   return (
     <>
-      <tr className="bg-danger/5">
+      <tr className="data-table-row-danger">
         <td className="px-3 py-2.5 font-mono text-danger font-semibold text-center w-16">{era}</td>
         <td className="px-3 py-2.5 text-right text-danger w-10">—</td>
         <td className="px-3 py-2.5 text-center hidden md:table-cell">

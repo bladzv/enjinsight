@@ -41,15 +41,15 @@ function getStatusMeta(status) {
 }
 
 function PhaseRing({ percent, phaseStatus }) {
-  const size = 72
-  const strokeWidth = 6
+  const size = 64
+  const strokeWidth = 5
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
   const dashOffset = circumference - ((phaseStatus === 'completed' ? 100 : percent) / 100) * circumference
   const meta = getStatusMeta(phaseStatus)
 
   return (
-    <div className="relative h-[4.5rem] w-[4.5rem] flex-shrink-0">
+    <div className="relative h-16 w-16 flex-shrink-0">
       <svg width={size} height={size} className="-rotate-90">
         <circle
           cx={size / 2}
@@ -99,10 +99,10 @@ function PhaseCard({ phase, index, indexLabel }) {
     ? (total > 0 ? `${completed} / ${total} complete` : 'Complete')
     : phase?.status === 'in_progress'
       ? (total > 0 ? `${completed} / ${total} complete` : 'Running')
-      : 'Waiting to start'
+      : null
 
   return (
-    <article className={`rounded-[1.25rem] border px-4 py-4 shadow-inset-soft transition-colors ${meta.cardClass}`}>
+    <article className={`rounded-[1.15rem] border px-4 py-3.5 shadow-inset-soft transition-colors ${meta.cardClass}`}>
       <div className="flex items-start gap-4">
         <PhaseRing percent={percent} phaseStatus={phase?.status} />
 
@@ -110,14 +110,11 @@ function PhaseCard({ phase, index, indexLabel }) {
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-secondary">
             {indexLabel} {index}
           </p>
-          <h4 className="mt-2 text-sm font-semibold text-text">{phase?.label ?? 'Untitled Phase'}</h4>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <h4 className="mt-1.5 text-sm font-semibold text-text">{phase?.label ?? 'Untitled Phase'}</h4>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <span className={`text-xs font-semibold ${meta.statusClass}`}>{meta.label}</span>
-            <span className="text-xs text-text-secondary">{detail}</span>
+            {detail && <span className="text-xs text-text-secondary">{detail}</span>}
           </div>
-          {phase?.status === 'in_progress' && (
-            <p className="mt-2 font-mono text-[11px] text-text-secondary">{percent}% complete</p>
-          )}
         </div>
       </div>
     </article>
@@ -127,35 +124,31 @@ function PhaseCard({ phase, index, indexLabel }) {
 export default function PhaseProgressCards({
   title,
   summary,
-  meta,
   phases = [],
-  eyebrow = 'Progress',
+  eyebrow = '',
   indexLabel = 'Phase',
   ariaLabel = 'Progress',
   className = '',
 }) {
   if (!phases.length) return null
-  const fallbackMeta = `${phases.filter(phase => phase?.status === 'completed').length} / ${phases.length} complete`
 
   return (
     <section
-      className={`rounded-[1.5rem] bg-surface p-5 shadow-ambient ${className}`}
+      className={`rounded-[1.35rem] bg-surface p-5 shadow-ambient ${className}`}
       aria-live="polite"
       aria-label={ariaLabel}
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-2">
-          <p className="section-label">{eyebrow}</p>
-          <h3 className="font-headline text-2xl font-bold text-text">{title}</h3>
+          {eyebrow && <p className="section-label">{eyebrow}</p>}
+          <h3 className="font-headline text-xl font-bold text-text sm:text-[1.6rem]">{title}</h3>
           {summary && (
             <p className="max-w-3xl text-sm leading-6 text-text-secondary">{summary}</p>
           )}
         </div>
-
-        <span className="mini-chip self-start">{meta || fallbackMeta}</span>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {phases.map((phase, index) => (
           <PhaseCard
             key={phase.key ?? `${indexLabel}-${index}`}

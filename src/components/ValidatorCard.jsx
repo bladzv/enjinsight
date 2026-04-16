@@ -56,7 +56,7 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
           <button
             type="button"
             onClick={() => onRetry?.(address)}
-            className="btn-icon bg-card"
+            className="btn-icon bg-card/75"
             aria-label={`Retry fetching data for ${displayName}`}
           >
             <RefreshCw size={14} className="text-danger" />
@@ -65,7 +65,7 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
         <button
           type="button"
           onClick={copyAddress}
-          className="btn-icon bg-card"
+          className="btn-icon bg-card/75"
           aria-label={`Copy address of ${displayName}`}
         >
           {copied ? <CheckCircle2 size={14} className="text-success" /> : <Copy size={14} />}
@@ -74,7 +74,7 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
           href={validatorExplorerUrl(address)}
           target="_blank"
           rel="noopener noreferrer"
-          className="btn-icon bg-card"
+          className="btn-icon bg-card/75"
           aria-label={`Open ${displayName} on Subscan`}
         >
           <ExternalLink size={14} />
@@ -95,53 +95,48 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
             setOpen(true)
           }
         }}
-        className={`group relative overflow-hidden rounded-[1.5rem] bg-surface p-5 shadow-ambient transition-all duration-200 hover:-translate-y-1 hover:bg-card sm:p-6 ${
-          hasMissed ? 'border-l-2 border-l-warning' : ''
-        } ${hasError ? 'border-l-2 border-l-danger' : ''}`}
-        style={{
-          borderColor: !hasMissed && !hasError ? 'rgba(70,71,82,0.10)' : undefined,
-          borderWidth: !hasMissed && !hasError ? '1px' : undefined,
-          borderStyle: !hasMissed && !hasError ? 'solid' : undefined,
-        }}
+        className={`group relative overflow-hidden rounded-[1.35rem] border bg-surface px-4 py-4 shadow-ambient transition-all duration-200 hover:-translate-y-0.5 hover:border-cyan/20 hover:bg-card sm:px-5 sm:py-5 ${
+          hasError ? 'border-danger/35' : hasMissed ? 'border-warning/30' : 'border-white/6'
+        }`}
         aria-label={`Open details for validator ${displayName}`}
       >
-        <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-card text-primary">
-            {loading
-              ? <Loader2 size={16} className="animate-spin text-dim" />
-              : isActive
-                ? <Shield size={16} className="text-success" />
-                : <Clock size={16} className="text-text-secondary" />
-            }
+        <div className="flex items-start gap-3.5">
+          <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-card text-primary">
+              {loading
+                ? <Loader2 size={16} className="animate-spin text-dim" />
+                : isActive
+                  ? <Shield size={16} className="text-success" />
+                  : <Clock size={16} className="text-text-secondary" />
+              }
+            </div>
+            {hasMissed && <span className="sev-high">{missedEras.length} missed</span>}
+            {!hasMissed && !hasError && loading && <span className="badge-waiting">Loading</span>}
+            {!loading && !hasMissed && !hasError && isActive && <span className="badge-active">Active</span>}
+            {!loading && !hasMissed && !hasError && !isActive && <span className="badge-waiting">Inactive</span>}
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="break-words font-headline text-lg font-bold text-text" title={displayName}>{displayName}</h3>
-              {hasMissed && <span className="sev-high">{missedEras.length} missed</span>}
-              {!hasMissed && !hasError && loading && <span className="badge-waiting">Loading</span>}
-              {!loading && !hasMissed && !hasError && isActive && <span className="badge-active">Active</span>}
-              {!loading && !hasMissed && !hasError && !isActive && <span className="badge-waiting">Inactive</span>}
-            </div>
+            <h3 className="break-words font-headline text-base font-bold text-text sm:text-lg" title={displayName}>{displayName}</h3>
             <p className="mt-1 break-all font-mono text-[11px] text-text-secondary">{address}</p>
           </div>
 
-          <div className="flex items-center gap-1.5" onClick={event => event.stopPropagation()}>
+          <div className="flex flex-col items-center gap-1" onClick={event => event.stopPropagation()}>
             {renderActions()}
           </div>
         </div>
 
-        <div className="mt-4 grid gap-2">
-          <PreviewMetric label="Commission" value={`${commission}%`} accent="text-primary" />
-          <PreviewMetric label="Bonded" value={formatENJ(bondedTotal, 2)} accent="text-cyan" />
-          <PreviewMetric label="Nominators" value={nominatorCount.toLocaleString('en')} accent="text-text" />
+        <div className="mt-4 divide-y divide-white/5 rounded-[1rem] bg-card/85 overflow-hidden">
+          <MetricRow label="Commission" value={`${commission}%`} accent="text-primary" />
+          <MetricRow label="Bonded" value={formatENJ(bondedTotal, 2)} accent="text-cyan" />
+          <MetricRow label="Nominators" value={nominatorCount.toLocaleString('en')} accent="text-text" />
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/6 pt-4">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/6 pt-3">
           <p className={`text-sm ${hasError ? 'text-danger' : hasMissed ? 'text-warning' : 'text-text-secondary'}`}>
             {latestStatus}
           </p>
-          <span className="mini-chip group-hover:text-text">View details</span>
+          <span className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.15em] text-primary group-hover:bg-primary/20 transition-colors">View Details</span>
         </div>
       </article>
 
@@ -226,11 +221,20 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
   )
 }
 
+function MetricRow({ label, value, accent = 'text-text' }) {
+  return (
+    <div className="flex items-center justify-between px-3 py-2.5">
+      <span className="text-xs text-text-secondary">{label}</span>
+      <span className={`text-sm font-bold font-headline ${accent}`}>{value}</span>
+    </div>
+  )
+}
+
 function PreviewMetric({ label, value, accent = 'text-text' }) {
   return (
-    <div className="rounded-[1.15rem] bg-card/85 px-4 py-3">
-      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-text-secondary">{label}</p>
-      <p className={`mt-2 font-headline text-xl font-bold ${accent}`}>{value}</p>
+    <div className="rounded-[1rem] bg-card/85 px-3 py-2.5">
+      <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-text-secondary">{label}</p>
+      <p className={`mt-1.5 font-headline text-lg font-bold ${accent}`}>{value}</p>
     </div>
   )
 }

@@ -43,21 +43,28 @@ function fmt(n) {
   return n != null ? n.toLocaleString() : '—'
 }
 
+const _DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const _MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+function _p2(n) { return String(n).padStart(2, '0') }
+
 function fmtDateLocal(utcStr) {
   if (!utcStr) return null
   try {
     const d = new Date(utcStr)
     if (isNaN(d.getTime())) return null
-    return d.toLocaleString(undefined, {
-      weekday: 'short',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      timeZoneName: 'short',
-    })
+    const day = _DAYS[d.getDay()]
+    const dd = _p2(d.getDate())
+    const mmm = _MONTHS[d.getMonth()]
+    const yyyy = d.getFullYear()
+    const hh = _p2(d.getHours())
+    const mm = _p2(d.getMinutes())
+    const ss = _p2(d.getSeconds())
+    const off = -d.getTimezoneOffset()
+    const sign = off >= 0 ? '+' : '-'
+    const absH = Math.floor(Math.abs(off) / 60)
+    const absM = Math.abs(off) % 60
+    const tz = off === 0 ? 'UTC' : (absM === 0 ? `UTC${sign}${absH}` : `UTC${sign}${absH}:${_p2(absM)}`)
+    return `${day}, ${dd} ${mmm} ${yyyy} ${hh}:${mm}:${ss} ${tz}`
   } catch {
     return null
   }
@@ -68,7 +75,14 @@ function fmtDateUtc(utcStr) {
   try {
     const d = new Date(utcStr)
     if (isNaN(d.getTime())) return null
-    return d.toUTCString().replace(' GMT', ' UTC')
+    const day = _DAYS[d.getUTCDay()]
+    const dd = _p2(d.getUTCDate())
+    const mmm = _MONTHS[d.getUTCMonth()]
+    const yyyy = d.getUTCFullYear()
+    const hh = _p2(d.getUTCHours())
+    const mm = _p2(d.getUTCMinutes())
+    const ss = _p2(d.getUTCSeconds())
+    return `${day}, ${dd} ${mmm} ${yyyy} ${hh}:${mm}:${ss} UTC`
   } catch {
     return null
   }
