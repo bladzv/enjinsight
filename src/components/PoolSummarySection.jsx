@@ -31,14 +31,14 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
   }, [safeGapPage, gapPage])
 
   return (
-    <section aria-labelledby="pool-summary-heading" className="space-y-6 animate-fade-in">
+    <section aria-labelledby="pool-summary-heading" className="space-y-5 animate-fade-in">
       <div>
         <p className="section-label">Summary</p>
         <h2 id="pool-summary-heading" className="section-title mt-2">Pool Overview</h2>
       </div>
 
       {/* ── Overview stat chips (bento grid) ────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatChip value={pools.length}  label="Total Pools" colour="text-text" />
         <StatChip value={clean.length}  label="All Rewarded" colour="text-success" />
         <StatChip
@@ -86,8 +86,8 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
 
       {/* ── Reward gap table (paginated) ──────────────────────────── */}
       {withGaps.length > 0 ? (
-        <div className="overflow-hidden rounded-[1.5rem] bg-surface shadow-ambient">
-          <div className="px-5 py-3 bg-card flex items-center gap-2">
+        <div className="overflow-hidden rounded-[1.35rem] bg-surface shadow-ambient">
+          <div className="flex items-center gap-2 bg-card px-4 py-3 sm:px-5">
             <XCircle size={14} className="text-warning" />
             <h3 className="text-sm font-semibold font-headline text-text">Pools with Missing Rewards</h3>
             <span className="ml-auto px-2 py-0.5 rounded text-[10px] font-bold bg-warning/15 text-warning">
@@ -146,10 +146,10 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
               )
             })}
           </div>
-          <div className="hidden sm:block scroll-x">
-            <table className="w-full text-xs min-w-[520px]">
+          <div className="hidden sm:block data-table-wrap">
+            <table className="data-table min-w-[520px]">
               <thead>
-                <tr className="bg-surface-high text-[10px] uppercase text-muted font-bold">
+                <tr className="data-table-head">
                   <th className="text-center px-4 py-3 w-[40%]">Pool</th>
                   <th className="text-center px-3 py-3">Checked</th>
                   <th className="text-center px-3 py-3">Rewarded</th>
@@ -167,7 +167,7 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
                   return (
                     <tr
                       key={p.poolId}
-                      className="cursor-pointer hover:bg-surface-bright transition-colors"
+                      className="data-table-row cursor-pointer"
                       role="button"
                       tabIndex={0}
                       onClick={() => onPoolSelect?.(p.poolId)}
@@ -224,7 +224,7 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
 
           {/* Gap table pagination */}
           {gapPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-2.5 bg-card text-xs text-text-secondary">
+            <div className="flex items-center justify-between bg-card px-4 py-2.5 text-xs text-text-secondary">
               <div className="flex items-center gap-2">
                 <span>{withGaps.length} pools</span>
                 <select
@@ -275,10 +275,10 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
 
       {/* ── Clean pools (collapsed) ──────────────────────────────── */}
       {clean.length > 0 && (
-        <div className="overflow-hidden rounded-[1.5rem] bg-surface shadow-ambient ring-1 ring-success/10">
+        <div className="overflow-hidden rounded-[1.35rem] bg-surface shadow-ambient ring-1 ring-success/10">
           <button
             onClick={() => setShowClean(s => !s)}
-            className="w-full px-5 py-5 text-left transition-colors hover:bg-card/50 sm:px-6"
+            className="w-full px-4 py-4 text-left transition-colors hover:bg-card/50 sm:px-5"
             aria-expanded={showClean}
           >
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
@@ -289,7 +289,7 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
                 <div className="space-y-2">
                   <p className="section-label text-success">Pool Review</p>
                   <div>
-                    <h3 className="font-headline text-2xl font-bold text-text">Perfect Record</h3>
+                    <h3 className="font-headline text-xl font-bold text-text sm:text-[1.6rem]">Perfect Record</h3>
                     <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
                       Pools in this group received rewards in every era across the current scan window.
                     </p>
@@ -316,11 +316,11 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
             </div>
           </button>
           {showClean && (
-            <div className="grid grid-cols-1 gap-3 px-5 py-5 animate-fade-in sm:grid-cols-2 xl:grid-cols-3 sm:px-6">
+            <div className="grid grid-cols-1 gap-3 px-4 py-4 animate-fade-in sm:grid-cols-2 2xl:grid-cols-4 sm:px-5">
               {clean.map(p => (
                 <div
                   key={p.poolId}
-                  className="rounded-[1.25rem] bg-card px-4 py-4 transition-colors hover:bg-surface-high cursor-pointer"
+                  className="rounded-[1.15rem] bg-card px-4 py-4 transition-colors hover:bg-surface-high cursor-pointer"
                   role="button"
                   tabIndex={0}
                   onClick={() => onPoolSelect?.(p.poolId)}
@@ -360,7 +360,7 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
                     className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-text-secondary transition-colors hover:text-cyan"
                     aria-label="Open on Subscan"
                   >
-                    Open on Subscan
+                    Subscan
                     <ExternalLink size={12} />
                   </a>
                 </div>
@@ -381,7 +381,7 @@ function StatChip({ value, label, colour }) {
   return (
     <div className="metric-card">
       <span className="metric-label">{label}</span>
-      <div className={`metric-value text-4xl ${colour}`}>{value}</div>
+      <div className={`metric-value text-3xl ${colour}`}>{value}</div>
     </div>
   )
 }

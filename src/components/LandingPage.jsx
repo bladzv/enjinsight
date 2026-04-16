@@ -1,4 +1,4 @@
-import { ArrowRight, BarChart3, LineChart, Layers, ShieldCheck, Sparkles, TrendingUp } from 'lucide-react'
+import { ArrowRight, BarChart3, LineChart, Layers, Sparkles, TrendingUp } from 'lucide-react'
 
 const FEATURES = [
   {
@@ -118,11 +118,7 @@ export default function LandingPage({ onNavigate }) {
                   <p className="text-sm leading-6 text-text-secondary">{description}</p>
                 </div>
 
-                <div className="mt-auto flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-text-secondary">
-                    <ShieldCheck size={12} className="text-success" />
-                    No Wallet Required
-                  </div>
+                <div className="mt-auto flex items-center justify-end gap-3">
                   <button
                     type="button"
                     onClick={() => onNavigate(key)}

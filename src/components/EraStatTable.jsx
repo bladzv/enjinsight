@@ -27,7 +27,7 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
   return (
     <div>
       {/* pagination controls */}
-      <div className="flex items-center justify-between mb-2 text-xs text-text-secondary">
+      <div className="data-toolbar">
         <div className="flex items-center gap-1">
           <span>Per page:</span>
           <select
@@ -60,10 +60,10 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
           </div>
         )}
       </div>
-      <div className="scroll-x rounded-xl">
-      <table className="w-full text-xs min-w-[520px]">
+      <div className="data-table-wrap">
+      <table className="data-table min-w-[520px]">
         <thead>
-          <tr className="bg-surface-high">
+          <tr className="data-table-head">
             <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-16">Era</th>
             <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Start Block</th>
             <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">End Block</th>
@@ -75,7 +75,7 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
           {pageItems.map(({ era, data, missed }) =>
             missed ? (
               // Gap row
-              <tr key={`miss-${era}`} className="bg-danger/5">
+              <tr key={`miss-${era}`} className="data-table-row-danger">
                 <td className="px-3 py-2.5 font-mono text-danger font-semibold">{era}</td>
                 <td className="px-3 py-2.5 text-right text-danger" colSpan={4}>
                   <span className="hidden md:inline">— No era stat recorded —</span>
@@ -84,7 +84,7 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
               </tr>
             ) : (
               // Normal row
-              <tr key={`era-${era}`} className="hover:bg-surface-bright transition-colors">
+              <tr key={`era-${era}`} className="data-table-row">
                 <td className="px-3 py-2.5 font-mono text-text-secondary">{era}</td>
                 <td className="px-3 py-2.5 font-mono text-text-secondary text-right">
                   {data?.startBlock?.toLocaleString() ?? '—'}
