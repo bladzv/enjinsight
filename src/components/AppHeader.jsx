@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { key: 'staking', label: 'Staking Cadence' },
   { key: 'balance', label: 'Balance Viewer' },
   { key: 'reward-history', label: 'Reward History' },
+  { key: 'infusion', label: 'ENJ Infusion' },
 ]
 
 const GITHUB_URL = 'https://github.com/bladzv/enjinsight'

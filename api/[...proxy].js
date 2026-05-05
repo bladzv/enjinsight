@@ -44,6 +44,26 @@ function consumeToken() {
 // MAX_CACHE_ENTRIES to prevent unbounded memory growth across long-lived instances.
 const CACHE_TTL_MS     = 5 * 60 * 1000   // 5 minutes
 const MAX_CACHE_ENTRIES = 200
+const ETHERSCAN_NFT_HOLDINGS_PATH = '/api/etherscan-nft-holdings'
+const ETHERSCAN_NFT_HOLDINGS_URL = 'https://etherscan.io/address-nft-holding.aspx/GetNftDetails'
+const ENJ_TOKEN_DETAILS_PATH = '/api/enj-token-details'
+const ENJIN_CRYPTOITEMS_CONTRACT = '0xfaafdc07907ff5120a76b34b731b278c38d6043c'
+const ETHERSCAN_API_URL = 'https://api.etherscan.io/v2/api'
+const ETHERSCAN_CHAIN_ID = '1'
+const ETHERSCAN_DETAIL_TTL_MS = 5 * 60 * 1000
+const ETHERSCAN_CONTRACT_TTL_MS = 24 * 60 * 60 * 1000
+const URI_SELECTOR = '0x0e89341c'
+const BALANCE_OF_SELECTOR = '0x00fdd58e'
+
+// Etherscan allows 5 calls/sec for this key. This limiter is per warm function
+// instance; truly global coordination would require a shared store such as Redis/KV.
+const _etherscanBucket = {
+  tokens: 5,
+  max: 5,
+  rate: 5,
+  lastRefill: Date.now(),
+}
+let _contractCreatorPromise = null
 
 // Paths whose responses are immutable once indexed by Subscan.
 const IMMUTABLE_PATHS = new Set([
@@ -84,6 +104,218 @@ function cacheSet(key, entry) {
   _cache.set(key, { ts: Date.now(), ...entry })
 }
 
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function takeEtherscanToken() {
+  while (true) {
+    const now = Date.now()
+    const elapsed = (now - _etherscanBucket.lastRefill) / 1000
+    _etherscanBucket.tokens = Math.min(_etherscanBucket.max, _etherscanBucket.tokens + elapsed * _etherscanBucket.rate)
+    _etherscanBucket.lastRefill = now
+
+    if (_etherscanBucket.tokens >= 1) {
+      _etherscanBucket.tokens -= 1
+      return
+    }
+
+    await delay(Math.ceil((1 - _etherscanBucket.tokens) / _etherscanBucket.rate * 1000))
+  }
+}
+
+function encodeUint256(value) {
+  return BigInt(value).toString(16).padStart(64, '0')
+}
+
+function encodeAddress(address) {
+  return address.toLowerCase().replace(/^0x/, '').padStart(64, '0')
+}
+
+function decodeAbiString(hex) {
+  if (!hex || hex === '0x') return ''
+  const payload = hex.startsWith('0x') ? hex.slice(2) : hex
+  if (payload.length < 128) return ''
+  const offset = Number(BigInt(`0x${payload.slice(0, 64)}`))
+  const lengthStart = offset * 2
+  const length = Number(BigInt(`0x${payload.slice(lengthStart, lengthStart + 64)}`))
+  const data = payload.slice(lengthStart + 64, lengthStart + 64 + length * 2)
+  return Buffer.from(data, 'hex').toString('utf8')
+}
+
+function decodeUint256(hex) {
+  if (!hex || hex === '0x') return ''
+  return BigInt(hex).toString()
+}
+
+function normalizeMetadataUrl(uri, tokenId) {
+  if (!uri) return ''
+  const tokenHex = BigInt(tokenId).toString(16).padStart(64, '0').toLowerCase()
+  const resolved = uri.replaceAll('{id}', tokenHex)
+  if (resolved.startsWith('ipfs://')) return `https://ipfs.io/ipfs/${resolved.slice('ipfs://'.length)}`
+  if (resolved.startsWith('ipns://')) return `https://ipfs.io/ipns/${resolved.slice('ipns://'.length)}`
+  if (/^https:\/\//i.test(resolved)) return resolved
+  return ''
+}
+
+function normalizeMetadataJson(body, tokenId) {
+  if (!body || typeof body !== 'object') return {}
+  const attributes = Array.isArray(body.attributes)
+    ? body.attributes.map(item => ({
+      trait: String(item.trait_type ?? item.trait ?? item.name ?? '').trim(),
+      value: String(item.value ?? '').trim(),
+      rarity: String(item.rarity ?? item.frequency ?? '').trim(),
+    })).filter(item => item.trait || item.value || item.rarity)
+    : []
+
+  return {
+    tokenId,
+    name: typeof body.name === 'string' ? body.name : '',
+    previewImage: normalizeMetadataUrl(typeof body.image === 'string' ? body.image : '', tokenId),
+    description: typeof body.description === 'string' ? body.description : '',
+    properties: attributes,
+  }
+}
+
+async function fetchEtherscanApi(params) {
+  const apiKey = process.env.ETHERSCAN_API_KEY || ''
+  if (!apiKey) throw new Error('ETHERSCAN_API_KEY is not configured.')
+
+  await takeEtherscanToken()
+
+  const url = new URL(ETHERSCAN_API_URL)
+  url.searchParams.set('chainid', ETHERSCAN_CHAIN_ID)
+  Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value))
+  url.searchParams.set('apikey', apiKey)
+
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`Etherscan API returned HTTP ${response.status}.`)
+
+  const body = await response.json()
+  if (body.status === '0') throw new Error(body.result || body.message || 'Etherscan API returned an error.')
+  if (body.error) throw new Error(body.error.message || 'Etherscan API returned an error.')
+  return body
+}
+
+async function etherscanEthCall(data) {
+  const body = await fetchEtherscanApi({
+    module: 'proxy',
+    action: 'eth_call',
+    to: ENJIN_CRYPTOITEMS_CONTRACT,
+    data,
+    tag: 'latest',
+  })
+  return body.result || ''
+}
+
+async function fetchJsonMetadata(uri, tokenId) {
+  const url = normalizeMetadataUrl(uri, tokenId)
+  if (!url) return {}
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 8000)
+
+  try {
+    const response = await fetch(url, {
+      headers: { accept: 'application/json' },
+      signal: controller.signal,
+    })
+    if (!response.ok) throw new Error(`metadata URI returned HTTP ${response.status}`)
+    return normalizeMetadataJson(await response.json(), tokenId)
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function getContractCreator() {
+  const cacheKey = `etherscan:contract-creator:${ENJIN_CRYPTOITEMS_CONTRACT}`
+  const hit = cacheGet(cacheKey, ETHERSCAN_CONTRACT_TTL_MS)
+  if (hit) return JSON.parse(hit.body)
+  if (_contractCreatorPromise) return _contractCreatorPromise
+
+  _contractCreatorPromise = (async () => {
+    try {
+      const body = await fetchEtherscanApi({
+        module: 'contract',
+        action: 'getcontractcreation',
+        contractaddresses: ENJIN_CRYPTOITEMS_CONTRACT,
+      })
+      const creator = body.result?.[0]?.contractCreator || ''
+      const result = { creator }
+      cacheSet(cacheKey, { body: JSON.stringify(result), status: 200, contentType: 'application/json' })
+      return result
+    } finally {
+      _contractCreatorPromise = null
+    }
+  })()
+
+  return _contractCreatorPromise
+}
+
+async function proxyEnjTokenDetails(req, res) {
+  if (req.method !== 'GET') {
+    res.statusCode = 405
+    return res.end('Method not allowed.')
+  }
+
+  const requestUrl = new URL(req.url || '', `https://${req.headers.host || 'localhost'}`)
+  const tokenId = requestUrl.searchParams.get('tokenId') || ''
+  const owner = requestUrl.searchParams.get('owner') || ''
+
+  if (!/^\d+$/.test(tokenId)) {
+    res.statusCode = 400
+    return res.end('Missing or invalid tokenId.')
+  }
+  if (!/^0x[a-fA-F0-9]{40}$/.test(owner)) {
+    res.statusCode = 400
+    return res.end('Missing or invalid owner.')
+  }
+
+  const cacheKey = `etherscan:enj-token-details:${owner.toLowerCase()}:${tokenId}`
+  const hit = cacheGet(cacheKey, ETHERSCAN_DETAIL_TTL_MS)
+  if (hit) {
+    res.setHeader('Content-Type', hit.contentType)
+    res.setHeader('Cache-Control', 'private, max-age=300')
+    res.statusCode = hit.status
+    return res.end(hit.body)
+  }
+
+  try {
+    const encodedTokenId = encodeUint256(tokenId)
+    const [creatorResult, uriHex, quantityHex] = await Promise.all([
+      getContractCreator().catch(error => ({ creator: '', error: error.message })),
+      etherscanEthCall(`${URI_SELECTOR}${encodedTokenId}`).catch(() => ''),
+      etherscanEthCall(`${BALANCE_OF_SELECTOR}${encodeAddress(owner)}${encodedTokenId}`).catch(() => ''),
+    ])
+    const uri = decodeAbiString(uriHex)
+    const jsonMetadata = await fetchJsonMetadata(uri, tokenId).catch(error => ({ metadataError: error.message }))
+    const result = {
+      tokenId,
+      owner,
+      contractAddress: ENJIN_CRYPTOITEMS_CONTRACT,
+      creator: creatorResult.creator || '',
+      tokenStandard: 'ERC-1155',
+      quantity: decodeUint256(quantityHex),
+      tokenUri: uri,
+      ...jsonMetadata,
+    }
+    const body = JSON.stringify(result)
+
+    cacheSet(cacheKey, { body, status: 200, contentType: 'application/json; charset=utf-8' })
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '')
+    res.setHeader('Vary', 'Origin')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('Cache-Control', 'private, max-age=300')
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.statusCode = 200
+    return res.end(body)
+  } catch (error) {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.statusCode = 502
+    return res.end(JSON.stringify({ error: error.message }))
+  }
+}
+
 /** Read the raw request body into a Buffer, enforcing a size limit. */
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
@@ -102,6 +334,44 @@ function readRawBody(req) {
   })
 }
 
+async function proxyEtherscanNftHoldings(req, res) {
+  if (req.method !== 'POST') {
+    res.statusCode = 405
+    return res.end('Method not allowed.')
+  }
+
+  try {
+    const rawBody = await readRawBody(req)
+    const upstreamRes = await fetch(ETHERSCAN_NFT_HOLDINGS_URL, {
+      method: 'POST',
+      headers: {
+        accept: 'application/json, text/javascript, */*; q=0.01',
+        'content-type': 'application/json',
+        origin: 'https://etherscan.io',
+        referer: 'https://etherscan.io/address-nft-holding',
+        'user-agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36',
+        'x-requested-with': 'XMLHttpRequest',
+      },
+      body: rawBody,
+    })
+    const text = await upstreamRes.text()
+
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '')
+    res.setHeader('Vary', 'Origin')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('X-Frame-Options', 'DENY')
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Content-Type', upstreamRes.headers.get('content-type') || 'application/json; charset=utf-8')
+    res.statusCode = upstreamRes.status
+    return res.end(text)
+  } catch (error) {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.statusCode = 502
+    return res.end(JSON.stringify({ error: error.message }))
+  }
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method === 'OPTIONS') {
@@ -118,6 +388,14 @@ export default async function handler(req, res) {
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !req.headers['content-type']) {
       res.statusCode = 400;
       return res.end('Missing Content-Type header.');
+    }
+
+    const requestPath = (req.url || '').split('?')[0]
+    if (requestPath === ETHERSCAN_NFT_HOLDINGS_PATH) {
+      return proxyEtherscanNftHoldings(req, res)
+    }
+    if (requestPath === ENJ_TOKEN_DETAILS_PATH) {
+      return proxyEnjTokenDetails(req, res)
     }
 
     const prefix = '/api/';
