@@ -375,6 +375,10 @@
     background: rgba(255, 110, 132, 0.06);
   }
 
+  .bulk-result-row {
+    animation: bulk-result-row-in 260ms ease-out both;
+  }
+
   .data-toolbar {
     @apply mb-3 flex flex-wrap items-center justify-between gap-3 text-xs text-text-secondary;
   }
@@ -538,6 +542,17 @@
         0 18px 40px rgba(128, 81, 255, 0.30),
         0 0 24px rgba(0, 238, 252, 0.22),
         inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    }
+  }
+
+  @keyframes bulk-result-row-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
     }
   }
 
