@@ -59,7 +59,7 @@ function normalizeMetadataJson(body, tokenId) {
   }
 }
 
-function createEtherscanDevDetailsPlugin(apiKey) {
+function createEtherscanDevDetailsPlugin(apiKey, alchemyRpcUrl) {
   const bucket = { tokens: 5, max: 5, rate: 5, lastRefill: Date.now() }
   const contractCreatorCache = { value: null }
   let contractCreatorPromise = null
@@ -188,6 +188,45 @@ function createEtherscanDevDetailsPlugin(apiKey) {
       ))
   }
 
+  async function proxyAlchemyEthCall(req, res) {
+    try {
+      const rpcUrl = alchemyRpcUrl || ''
+      if (!rpcUrl) {
+        res.statusCode = 503
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ error: 'ALCHEMY_ETH_RPC_URL is not configured.' }))
+        return
+      }
+
+      const targetUrl = new URL(rpcUrl)
+      if (targetUrl.protocol !== 'https:') {
+        res.statusCode = 500
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ error: 'ALCHEMY_ETH_RPC_URL must use https.' }))
+        return
+      }
+
+      const chunks = []
+      for await (const chunk of req) chunks.push(chunk)
+      const upstreamRes = await fetch(targetUrl, {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: Buffer.concat(chunks),
+      })
+
+      res.statusCode = upstreamRes.status
+      res.setHeader('Content-Type', upstreamRes.headers.get('content-type') || 'application/json; charset=utf-8')
+      res.end(await upstreamRes.text())
+    } catch (error) {
+      res.statusCode = 502
+      res.setHeader('Content-Type', 'application/json; charset=utf-8')
+      res.end(JSON.stringify({ error: error.message }))
+    }
+  }
+
   async function ethCall(data) {
     const body = await etherscanApi({
       module: 'proxy',
@@ -231,6 +270,16 @@ function createEtherscanDevDetailsPlugin(apiKey) {
   return {
     name: 'enj-token-details-dev',
     configureServer(server) {
+      server.middlewares.use('/__eth-call', async (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          res.end('Method not allowed.')
+          return
+        }
+
+        await proxyAlchemyEthCall(req, res)
+      })
+
       server.middlewares.use('/__enj-wallet-tokens', async (req, res) => {
         try {
           const requestUrl = new URL(req.url || '', 'http://localhost')
@@ -299,9 +348,10 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const apiKey = env.SUBSCAN_API_KEY || ''
   const etherscanApiKey = env.ETHERSCAN_API_KEY || ''
+  const alchemyRpcUrl = env.ALCHEMY_ETH_RPC_URL || ''
 
   return {
-    plugins: [react(), createEtherscanDevDetailsPlugin(etherscanApiKey)],
+    plugins: [react(), createEtherscanDevDetailsPlugin(etherscanApiKey, alchemyRpcUrl)],
     // './' base makes the app work at any subdirectory path,
     // including use in relative subdirectories for static hosts
     base: './',
