@@ -1,4 +1,4 @@
-import { ArrowRight, BarChart3, LineChart, Layers, Sparkles, TrendingUp } from 'lucide-react'
+import { BarChart3, Gem, LineChart, Layers, TrendingUp } from 'lucide-react'
 
 const FEATURES = [
   {
@@ -45,13 +45,24 @@ const FEATURES = [
     accent: 'text-success',
     glow: 'from-success/20 to-transparent',
   },
+  {
+    key: 'infusion',
+    icon: Gem,
+    title: 'ENJ Infusion Checker',
+    description:
+      'Check ERC-20 ENJ infusion on Ethereum ERC-1155 CryptoItems by token ID, or scan a wallet and total the infused amount across holdings.',
+    label: 'Check Infusion',
+    resource: 'Ethereum RPC + Etherscan',
+    accent: 'text-primary',
+    glow: 'from-primary/20 to-transparent',
+  },
 ]
 
 const SIGNALS = [
-  { label: 'Tool Modules', value: '4', tone: 'text-primary', accent: 'metric-card-left-primary' },
+  { label: 'Tool Modules', value: '5', tone: 'text-primary', accent: 'metric-card-left-primary' },
   { label: 'Access Mode', value: 'Read-only', tone: 'text-cyan', accent: 'metric-card-left-cyan' },
   { label: 'Wallet Required', value: 'None', tone: 'text-success', accent: 'metric-card-left-success' },
-  { label: 'Sources', value: 'RPC + Subscan', tone: 'text-text', accent: 'metric-card-left-warning' },
+  { label: 'Sources', value: 'RPC + Indexers', tone: 'text-text', accent: 'metric-card-left-warning' },
 ]
 
 export default function LandingPage({ onNavigate }) {
@@ -70,7 +81,7 @@ export default function LandingPage({ onNavigate }) {
               </h2>
               <p className="hero-copy">
                 Read-only monitoring utilities for the Enjin ecosystem, designed to make dense on-chain data feel legible.
-                Jump straight into era tracking, staking diagnostics, balance archaeology, or reward audits.
+                Jump straight into era tracking, staking diagnostics, balance archaeology, reward audits, or ERC-20 ENJ infusion checks.
               </p>
             </div>
           </div>
@@ -98,7 +109,7 @@ export default function LandingPage({ onNavigate }) {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {FEATURES.map(({ key, icon: Icon, title, description, label, resource, accent, glow }) => (
             <article
               key={key}
