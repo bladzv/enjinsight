@@ -334,26 +334,65 @@ async function proxyEnjWalletTokens(req, res) {
   }
 }
 
+function parseInfusionEthCall(rawBody) {
+  let payload
+  try {
+    payload = JSON.parse(rawBody.toString('utf8'))
+  } catch (error) {
+    throw new Error('Invalid JSON-RPC body.')
+  }
+
+  if (payload?.method !== 'eth_call') throw new Error('Only eth_call is allowed.')
+  const call = payload.params?.[0] || {}
+  if (String(call.to || '').toLowerCase() !== ENJIN_CRYPTOITEMS_CONTRACT) {
+    throw new Error('Only the configured Enjin ERC-1155 contract calls are allowed.')
+  }
+  if (!/^0x[0-9a-fA-F]+$/.test(String(call.data || ''))) {
+    throw new Error('Missing or invalid eth_call data.')
+  }
+
+  return { id: payload.id ?? 1, data: call.data }
+}
+
+async function proxyEtherscanEthCallFallback(rawBody) {
+  const { id, data } = parseInfusionEthCall(rawBody)
+  const result = await etherscanEthCall(data)
+  return JSON.stringify({ jsonrpc: '2.0', id, result })
+}
+
 async function proxyAlchemyEthCall(req, res) {
   if (req.method !== 'POST') {
     res.statusCode = 405
     return res.end('Method not allowed.')
   }
 
+  const rawBody = await readRawBody(req)
   const rpcUrl = process.env.ALCHEMY_ETH_RPC_URL || ''
+  const finish = (status, body, contentType = 'application/json; charset=utf-8', provider = '') => {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '')
+    res.setHeader('Vary', 'Origin')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Content-Type', contentType)
+    if (provider) res.setHeader('X-RPC-Provider', provider)
+    res.statusCode = status
+    return res.end(body)
+  }
+
   if (!rpcUrl) {
-    res.statusCode = 503
-    return res.end(JSON.stringify({ error: 'ALCHEMY_ETH_RPC_URL is not configured.' }))
+    try {
+      return finish(200, await proxyEtherscanEthCallFallback(rawBody), 'application/json; charset=utf-8', 'Etherscan')
+    } catch (error) {
+      return finish(503, JSON.stringify({ error: `No Ethereum RPC provider available. ${error.message}` }))
+    }
   }
 
   try {
     const targetUrl = new URL(rpcUrl)
     if (targetUrl.protocol !== 'https:') {
-      res.statusCode = 500
-      return res.end(JSON.stringify({ error: 'ALCHEMY_ETH_RPC_URL must use https.' }))
+      throw new Error('ALCHEMY_ETH_RPC_URL must use https.')
     }
 
-    const rawBody = await readRawBody(req)
     const upstreamRes = await fetch(targetUrl, {
       method: 'POST',
       headers: {
@@ -364,17 +403,17 @@ async function proxyAlchemyEthCall(req, res) {
     })
     const text = await upstreamRes.text()
 
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '')
-    res.setHeader('Vary', 'Origin')
-    res.setHeader('X-Content-Type-Options', 'nosniff')
-    res.setHeader('Cache-Control', 'no-store')
-    res.setHeader('Content-Type', upstreamRes.headers.get('content-type') || 'application/json; charset=utf-8')
-    res.statusCode = upstreamRes.status
-    return res.end(text)
+    if (upstreamRes.ok) {
+      return finish(upstreamRes.status, text, upstreamRes.headers.get('content-type') || 'application/json; charset=utf-8', 'Alchemy')
+    }
   } catch (error) {
-    res.setHeader('Content-Type', 'application/json; charset=utf-8')
-    res.statusCode = 502
-    return res.end(JSON.stringify({ error: error.message }))
+    // Fall back to Etherscan below.
+  }
+
+  try {
+    return finish(200, await proxyEtherscanEthCallFallback(rawBody), 'application/json; charset=utf-8', 'Etherscan')
+  } catch (error) {
+    return finish(502, JSON.stringify({ error: error.message }))
   }
 }
 
