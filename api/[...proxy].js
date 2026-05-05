@@ -55,12 +55,18 @@ const ETHERSCAN_CONTRACT_TTL_MS = 24 * 60 * 60 * 1000
 const URI_SELECTOR = '0x0e89341c'
 const BALANCE_OF_SELECTOR = '0x00fdd58e'
 
-// Etherscan allows 5 calls/sec for this key. This limiter is per warm function
-// instance; truly global coordination would require a shared store such as Redis/KV.
+// Etherscan and Alchemy are capped at 3 calls/sec per warm function instance.
+// Truly global coordination would require a shared store such as Redis/KV.
 const _etherscanBucket = {
-  tokens: 5,
-  max: 5,
-  rate: 5,
+  tokens: 3,
+  max: 3,
+  rate: 3,
+  lastRefill: Date.now(),
+}
+const _alchemyBucket = {
+  tokens: 3,
+  max: 3,
+  rate: 3,
   lastRefill: Date.now(),
 }
 let _contractCreatorPromise = null
@@ -108,20 +114,28 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-async function takeEtherscanToken() {
+async function takeApiToken(bucket) {
   while (true) {
     const now = Date.now()
-    const elapsed = (now - _etherscanBucket.lastRefill) / 1000
-    _etherscanBucket.tokens = Math.min(_etherscanBucket.max, _etherscanBucket.tokens + elapsed * _etherscanBucket.rate)
-    _etherscanBucket.lastRefill = now
+    const elapsed = (now - bucket.lastRefill) / 1000
+    bucket.tokens = Math.min(bucket.max, bucket.tokens + elapsed * bucket.rate)
+    bucket.lastRefill = now
 
-    if (_etherscanBucket.tokens >= 1) {
-      _etherscanBucket.tokens -= 1
+    if (bucket.tokens >= 1) {
+      bucket.tokens -= 1
       return
     }
 
-    await delay(Math.ceil((1 - _etherscanBucket.tokens) / _etherscanBucket.rate * 1000))
+    await delay(Math.ceil((1 - bucket.tokens) / bucket.rate * 1000))
   }
+}
+
+function takeEtherscanToken() {
+  return takeApiToken(_etherscanBucket)
+}
+
+function takeAlchemyToken() {
+  return takeApiToken(_alchemyBucket)
 }
 
 function encodeUint256(value) {
@@ -393,6 +407,7 @@ async function proxyAlchemyEthCall(req, res) {
       throw new Error('ALCHEMY_ETH_RPC_URL must use https.')
     }
 
+    await takeAlchemyToken()
     const upstreamRes = await fetch(targetUrl, {
       method: 'POST',
       headers: {
