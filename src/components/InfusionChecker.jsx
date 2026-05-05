@@ -5,14 +5,13 @@ import TerminalLog from './TerminalLog.jsx'
 
 const CONTRACT_ADDRESS = '0xfaafdc07907ff5120a76b34b731b278c38d6043c'
 const ETHERSCAN_NFT_HOLDINGS_URL = import.meta.env.DEV
-  ? '/etherscan-nft-holdings'
-  : '/api/etherscan-nft-holdings'
+  ? '/__enj-wallet-tokens'
+  : '/api/enj-wallet-tokens'
 const ENJ_TOKEN_DETAILS_URL = import.meta.env.DEV
   ? '/__enj-token-details'
   : '/api/enj-token-details'
 const TYPE_DATA_SELECTOR = '4341963e'
 const WEI_PER_ENJ = 10n ** 18n
-const ETHERSCAN_NFT_PAGE_SIZE = 12
 const BULK_RPC_CONCURRENCY = 4
 const BULK_PAGE_SIZE_OPTIONS = [10, 25, 50]
 
@@ -110,16 +109,6 @@ function formatTokenId(tokenId) {
   return tokenId.length > 12 ? `${tokenId.slice(0, 5)}...${tokenId.slice(-5)}` : tokenId
 }
 
-function cleanText(value) {
-  return value?.replace(/\s+/g, ' ').trim() || ''
-}
-
-function absoluteEtherscanUrl(value) {
-  if (!value) return ''
-  if (/^https?:\/\//i.test(value)) return value
-  return `https://etherscan.io${value.startsWith('/') ? value : `/${value}`}`
-}
-
 async function callRpc([name, url], data) {
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), 12000)
@@ -167,119 +156,19 @@ async function readInfusion(tokenId, onEndpoint) {
   throw new Error(`All RPC endpoints failed. ${errors.join(' | ')}`)
 }
 
-function buildEtherscanPayload(address, start, draw) {
-  return {
-    dataTableModel: {
-      draw,
-      columns: [
-        {
-          data: 'NftColumn',
-          name: '',
-          searchable: true,
-          orderable: false,
-          search: { value: '', regex: false },
-        },
-      ],
-      order: [],
-      start,
-      length: ETHERSCAN_NFT_PAGE_SIZE,
-      search: { value: '', regex: false },
-    },
-    model: {
-      address,
-      filteredContract: CONTRACT_ADDRESS,
-      hideZeroAssets: false,
-      showEthPrice: false,
-    },
-  }
-}
-
-async function fetchNftHoldingPage(address, start, draw) {
-  const response = await fetch(ETHERSCAN_NFT_HOLDINGS_URL, {
-    method: 'POST',
-    headers: {
-      accept: 'application/json, text/javascript, */*; q=0.01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify(buildEtherscanPayload(address, start, draw)),
-  })
-
-  if (!response.ok) throw new Error(`Etherscan returned HTTP ${response.status}.`)
-
-  const body = await response.json()
-  if (body?.d?.error) throw new Error(body.d.error)
-  if (!body?.d?.data) throw new Error('Etherscan returned an unexpected response.')
-
-  return body.d
-}
-
-function parseTokensFromNftColumn(html, owner) {
-  const document = new DOMParser().parseFromString(html, 'text/html')
-  const tokens = []
-
-  document
-    .querySelectorAll(`a[href^="/nft/${CONTRACT_ADDRESS}/" i]`)
-    .forEach(link => {
-      const parts = link.getAttribute('href').split('/')
-      const tokenId = parts[parts.length - 1]?.trim()
-
-      if (!/^\d+$/.test(tokenId)) return
-
-      const container = link.closest('.d-flex, .media, .row, div') || document.body
-      const image = link.querySelector('img[src]') || container.querySelector('img[src]')
-      const quantityBadge = container.querySelector('[title*="Token Quantity" i], .badge')
-      const rawName = cleanText(link.getAttribute('title')) || cleanText(link.textContent)
-      const name = rawName && rawName !== tokenId ? rawName : `Token ${formatTokenId(tokenId)}`
-
-      tokens.push({
-        tokenId,
-        metadata: {
-          tokenId,
-          name,
-          previewImage: absoluteEtherscanUrl(image?.getAttribute('src')),
-          owner,
-          contractAddress: CONTRACT_ADDRESS,
-          creator: '',
-          tokenStandard: 'ERC-1155',
-          quantity: cleanText(quantityBadge?.textContent),
-          properties: [],
-          description: '',
-          source: 'wallet-holdings',
-        },
-      })
-    })
-
-  return tokens
-}
-
 async function fetchWalletTokens(address, onStatus) {
-  const tokensById = new Map()
-  let start = 0
-  let draw = 1
-  let recordsTotal = null
+  onStatus('Fetching wallet ERC-1155 transfer history.')
+  const url = new URL(ETHERSCAN_NFT_HOLDINGS_URL, window.location.origin)
+  url.searchParams.set('address', address)
 
-  while (recordsTotal === null || start < recordsTotal) {
-    const rangeEnd = recordsTotal === null
-      ? start + ETHERSCAN_NFT_PAGE_SIZE
-      : Math.min(start + ETHERSCAN_NFT_PAGE_SIZE, recordsTotal)
-    onStatus(`Fetching wallet NFTs ${start + 1}-${rangeEnd}.`)
+  const response = await fetch(url)
+  const body = await response.json().catch(() => ({}))
 
-    const page = await fetchNftHoldingPage(address, start, draw)
-    recordsTotal = Number(page.recordsFiltered ?? page.recordsTotal ?? 0)
+  if (!response.ok) throw new Error(body.error || `Etherscan returned HTTP ${response.status}.`)
+  if (!Array.isArray(body.tokens)) throw new Error('Etherscan returned an unexpected response.')
 
-    page.data.forEach(row => {
-      parseTokensFromNftColumn(row.NftColumn || '', address).forEach(token => {
-        if (!tokensById.has(token.tokenId)) tokensById.set(token.tokenId, token)
-      })
-    })
-
-    if (!page.data.length || recordsTotal <= start + ETHERSCAN_NFT_PAGE_SIZE) break
-
-    start += ETHERSCAN_NFT_PAGE_SIZE
-    draw += 1
-  }
-
-  return [...tokensById.values()]
+  onStatus(`Found ${body.tokens.length} current token IDs.`)
+  return body.tokens
 }
 
 function mergeTokenMetadata(base, detail) {
