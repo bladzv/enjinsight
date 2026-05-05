@@ -8,6 +8,7 @@ Tools:
   3. Pool Reward Cadence       — missed-era detection for nomination pools
   4. Historical Balance Viewer — archive-node balance history + CSV export
   5. Reward History Viewer     — per-era staking reward computation
+  6. ENJ Infusion Checker      — ERC-20 ENJ infusion reads for Ethereum ERC-1155 tokens
 
 Usage:
   python enjinsight_cli.py
@@ -18,7 +19,8 @@ Requirements:
 Optional (encrypted export):
   pip install cryptography
 
-Set SUBSCAN_API_KEY in .env or as an environment variable.
+Set SUBSCAN_API_KEY, ETHERSCAN_API_KEY, and optional ALCHEMY_ETH_RPC_URL in .env or
+as environment variables.
 """
 
 # ── Standard library ──────────────────────────────────────────────────────────
@@ -149,6 +151,9 @@ load_dotenv(Path(__file__).parent / ".env")
 SUBSCAN_BASE = "https://enjin.api.subscan.io"
 EXPLORER_BASE = "https://enjin.subscan.io"
 GITHUB_URL = "https://github.com/bladzv/enjinsight"
+ETHERSCAN_API_URL = "https://api.etherscan.io/v2/api"
+ETHERSCAN_CHAIN_ID = "1"
+ETHERSCAN_NFT_BASE = "https://etherscan.io/nft"
 
 ENDPOINTS = {
     "validators":      "/api/scan/staking/validators",
@@ -191,6 +196,17 @@ SYS_ACCT_PREFIX = bytes.fromhex(
 )
 STAKING_ACTIVE_ERA_KEY = "0x5f3e4907f716ac89b6347d15ececedca487df464e44a534ba6b0cbb32407b587"
 TIMESTAMP_NOW_KEY      = "0xf0c365c3cf59d671eb72da0e7a4113c49f1f0515f462cdcf84e0f1d6045dfcbb"
+
+ENJIN_ERC1155_CONTRACT = "0xfaafdc07907ff5120a76b34b731b278c38d6043c"
+TYPE_DATA_SELECTOR = "4341963e"
+ETH_PUBLIC_RPC_ENDPOINTS = [
+    ("PublicNode", "https://ethereum-rpc.publicnode.com"),
+    ("LlamaRPC", "https://eth.llamarpc.com"),
+    ("Ankr", "https://rpc.ankr.com/eth"),
+]
+ETHERSCAN_PAGE_SIZE = 1000
+ETHERSCAN_MAX_PAGES = 25
+ETHERSCAN_DELAY_SEC = 0.35
 
 # ════════════════════════════════════════════════════════════════════════════════
 # DISPLAY HELPERS
@@ -258,6 +274,12 @@ def truncate_addr(addr: str, start: int = 8, end: int = 6) -> str:
         return clean
     return f"{clean[:start]}…{clean[-end:]}"
 
+def truncate_token_id(token_id: str, start: int = 8, end: int = 6) -> str:
+    clean = str(token_id or "").strip()
+    if len(clean) <= start + end + 3:
+        return clean
+    return f"{clean[:start]}…{clean[-end:]}"
+
 def parse_commission(raw) -> float:
     try:
         n = int(str(raw))
@@ -276,6 +298,59 @@ def now_ts() -> str:
 
 def ms_to_utc(ms: int) -> str:
     return datetime.fromtimestamp(ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+def validate_eth_address(addr: str) -> str:
+    clean = (addr or "").strip()
+    if not re.fullmatch(r"0x[a-fA-F0-9]{40}", clean):
+        raise ValueError("Ethereum address must be 0x-prefixed and 40 hex bytes.")
+    return clean
+
+def normalize_infusion_token_id(value: str) -> str:
+    clean = (value or "").strip()
+    if not clean:
+        return ""
+    try:
+        parsed = urlparse(clean)
+        parts = [p for p in parsed.path.split("/") if p]
+        if (
+            parsed.hostname
+            and parsed.hostname.lower().replace("www.", "") == "etherscan.io"
+            and len(parts) >= 3
+            and parts[0].lower() == "nft"
+            and parts[1].lower() == ENJIN_ERC1155_CONTRACT.lower()
+        ):
+            return parts[-1].replace("_", "")
+    except Exception:
+        pass
+    return clean.replace("_", "")
+
+def validate_infusion_token_id(token_id: str) -> int:
+    clean = normalize_infusion_token_id(token_id)
+    if not clean:
+        raise ValueError("Token ID is required.")
+    if not re.fullmatch(r"\d+", clean):
+        raise ValueError("Token ID must contain digits only, or be a matching Etherscan NFT URL.")
+    parsed = int(clean)
+    if parsed > (1 << 256) - 1:
+        raise ValueError("Token ID is larger than uint256.")
+    return parsed
+
+def encode_uint256(value: int) -> str:
+    return f"{value:x}".rjust(64, "0")
+
+def build_type_data_call(token_id: int) -> str:
+    return "0x" + TYPE_DATA_SELECTOR + encode_uint256(token_id)
+
+def parse_uint256_words(hex_data: str) -> List[int]:
+    if not hex_data or hex_data == "0x":
+        raise ValueError("The contract returned no data.")
+    payload = hex_data[2:] if hex_data.startswith("0x") else hex_data
+    if len(payload) < 64 * 4:
+        raise ValueError("The contract returned an unexpected response.")
+    return [int(payload[i * 64:(i + 1) * 64], 16) for i in range(4)]
+
+def etherscan_token_url(token_id: str) -> str:
+    return f"{ETHERSCAN_NFT_BASE}/{ENJIN_ERC1155_CONTRACT}/{token_id}"
 
 # ════════════════════════════════════════════════════════════════════════════════
 # CRYPTO / SUBSTRATE UTILITIES
@@ -813,6 +888,215 @@ class SubscanClient:
                 break
             page += 1
         return all_events
+
+
+class EthereumInfusionClient:
+    """Ethereum/Etherscan client for ERC-20 ENJ infusion reads."""
+
+    def __init__(self, etherscan_api_key: str = "", alchemy_rpc_url: str = ""):
+        self.etherscan_api_key = (etherscan_api_key or "").strip()
+        self.alchemy_rpc_url = (alchemy_rpc_url or "").strip()
+        self._session = requests.Session()
+        self._session.headers.update({"Accept": "application/json"})
+        self._last_etherscan_req = 0.0
+
+    def _take_etherscan_token(self) -> None:
+        elapsed = time.time() - self._last_etherscan_req
+        if elapsed < ETHERSCAN_DELAY_SEC:
+            time.sleep(ETHERSCAN_DELAY_SEC - elapsed)
+        self._last_etherscan_req = time.time()
+
+    def etherscan_api(self, params: Dict[str, str], allow_no_transactions: bool = False) -> dict:
+        if not self.etherscan_api_key:
+            raise RuntimeError("ETHERSCAN_API_KEY is not configured.")
+
+        self._take_etherscan_token()
+        merged = {"chainid": ETHERSCAN_CHAIN_ID, **params, "apikey": self.etherscan_api_key}
+        try:
+            resp = self._session.get(ETHERSCAN_API_URL, params=merged, timeout=REQUEST_TIMEOUT)
+        except requests.exceptions.RequestException as e:
+            raise RuntimeError(f"Etherscan request failed: {e}")
+
+        if not resp.ok:
+            raise RuntimeError(f"Etherscan API returned HTTP {resp.status_code}.")
+
+        try:
+            body = resp.json()
+        except Exception:
+            raise RuntimeError("Etherscan returned an invalid JSON response.")
+
+        if (
+            body.get("status") == "0"
+            and allow_no_transactions
+            and re.search(r"no transactions found", str(body.get("result") or body.get("message") or ""), re.I)
+        ):
+            return {**body, "result": []}
+
+        if body.get("status") == "0":
+            raise RuntimeError(str(body.get("result") or body.get("message") or "Etherscan API returned an error."))
+        if body.get("error"):
+            err = body["error"]
+            raise RuntimeError(str(err.get("message") if isinstance(err, dict) else err))
+        return body
+
+    def _rpc_call(self, label: str, url: str, data: str) -> Tuple[str, str]:
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "eth_call",
+            "params": [{"to": ENJIN_ERC1155_CONTRACT, "data": data}, "latest"],
+        }
+        try:
+            resp = self._session.post(
+                url,
+                headers={"Content-Type": "application/json", "Accept": "application/json"},
+                data=json.dumps(payload),
+                timeout=12,
+            )
+        except requests.exceptions.RequestException as e:
+            raise RuntimeError(str(e))
+
+        try:
+            body = resp.json()
+        except Exception:
+            body = {}
+
+        if not resp.ok:
+            raise RuntimeError(str(body.get("error") or f"HTTP {resp.status_code}"))
+        if body.get("error"):
+            err = body["error"]
+            raise RuntimeError(str(err.get("message") if isinstance(err, dict) else err))
+
+        result = body.get("result") or ""
+        if not result:
+            raise RuntimeError("RPC returned an empty result.")
+        return label, result
+
+    def _etherscan_eth_call(self, data: str) -> Tuple[str, str]:
+        body = self.etherscan_api({
+            "module": "proxy",
+            "action": "eth_call",
+            "to": ENJIN_ERC1155_CONTRACT,
+            "data": data,
+            "tag": "latest",
+        })
+        result = body.get("result") or ""
+        if not result:
+            raise RuntimeError("Etherscan returned an empty eth_call result.")
+        return "Etherscan", result
+
+    def read_infusion(self, token_id: int) -> Tuple[int, str]:
+        data = build_type_data_call(token_id)
+        errors: List[str] = []
+
+        if self.alchemy_rpc_url:
+            try:
+                parsed = urlparse(self.alchemy_rpc_url)
+                if parsed.scheme != "https":
+                    raise RuntimeError("ALCHEMY_ETH_RPC_URL must use https.")
+                log_line("INFO", "Querying Alchemy")
+                provider, result = self._rpc_call("Alchemy", self.alchemy_rpc_url, data)
+                words = parse_uint256_words(result)
+                return words[3], provider
+            except Exception as e:
+                errors.append(f"Alchemy: {e}")
+                log_line("WARN", f"Alchemy: {e}")
+
+        if self.etherscan_api_key:
+            try:
+                log_line("INFO", "Querying Etherscan")
+                provider, result = self._etherscan_eth_call(data)
+                words = parse_uint256_words(result)
+                return words[3], provider
+            except Exception as e:
+                errors.append(f"Etherscan: {e}")
+                log_line("WARN", f"Etherscan: {e}")
+
+        for label, url in ETH_PUBLIC_RPC_ENDPOINTS:
+            try:
+                log_line("INFO", f"Querying {label}")
+                provider, result = self._rpc_call(label, url, data)
+                words = parse_uint256_words(result)
+                return words[3], provider
+            except Exception as e:
+                errors.append(f"{label}: {e}")
+                log_line("WARN", f"{label}: {e}")
+
+        raise RuntimeError(f"All RPC endpoints failed. {' | '.join(errors)}")
+
+    def fetch_current_wallet_tokens(self, owner: str) -> List[dict]:
+        validate_eth_address(owner)
+        balances: Dict[str, dict] = {}
+        last_token_name = ""
+        last_token_symbol = ""
+
+        for page in range(1, ETHERSCAN_MAX_PAGES + 1):
+            body = self.etherscan_api(
+                {
+                    "module": "account",
+                    "action": "token1155tx",
+                    "contractaddress": ENJIN_ERC1155_CONTRACT,
+                    "address": owner,
+                    "page": str(page),
+                    "offset": str(ETHERSCAN_PAGE_SIZE),
+                    "startblock": "0",
+                    "endblock": "9999999999",
+                    "sort": "asc",
+                },
+                allow_no_transactions=True,
+            )
+            transfers = body.get("result") if isinstance(body.get("result"), list) else []
+            log_line("INFO", f"Etherscan transfer page {page}: {len(transfers)} row(s)")
+            if not transfers:
+                break
+
+            for transfer in transfers:
+                token_id = str(transfer.get("tokenID") or transfer.get("tokenId") or "").strip()
+                if not re.fullmatch(r"\d+", token_id):
+                    continue
+
+                last_token_name = transfer.get("tokenName") or last_token_name
+                last_token_symbol = transfer.get("tokenSymbol") or last_token_symbol
+                current = balances.get(token_id) or {
+                    "quantity": 0,
+                    "tokenName": transfer.get("tokenName") or "",
+                    "tokenSymbol": transfer.get("tokenSymbol") or "",
+                }
+                value = safe_int(transfer.get("tokenValue") or 1, 1)
+                sender = str(transfer.get("from") or "").lower()
+                recipient = str(transfer.get("to") or "").lower()
+                normalized_owner = owner.lower()
+
+                if sender == normalized_owner:
+                    current["quantity"] -= value
+                if recipient == normalized_owner:
+                    current["quantity"] += value
+                current["tokenName"] = transfer.get("tokenName") or current["tokenName"]
+                current["tokenSymbol"] = transfer.get("tokenSymbol") or current["tokenSymbol"]
+                balances[token_id] = current
+
+            if len(transfers) < ETHERSCAN_PAGE_SIZE:
+                break
+            if page == ETHERSCAN_MAX_PAGES:
+                raise RuntimeError(
+                    f"Wallet transfer history exceeds {ETHERSCAN_MAX_PAGES * ETHERSCAN_PAGE_SIZE} rows; "
+                    "unable to compute a complete current token list."
+                )
+
+        tokens = []
+        for token_id, balance in balances.items():
+            if balance["quantity"] <= 0:
+                continue
+            label = balance.get("tokenName") or balance.get("tokenSymbol") or last_token_name or last_token_symbol
+            tokens.append({
+                "tokenId": token_id,
+                "name": f"{label} #{token_id}" if label else f"Token {truncate_token_id(token_id, 5, 5)}",
+                "quantity": balance["quantity"],
+                "owner": owner,
+                "contractAddress": ENJIN_ERC1155_CONTRACT,
+            })
+        tokens.sort(key=lambda item: int(item["tokenId"]))
+        return tokens
 
 # ════════════════════════════════════════════════════════════════════════════════
 # ASYNC WEBSOCKET RPC CLIENT
@@ -2534,6 +2818,227 @@ def tool_reward_history(subscan: SubscanClient, era_csv: Dict[int, dict]) -> Non
         export_reward_records(results, address, start_era, end_era, fmt)
 
 # ════════════════════════════════════════════════════════════════════════════════
+# TOOL 6: ENJ INFUSION CHECKER
+# ════════════════════════════════════════════════════════════════════════════════
+
+def export_infusion_records(records: List[dict], owner: str, fmt: str) -> None:
+    base = f"infusions_{owner[:10] if owner else 'token'}"
+    fname = ask("Filename", f"{base}.{fmt}")
+    now = datetime.now(timezone.utc).isoformat()
+    HEADERS = ["token_id", "token_name", "quantity", "enj_infusion", "raw_enj_infusion",
+               "provider", "status", "error", "etherscan_url"]
+
+    def to_row(r: dict) -> dict:
+        return {
+            "token_id": r.get("tokenId", ""),
+            "token_name": r.get("name", ""),
+            "quantity": r.get("quantity", ""),
+            "enj_infusion": r.get("amount", ""),
+            "raw_enj_infusion": r.get("raw", ""),
+            "provider": r.get("provider", ""),
+            "status": "failed" if r.get("error") else "ok",
+            "error": r.get("errorMessage", ""),
+            "etherscan_url": etherscan_token_url(str(r.get("tokenId", ""))) if r.get("tokenId") else "",
+        }
+
+    try:
+        if fmt == "csv":
+            with open(fname, "w", newline="", encoding="utf-8") as f:
+                w = csv.DictWriter(f, fieldnames=HEADERS)
+                w.writeheader()
+                for r in records:
+                    w.writerow(to_row(r))
+        elif fmt == "json":
+            with open(fname, "w", encoding="utf-8") as f:
+                json.dump({
+                    "_meta": {
+                        "owner": owner,
+                        "contractAddress": ENJIN_ERC1155_CONTRACT,
+                        "exportedAt": now,
+                    },
+                    "records": [to_row(r) for r in records],
+                }, f, indent=2)
+        elif fmt == "xml":
+            ex = _xml_escape
+            rows = []
+            for r in records:
+                row = to_row(r)
+                rows.append("  <token>\n" + "\n".join(
+                    f"    <{k}>{ex(str(row[k]))}</{k}>" for k in HEADERS
+                ) + "\n  </token>")
+            meta = (
+                "  <meta>\n"
+                f"    <owner>{ex(owner)}</owner>\n"
+                f"    <contractAddress>{ex(ENJIN_ERC1155_CONTRACT)}</contractAddress>\n"
+                f"    <exportedAt>{ex(now)}</exportedAt>\n"
+                "  </meta>"
+            )
+            with open(fname, "w", encoding="utf-8") as f:
+                f.write('<?xml version="1.0" encoding="UTF-8"?>\n<enjinInfusions>\n'
+                        + meta + "\n" + "\n".join(rows) + "\n</enjinInfusions>")
+        log_line("OK", f"Exported {len(records)} infusion record(s) to {fname}")
+    except Exception as e:
+        log_line("ERR", f"Export failed: {e}")
+
+
+def _display_infusion_records(records: List[dict], title: str) -> None:
+    if HAS_RICH:
+        t = Table(title=title, border_style="cyan", show_lines=True)
+        t.add_column("Token ID", style="bold cyan", max_width=18)
+        t.add_column("Token Name", max_width=32)
+        t.add_column("Qty", justify="right")
+        t.add_column("ENJ Infusion", justify="right")
+        t.add_column("Raw", justify="right", max_width=20)
+        t.add_column("Provider", justify="center")
+        t.add_column("Status", justify="center")
+        for r in records:
+            status = "[red]failed[/red]" if r.get("error") else "[green]ok[/green]"
+            t.add_row(
+                truncate_token_id(str(r.get("tokenId", ""))),
+                str(r.get("name") or "—"),
+                str(r.get("quantity") or "—"),
+                str(r.get("amount") or "—"),
+                truncate_token_id(str(r.get("raw") or "—"), 10, 8),
+                str(r.get("provider") or "—"),
+                status,
+            )
+        console.print(t)
+    else:
+        print(f"\n{title}")
+        print(f"{'Token ID':<20} {'Name':<30} {'Qty':>6} {'Infusion':>22} {'Provider':<12} {'Status'}")
+        for r in records:
+            print(f"{truncate_token_id(str(r.get('tokenId', ''))):<20} "
+                  f"{str(r.get('name') or '—')[:30]:<30} "
+                  f"{str(r.get('quantity') or '—'):>6} "
+                  f"{str(r.get('amount') or '—'):>22} "
+                  f"{str(r.get('provider') or '—'):<12} "
+                  f"{'failed' if r.get('error') else 'ok'}")
+
+
+def tool_infusion_checker() -> None:
+    cprint("\n[bold cyan]── ENJ Infusion Checker ──[/bold cyan]")
+    cprint("Ethereum ERC-1155 assets")
+    cprint("ERC-20 ENJ is different from native ENJ on the Enjin Blockchain.")
+    cprint(f"Contract: {ENJIN_ERC1155_CONTRACT}")
+    cprint("RPC: Alchemy/Etherscan, then public Ethereum RPC fallbacks")
+    cprint("[dim]Wallet token lists can be incomplete. If a token is missing, use Token ID scan with its Etherscan NFT URL or token ID.[/dim]")
+
+    etherscan_key = os.environ.get("ETHERSCAN_API_KEY", "").strip()
+    alchemy_rpc_url = os.environ.get("ALCHEMY_ETH_RPC_URL", "").strip()
+    if not etherscan_key:
+        cprint("[yellow]Warning: ETHERSCAN_API_KEY is not set. Wallet scans and Etherscan fallback will be unavailable.[/yellow]")
+    if alchemy_rpc_url:
+        cprint("[dim]Alchemy RPC configured.[/dim]")
+
+    client = EthereumInfusionClient(etherscan_key, alchemy_rpc_url)
+
+    cprint("\n[bold]Scan mode:[/bold]")
+    cprint("  1. Token ID / Etherscan NFT URL")
+    cprint("  2. Wallet bulk scan")
+    mode = ask_int("Mode", default=1, min_val=1, max_val=2)
+
+    if mode == 1:
+        raw_input = ask("Token ID or Etherscan NFT URL")
+        try:
+            token_id = validate_infusion_token_id(raw_input)
+        except ValueError as e:
+            cprint(f"[red]{e}[/red]"); return
+
+        log_line("INFO", f"Token scan: tokenId={token_id}")
+        log_line("INFO", "Method: typeData(uint256)")
+        try:
+            raw, provider = client.read_infusion(token_id)
+        except Exception as e:
+            log_line("ERR", f"Token scan failed: {e}")
+            return
+
+        amount = fmt_enj(raw, 8)
+        record = {
+            "tokenId": str(token_id),
+            "name": f"Token {truncate_token_id(str(token_id), 5, 5)}",
+            "quantity": "",
+            "amount": amount,
+            "raw": str(raw),
+            "provider": provider,
+        }
+        log_line("OK", f"Infusion: {amount} (raw={raw}) via {provider}")
+        _display_infusion_records([record], "Token Infusion")
+        cprint(f"Etherscan: {etherscan_token_url(str(token_id))}")
+        return
+
+    if not etherscan_key:
+        cprint("[red]ETHERSCAN_API_KEY is required for wallet bulk scans.[/red]")
+        return
+
+    wallet = ask("Ethereum wallet address")
+    try:
+        wallet = validate_eth_address(wallet)
+    except ValueError as e:
+        cprint(f"[red]{e}[/red]"); return
+
+    log_line("INFO", f"Wallet scan: {wallet}")
+    log_line("INFO", "Fetching wallet ERC-1155 transfer history from Etherscan.")
+    try:
+        tokens = client.fetch_current_wallet_tokens(wallet)
+    except Exception as e:
+        log_line("ERR", f"Wallet token discovery failed: {e}")
+        return
+
+    if not tokens:
+        log_line("WARN", "No matching current token IDs found.")
+        return
+
+    log_line("OK", f"Found {len(tokens)} current token ID(s).")
+    start_stop_listener()
+    records: List[dict] = []
+    total_raw = 0
+    failed = 0
+
+    for idx, token in enumerate(tokens, start=1):
+        if _stop_event.is_set():
+            log_line("WARN", "Wallet scan stopped early by user.")
+            break
+
+        token_id = token["tokenId"]
+        log_line("INFO", f"[{idx}/{len(tokens)}] Token {truncate_token_id(token_id)}: reading infusion.")
+        try:
+            raw, provider = client.read_infusion(int(token_id))
+            total_raw += raw
+            records.append({
+                **token,
+                "amount": fmt_enj(raw, 8),
+                "raw": str(raw),
+                "provider": provider,
+                "error": False,
+                "errorMessage": "",
+            })
+            log_line("OK", f"Token {truncate_token_id(token_id)}: {fmt_enj(raw, 8)} via {provider}")
+            log_line("INFO", f"Running total: {fmt_enj(total_raw, 8)} (raw={total_raw})")
+        except Exception as e:
+            failed += 1
+            records.append({
+                **token,
+                "amount": "Failed",
+                "raw": "",
+                "provider": "",
+                "error": True,
+                "errorMessage": str(e),
+            })
+            log_line("ERR", f"Token {truncate_token_id(token_id)} failed: {e}")
+
+    _stop_event.set()
+
+    cprint(f"\n[bold green]── Wallet Infusion Total: {fmt_enj(total_raw, 8)} ──[/bold green]")
+    cprint(f"Raw total: {total_raw}")
+    if failed:
+        cprint(f"[yellow]{failed} token read{'s' if failed != 1 else ''} failed. See logs above for provider details.[/yellow]")
+    _display_infusion_records(records, "Wallet Token Infusions")
+
+    if records and confirm("\nExport infusion results?", default=False):
+        fmt = ask_export_format()
+        export_infusion_records(records, wallet, fmt)
+
+# ════════════════════════════════════════════════════════════════════════════════
 # STAKING CADENCE (unified entry point)
 # ════════════════════════════════════════════════════════════════════════════════
 
@@ -2560,12 +3065,14 @@ def show_about() -> None:
   2. Staking Reward Cadence    Missed-era detection for validators and nomination pools
   3. Historical Balance Viewer Archive-node balance history with multi-format export
   4. Reward History Viewer     Per-era staking reward computation
+  5. ENJ Infusion Checker      ERC-20 ENJ infusion lookup for Ethereum ERC-1155 tokens
 
 [bold cyan]Network:[/bold cyan]
   Enjin Relaychain            wss://rpc.relay.blockchain.enjin.io
   Enjin Archive Node          wss://archive.relay.blockchain.enjin.io
   Enjin Matrixchain Archive   wss://archive.matrix.blockchain.enjin.io
   Canary Relaychain Archive   wss://archive.relay.canary.enjin.io
+  Ethereum Mainnet            Etherscan / optional Alchemy / public RPC fallbacks
   Subscan Explorer            {EXPLORER_BASE}
 
 [bold cyan]Links:[/bold cyan]
@@ -2582,9 +3089,10 @@ def show_about() -> None:
 
 [bold cyan]Security:[/bold cyan]
   - API key read from environment (never hard-coded)
-  - Subscan endpoint allowlist enforced
+  - Subscan and Etherscan API keys read from environment
   - WS endpoints validated (wss:// only for production)
   - All addresses validated via SS58 decode before use
+  - Ethereum wallet addresses and token IDs validated before use
   - No user input reaches eval or shell execution
 """
     if HAS_RICH:
@@ -2618,6 +3126,8 @@ def main() -> None:
     if not api_key:
         cprint("[yellow]Warning: SUBSCAN_API_KEY not set. Subscan tools will fail.[/yellow]")
         cprint("Set it in .env or as an environment variable.")
+    if not os.environ.get("ETHERSCAN_API_KEY", "").strip():
+        cprint("[yellow]Warning: ETHERSCAN_API_KEY not set. ENJ Infusion wallet scans and Etherscan fallback will be unavailable.[/yellow]")
 
     # Init clients
     subscan: Optional[SubscanClient] = None
@@ -2640,7 +3150,8 @@ def main() -> None:
         cprint("  2. Staking Reward Cadence")
         cprint("  3. Historical Balance Viewer")
         cprint("  4. Reward History Viewer")
-        cprint("  5. About / Info")
+        cprint("  5. ENJ Infusion Checker")
+        cprint("  6. About / Info")
         cprint("  0. Exit")
 
         choice = ask("Select tool", "0")
@@ -2658,6 +3169,8 @@ def main() -> None:
                 cprint("[red]SUBSCAN_API_KEY required for this tool.[/red]"); continue
             tool_reward_history(subscan, era_csv)
         elif choice == "5":
+            tool_infusion_checker()
+        elif choice == "6":
             show_about()
         elif choice == "0":
             cprint("\n[dim]Goodbye.[/dim]")

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
-import { AlertTriangle, Database, Shield, Sparkles, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Database, Eye, X } from 'lucide-react'
 
 const STORAGE_KEY = 'enjinsight_disclaimer_v1'
+const BRAND_LOGO_URL = '/android-chrome-192x192.png'
+const BRAND_NAME_URL = '/assets/brand/enjinsight_brand.png'
 
 export function DisclaimerContent({ compact = false } = {}) {
   return (
@@ -62,9 +64,7 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
       />
 
       <div
-        className={`relative z-10 w-full animate-fade-in overflow-hidden rounded-[2rem] bg-surface shadow-float ${
-          isFirstVisit ? 'max-w-xl' : 'max-w-3xl'
-        }`}
+        className="relative z-10 w-full max-w-2xl animate-fade-in overflow-hidden rounded-[2rem] bg-surface shadow-float"
         style={{ border: '1px solid rgba(70,71,82,0.14)' }}
       >
         <div
@@ -85,31 +85,32 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
 
         <div className="relative z-10 space-y-6 p-6 sm:p-8">
           <div className="rounded-[1.5rem] bg-card/80 p-5 shadow-inset-soft sm:p-6">
-            <div className="flex items-start gap-4">
-              <div
-                className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl ${
-                  isFirstVisit ? 'bg-warning/10 text-warning' : 'bg-primary/10 text-primary'
-                }`}
-              >
-                {isFirstVisit ? <AlertTriangle size={20} /> : <Sparkles size={20} />}
-              </div>
-              <div className="space-y-2">
+            <div className="space-y-2">
+              {!isFirstVisit && (
+                <div className="mb-4 flex items-center gap-3">
+                  <img src={BRAND_LOGO_URL} alt="EnjinSight logo" className="h-12 w-12 rounded-2xl" />
+                  <img src={BRAND_NAME_URL} alt="EnjinSight" className="h-9 w-auto max-w-[13rem]" />
+                </div>
+              )}
+              {isFirstVisit && (
                 <p className="section-label">
-                  {isFirstVisit ? 'Before You Continue' : 'About'}
+                  Before You Continue
                 </p>
+              )}
+              {isFirstVisit && (
                 <h2 className="font-headline text-3xl font-bold tracking-tight text-text">
-                  {isFirstVisit ? 'Read This First' : 'EnjinSight'}
+                  Read This First
                 </h2>
+              )}
+              <div className="space-y-2">
                 <p className="max-w-2xl text-sm leading-6 text-text-secondary">
-                  {isFirstVisit
-                    ? 'This app is designed for read-only blockchain research. Please review the disclaimer before using the tools.'
-                    : 'Read-only diagnostics for Enjin staking, era tracking, and historical balance or reward analysis.'}
+                  EnjinSight is a read-only research workspace. It never asks you to connect a wallet, but the data still deserves verification before you act on it.
                 </p>
               </div>
             </div>
           </div>
 
-          {isFirstVisit ? <DisclaimerContent /> : <AboutContent />}
+          <FirstVisitContent />
 
           <div className="flex justify-end">
             {isFirstVisit ? (
@@ -133,46 +134,40 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
   )
 }
 
-function AboutContent() {
+function FirstVisitContent() {
   return (
     <div className="space-y-4">
-      <div className="rounded-[1.5rem] bg-card/80 p-5 shadow-inset-soft">
-        <p className="section-label">Overview</p>
-        <h3 className="mt-2 font-headline text-2xl font-bold text-text">Built for quick Enjin chain research</h3>
-        <p className="mt-3 section-subtitle">
-          EnjinSight brings together live era tracking, staking cadence checks, historical balance snapshots, and reward-history estimates in one read-only workspace.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <span className="mini-chip">Read-only</span>
-          <span className="mini-chip">Archive RPC</span>
-          <span className="mini-chip">Staking + Balance</span>
-        </div>
-      </div>
+      <DisclaimerContent />
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="rounded-[1.5rem] bg-card px-5 py-5 shadow-ambient">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-success/10 text-success">
-            <Shield size={18} />
-          </div>
-          <p className="section-label mt-4">Usage</p>
-          <h4 className="mt-2 font-headline text-xl font-bold text-text">Read-only by design</h4>
-          <p className="mt-3 text-sm leading-6 text-text-secondary">
-            The app is meant for investigation and review. It does not require wallet connection or signing.
-          </p>
-        </div>
-        <div className="rounded-[1.5rem] bg-card px-5 py-5 shadow-ambient">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <Database size={18} />
-          </div>
-          <p className="section-label mt-4">Data</p>
-          <h4 className="mt-2 font-headline text-xl font-bold text-text">RPC-first workflow</h4>
-          <p className="mt-3 text-sm leading-6 text-text-secondary">
-            Results come from archive RPC endpoints, era references, and selective public explorer lookups where needed.
-          </p>
-        </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <FirstVisitCard
+          icon={Eye}
+          title="Read-only"
+          text="No wallet connection, no signing, and no transaction flow."
+        />
+        <FirstVisitCard
+          icon={Database}
+          title="Public data"
+          text="Values are assembled from public RPC nodes, indexers, and bundled era references."
+        />
+        <FirstVisitCard
+          icon={CheckCircle2}
+          title="Verify"
+          text="Use the output as a research aid and confirm important decisions independently."
+        />
       </div>
+    </div>
+  )
+}
 
-      <DisclaimerContent compact />
+function FirstVisitCard({ icon: Icon, title, text }) {
+  return (
+    <div className="rounded-[1.25rem] bg-card px-4 py-4 shadow-inset-soft">
+      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+        <Icon size={17} />
+      </div>
+      <h3 className="mt-3 font-headline text-lg font-bold text-text">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-text-secondary">{text}</p>
     </div>
   )
 }

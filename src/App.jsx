@@ -364,6 +364,8 @@ export default function App() {
           <SummarySection
             validators={validators}
             eraCount={lastEraCount}
+            latestEra={validatorLatestEra}
+            onRetry={vRetryValidator}
           />
         )}
 
