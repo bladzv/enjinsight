@@ -44,6 +44,7 @@ function consumeToken() {
 // MAX_CACHE_ENTRIES to prevent unbounded memory growth across long-lived instances.
 const CACHE_TTL_MS     = 5 * 60 * 1000   // 5 minutes
 const MAX_CACHE_ENTRIES = 200
+const ALCHEMY_ETH_CALL_PATH = '/api/eth-call'
 const ENJ_WALLET_TOKENS_PATH = '/api/enj-wallet-tokens'
 const ENJ_TOKEN_DETAILS_PATH = '/api/enj-token-details'
 const ENJIN_CRYPTOITEMS_CONTRACT = '0xfaafdc07907ff5120a76b34b731b278c38d6043c'
@@ -333,6 +334,50 @@ async function proxyEnjWalletTokens(req, res) {
   }
 }
 
+async function proxyAlchemyEthCall(req, res) {
+  if (req.method !== 'POST') {
+    res.statusCode = 405
+    return res.end('Method not allowed.')
+  }
+
+  const rpcUrl = process.env.ALCHEMY_ETH_RPC_URL || ''
+  if (!rpcUrl) {
+    res.statusCode = 503
+    return res.end(JSON.stringify({ error: 'ALCHEMY_ETH_RPC_URL is not configured.' }))
+  }
+
+  try {
+    const targetUrl = new URL(rpcUrl)
+    if (targetUrl.protocol !== 'https:') {
+      res.statusCode = 500
+      return res.end(JSON.stringify({ error: 'ALCHEMY_ETH_RPC_URL must use https.' }))
+    }
+
+    const rawBody = await readRawBody(req)
+    const upstreamRes = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: rawBody,
+    })
+    const text = await upstreamRes.text()
+
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '')
+    res.setHeader('Vary', 'Origin')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Content-Type', upstreamRes.headers.get('content-type') || 'application/json; charset=utf-8')
+    res.statusCode = upstreamRes.status
+    return res.end(text)
+  } catch (error) {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.statusCode = 502
+    return res.end(JSON.stringify({ error: error.message }))
+  }
+}
+
 async function etherscanEthCall(data) {
   const body = await fetchEtherscanApi({
     module: 'proxy',
@@ -489,6 +534,9 @@ export default async function handler(req, res) {
     }
 
     const requestPath = (req.url || '').split('?')[0]
+    if (requestPath === ALCHEMY_ETH_CALL_PATH) {
+      return proxyAlchemyEthCall(req, res)
+    }
     if (requestPath === ENJ_WALLET_TOKENS_PATH) {
       return proxyEnjWalletTokens(req, res)
     }
