@@ -12,6 +12,8 @@ const NAV_ITEMS = [
 
 const GITHUB_URL = 'https://github.com/bladzv/enjinsight'
 const README_URL = 'https://github.com/bladzv/enjinsight#readme'
+const BRAND_LOGO_URL = '/android-chrome-192x192.png'
+const BRAND_NAME_URL = '/assets/brand/enjinsight_brand.png'
 
 export default function AppHeader({ status, view, onBack, onNavigate, onAbout }) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -38,14 +40,12 @@ export default function AppHeader({ status, view, onBack, onNavigate, onAbout })
             aria-label="Go to home"
           >
             <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-card shadow-card ring-1 ring-white/5 transition-transform duration-200 group-hover:-translate-y-0.5">
-              <img src="/enjin-logo.png" alt="Enjin logo" className="h-5 w-5" />
+              <img src={BRAND_LOGO_URL} alt="EnjinSight logo" className="h-7 w-7" />
               {isLoading && (
                 <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-cyan shadow-cyan-glow" />
               )}
             </div>
-            <p className="font-brand text-xl font-bold tracking-tight text-primary sm:text-2xl">
-              EnjinSight
-            </p>
+            <img src={BRAND_NAME_URL} alt="EnjinSight" className="h-7 w-auto max-w-[10rem] sm:h-8 sm:max-w-[12rem]" />
           </button>
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">

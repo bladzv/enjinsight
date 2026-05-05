@@ -50,7 +50,7 @@ const FEATURES = [
     icon: Gem,
     title: 'ENJ Infusion Checker',
     description:
-      'Check ERC-20 ENJ infusion on Ethereum ERC-1155 CryptoItems by token ID, or scan a wallet and total the infused amount across holdings.',
+      'Check ERC-20 ENJ infusion on Ethereum ERC-1155 tokens by token ID, or scan a wallet and total the infused amount across holdings.',
     label: 'Check Infusion',
     resource: 'Ethereum RPC + Etherscan',
     accent: 'text-primary',
