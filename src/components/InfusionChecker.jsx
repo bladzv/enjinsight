@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Database, ExternalLink, ImageIcon, Loader2, Search, Wallet } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Database, ExternalLink, ImageIcon, Loader2, RefreshCw, Search, Wallet } from 'lucide-react'
 import DetailModal from './DetailModal.jsx'
 import PhaseProgressCards from './PhaseProgressCards.jsx'
 import TerminalLog from './TerminalLog.jsx'
@@ -16,7 +16,7 @@ const ALCHEMY_ETH_CALL_URL = import.meta.env.DEV
   : '/api/eth-call'
 const TYPE_DATA_SELECTOR = '4341963e'
 const WEI_PER_ENJ = 10n ** 18n
-const BULK_RPC_CONCURRENCY = 4
+const BULK_RPC_CONCURRENCY = 3
 const BULK_PAGE_SIZE_OPTIONS = [10, 25, 50]
 const BULK_SORT_LABELS = {
   tokenId: 'Token ID',
@@ -296,6 +296,7 @@ export default function InfusionChecker() {
   const [bulkSort, setBulkSort] = useState({ key: '', direction: 'asc' })
   const [selectedTokenDetails, setSelectedTokenDetails] = useState(null)
   const [retryingTokenIds, setRetryingTokenIds] = useState(() => new Set())
+  const [isRetryingAllFailed, setIsRetryingAllFailed] = useState(false)
   const [bulkFailureMessage, setBulkFailureMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [logs, setLogs] = useState([])
@@ -378,6 +379,8 @@ export default function InfusionChecker() {
     const start = (safeBulkPage - 1) * bulkPageSize
     return filteredSortedRows.slice(start, start + bulkPageSize)
   }, [bulkPageSize, filteredSortedRows, safeBulkPage])
+  const failedBulkRows = useMemo(() => rows.filter(row => row.error), [rows])
+  const hasRetryingRows = retryingTokenIds.size > 0
 
   function appendRow(row) {
     setRows(current => [...current, row])
@@ -514,7 +517,7 @@ export default function InfusionChecker() {
   }
 
   async function retryBulkRow(row) {
-    if (!row?.tokenId || retryingTokenIds.has(row.tokenId)) return
+    if (!row?.tokenId || retryingTokenIds.has(row.tokenId)) return false
 
     setRetryingTokenIds(current => new Set(current).add(row.tokenId))
     setBulkFailureMessage('')
@@ -534,34 +537,83 @@ export default function InfusionChecker() {
       ])
       const metadata = mergeTokenMetadata(row.metadata || {}, detailResult.details)
 
-      const nextRows = rows.map(item => item.tokenId === row.tokenId
-        ? {
-          ...item,
-          amount: formatEnj(raw),
-          raw: raw.toString(),
-          error: false,
-          metadata,
-          metadataError: detailResult.detailsError || metadata.metadataError || null,
-          errorMessage: null,
-        }
-        : item)
-      const nextRawTotal = sumSuccessfulRaw(nextRows)
-      setRows(nextRows)
-      setBulkTotal(formatEnj(nextRawTotal))
-      setRawValue(`Total raw infusion: ${nextRawTotal.toString()}`)
+      setRows(current => {
+        const nextRows = current.map(item => item.tokenId === row.tokenId
+          ? {
+            ...item,
+            amount: formatEnj(raw),
+            raw: raw.toString(),
+            error: false,
+            metadata,
+            metadataError: detailResult.detailsError || metadata.metadataError || null,
+            errorMessage: null,
+          }
+          : item)
+        const nextRawTotal = sumSuccessfulRaw(nextRows)
+        setBulkTotal(formatEnj(nextRawTotal))
+        setRawValue(`Total raw infusion: ${nextRawTotal.toString()}`)
+        return nextRows
+      })
       log('ok', `Retry ${formatTokenId(row.tokenId)} succeeded: ${formatEnj(raw)}`)
+      return true
     } catch (error) {
       setRows(current => current.map(item => item.tokenId === row.tokenId
         ? { ...item, raw: 'See terminal log', error: true, errorMessage: error.message }
         : item))
       setBulkFailureMessage('Retry failed. See terminal log for provider details.')
       log('err', `Retry ${formatTokenId(row.tokenId)} failed: ${error.message}`)
+      return false
     } finally {
       setRetryingTokenIds(current => {
         const next = new Set(current)
         next.delete(row.tokenId)
         return next
       })
+    }
+  }
+
+  async function retryAllFailedBulkRows() {
+    if (isRetryingAllFailed) return
+
+    const failedRows = rows.filter(row => row.error && !retryingTokenIds.has(row.tokenId))
+    if (!failedRows.length) return
+
+    setIsRetryingAllFailed(true)
+    setBulkFailureMessage('')
+    setBulkStatus(`Retrying ${failedRows.length} failed token read${failedRows.length === 1 ? '' : 's'}.`)
+    log('info', `Retrying ${failedRows.length} failed token read${failedRows.length === 1 ? '' : 's'}.`)
+
+    try {
+      let succeeded = 0
+      let failed = 0
+
+      for (const row of failedRows) {
+        const ok = await retryBulkRow(row)
+        if (ok) succeeded += 1
+        else failed += 1
+      }
+
+      setRows(current => {
+        const remainingFailed = current.filter(row => row.error).length
+        const nextRawTotal = sumSuccessfulRaw(current)
+        setAmount(formatEnj(nextRawTotal))
+        setBulkTotal(formatEnj(nextRawTotal))
+        setRawValue(`Total raw infusion: ${nextRawTotal.toString()}`)
+        setBulkStatus(
+          remainingFailed === 0
+            ? `Retry complete. All ${current.length} token IDs are readable.`
+            : `Retry complete. ${remainingFailed} failed token read${remainingFailed === 1 ? '' : 's'} remain.`,
+        )
+        setBulkFailureMessage(
+          remainingFailed === 0
+            ? ''
+            : `${remainingFailed} token read${remainingFailed === 1 ? '' : 's'} still failed. See terminal log for provider details.`,
+        )
+        return current
+      })
+      log(failed === 0 ? 'ok' : 'warn', `Retry all finished: ${succeeded} succeeded, ${failed} failed.`)
+    } finally {
+      setIsRetryingAllFailed(false)
     }
   }
 
@@ -846,8 +898,19 @@ export default function InfusionChecker() {
         </div>
 
         {bulkFailureMessage && (
-          <div className="rounded-[1rem] border border-warning/20 bg-warning/5 px-4 py-3 text-sm font-semibold leading-6 text-warning">
-            {bulkFailureMessage}
+          <div className="flex flex-col gap-3 rounded-[1rem] border border-warning/20 bg-warning/5 px-4 py-3 text-sm font-semibold leading-6 text-warning sm:flex-row sm:items-center sm:justify-between">
+            <span>{bulkFailureMessage}</span>
+            {failedBulkRows.length > 0 && (
+              <button
+                type="button"
+                onClick={retryAllFailedBulkRows}
+                className="btn-secondary shrink-0 px-3 py-2 text-xs"
+                disabled={isLoading || hasRetryingRows || isRetryingAllFailed}
+              >
+                {hasRetryingRows || isRetryingAllFailed ? <Loader2 className="animate-spin" size={14} /> : <RefreshCw size={14} />}
+                Retry All Failed
+              </button>
+            )}
           </div>
         )}
 
@@ -920,7 +983,7 @@ export default function InfusionChecker() {
                           type="button"
                           onClick={() => retryBulkRow(row)}
                           className="btn-secondary px-3 py-1.5 text-[11px]"
-                          disabled={retryingTokenIds.has(row.tokenId)}
+                          disabled={retryingTokenIds.has(row.tokenId) || isRetryingAllFailed}
                         >
                           {retryingTokenIds.has(row.tokenId) && <Loader2 className="animate-spin" size={13} />}
                           Retry
