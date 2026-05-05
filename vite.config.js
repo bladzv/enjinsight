@@ -78,7 +78,7 @@ function createEtherscanDevDetailsPlugin(apiKey) {
     }
   }
 
-  async function etherscanApi(params) {
+  async function etherscanApi(params, options = {}) {
     if (!apiKey) throw new Error('ETHERSCAN_API_KEY is not configured.')
     await takeToken()
     const url = new URL(ETHERSCAN_API_URL)
@@ -88,9 +88,104 @@ function createEtherscanDevDetailsPlugin(apiKey) {
     const response = await fetch(url)
     if (!response.ok) throw new Error(`Etherscan API returned HTTP ${response.status}.`)
     const body = await response.json()
+    if (
+      body.status === '0' &&
+      options.allowNoTransactions &&
+      /no transactions found/i.test(String(body.result || body.message || ''))
+    ) {
+      return { ...body, result: [] }
+    }
     if (body.status === '0') throw new Error(body.result || body.message || 'Etherscan API returned an error.')
     if (body.error) throw new Error(body.error.message || 'Etherscan API returned an error.')
     return body
+  }
+
+  function toTokenMetadata(owner, tokenId, tokenName, tokenSymbol, quantity) {
+    const label = tokenName || tokenSymbol
+
+    return {
+      tokenId,
+      metadata: {
+        tokenId,
+        name: label ? `${label} #${tokenId}` : `Token ${tokenId.length > 12 ? `${tokenId.slice(0, 5)}...${tokenId.slice(-5)}` : tokenId}`,
+        previewImage: '',
+        owner,
+        contractAddress: ENJIN_CRYPTOITEMS_CONTRACT,
+        creator: '',
+        tokenStandard: 'ERC-1155',
+        quantity: quantity.toString(),
+        properties: [],
+        description: '',
+        source: 'etherscan-api-token1155tx',
+      },
+    }
+  }
+
+  async function fetchCurrentWalletTokens(owner) {
+    const balances = new Map()
+    const pageSize = 1000
+    const maxPages = 25
+    let lastTokenName = ''
+    let lastTokenSymbol = ''
+
+    for (let page = 1; page <= maxPages; page += 1) {
+      const body = await etherscanApi(
+        {
+          module: 'account',
+          action: 'token1155tx',
+          contractaddress: ENJIN_CRYPTOITEMS_CONTRACT,
+          address: owner,
+          page: String(page),
+          offset: String(pageSize),
+          startblock: '0',
+          endblock: '9999999999',
+          sort: 'asc',
+        },
+        { allowNoTransactions: true },
+      )
+      const transfers = Array.isArray(body.result) ? body.result : []
+      if (!transfers.length) break
+
+      transfers.forEach(transfer => {
+        const tokenId = String(transfer.tokenID ?? transfer.tokenId ?? '').trim()
+        if (!/^\d+$/.test(tokenId)) return
+
+        lastTokenName = transfer.tokenName || lastTokenName
+        lastTokenSymbol = transfer.tokenSymbol || lastTokenSymbol
+
+        const value = BigInt(String(transfer.tokenValue || '1'))
+        const current = balances.get(tokenId) || {
+          quantity: 0n,
+          tokenName: transfer.tokenName || '',
+          tokenSymbol: transfer.tokenSymbol || '',
+        }
+        const from = String(transfer.from || '').toLowerCase()
+        const to = String(transfer.to || '').toLowerCase()
+        const normalizedOwner = owner.toLowerCase()
+
+        if (from === normalizedOwner) current.quantity -= value
+        if (to === normalizedOwner) current.quantity += value
+        current.tokenName = transfer.tokenName || current.tokenName
+        current.tokenSymbol = transfer.tokenSymbol || current.tokenSymbol
+        balances.set(tokenId, current)
+      })
+
+      if (transfers.length < pageSize) break
+      if (page === maxPages) {
+        throw new Error(`Wallet transfer history exceeds ${maxPages * pageSize} rows; unable to compute a complete current token list.`)
+      }
+    }
+
+    return [...balances.entries()]
+      .filter(([, balance]) => balance.quantity > 0n)
+      .sort(([a], [b]) => BigInt(a) < BigInt(b) ? -1 : 1)
+      .map(([tokenId, balance]) => toTokenMetadata(
+        owner,
+        tokenId,
+        balance.tokenName || lastTokenName,
+        balance.tokenSymbol || lastTokenSymbol,
+        balance.quantity,
+      ))
   }
 
   async function ethCall(data) {
@@ -136,6 +231,27 @@ function createEtherscanDevDetailsPlugin(apiKey) {
   return {
     name: 'enj-token-details-dev',
     configureServer(server) {
+      server.middlewares.use('/__enj-wallet-tokens', async (req, res) => {
+        try {
+          const requestUrl = new URL(req.url || '', 'http://localhost')
+          const owner = requestUrl.searchParams.get('address') || ''
+          if (!/^0x[a-fA-F0-9]{40}$/.test(owner)) {
+            res.statusCode = 400
+            res.setHeader('Content-Type', 'application/json; charset=utf-8')
+            res.end(JSON.stringify({ error: 'Missing or invalid address.' }))
+            return
+          }
+
+          const tokens = await fetchCurrentWalletTokens(owner)
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify({ owner, contractAddress: ENJIN_CRYPTOITEMS_CONTRACT, tokens }))
+        } catch (error) {
+          res.statusCode = 502
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify({ error: error.message }))
+        }
+      })
+
       server.middlewares.use('/__enj-token-details', async (req, res) => {
         try {
           const requestUrl = new URL(req.url || '', 'http://localhost')
@@ -211,17 +327,6 @@ export default defineConfig(({ mode }) => {
     // and inject `x-api-key` from local `SUBSCAN_API_KEY` to avoid CORS issues.
     server: {
       proxy: {
-        '/etherscan-nft-holdings': {
-          target: 'https://etherscan.io',
-          changeOrigin: true,
-          secure: true,
-          headers: {
-            origin: 'https://etherscan.io',
-            referer: 'https://etherscan.io/address-nft-holding',
-            'x-requested-with': 'XMLHttpRequest',
-          },
-          rewrite: () => '/address-nft-holding.aspx/GetNftDetails',
-        },
         '/api': {
           target: 'https://enjin.api.subscan.io',
           changeOrigin: true,
