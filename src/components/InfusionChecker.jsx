@@ -10,12 +10,16 @@ const ETHERSCAN_NFT_HOLDINGS_URL = import.meta.env.DEV
 const ENJ_TOKEN_DETAILS_URL = import.meta.env.DEV
   ? '/__enj-token-details'
   : '/api/enj-token-details'
+const ALCHEMY_ETH_CALL_URL = import.meta.env.DEV
+  ? '/__eth-call'
+  : '/api/eth-call'
 const TYPE_DATA_SELECTOR = '4341963e'
 const WEI_PER_ENJ = 10n ** 18n
 const BULK_RPC_CONCURRENCY = 4
 const BULK_PAGE_SIZE_OPTIONS = [10, 25, 50]
 
 const RPC_ENDPOINTS = [
+  ['Alchemy', ALCHEMY_ETH_CALL_URL],
   ['PublicNode', 'https://ethereum-rpc.publicnode.com'],
   ['LlamaRPC', 'https://eth.llamarpc.com'],
   ['Ankr', 'https://rpc.ankr.com/eth'],
