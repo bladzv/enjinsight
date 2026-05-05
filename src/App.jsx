@@ -11,6 +11,7 @@ import LandingPage         from './components/LandingPage.jsx'
 import BalanceExplorer     from './components/BalanceExplorer.jsx'
 import RewardHistoryViewer from './components/RewardHistoryViewer.jsx'
 import EraBlockExplorer    from './components/EraBlockExplorer.jsx'
+import InfusionChecker     from './components/InfusionChecker.jsx'
 import ModeSelector        from './components/ModeSelector.jsx'
 import ControlPanel        from './components/ControlPanel.jsx'
 import ValidatorCard       from './components/ValidatorCard.jsx'
@@ -41,7 +42,7 @@ export default function App() {
   // Persist active view in URL hash so page refresh stays on current tool
   const [view, setView] = useState(() => {
     const hash = window.location.hash.slice(1)
-    return ['home', 'staking', 'balance', 'era', 'reward-history'].includes(hash) ? hash : 'home'
+    return ['home', 'staking', 'balance', 'era', 'reward-history', 'infusion'].includes(hash) ? hash : 'home'
   })
   const [mode,       setMode]       = useState('validators') // 'validators' | 'pools'
   const [lastEraCount, setLastEraCount] = useState(DEFAULT_ERA_COUNT)
@@ -229,6 +230,13 @@ export default function App() {
       {view === 'reward-history' && (
         <main className="relative z-10 mx-auto max-w-[104rem] px-4 py-6 sm:px-6 sm:py-8 pb-24 sm:pb-28">
           <RewardHistoryViewer />
+        </main>
+      )}
+
+      {/* ── ENJ Infusion Checker ─────────────────────────────────────────── */}
+      {view === 'infusion' && (
+        <main className="relative z-10 mx-auto max-w-[104rem] px-4 py-6 sm:px-6 sm:py-8 pb-24 sm:pb-28">
+          <InfusionChecker />
         </main>
       )}
 
