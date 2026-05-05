@@ -17,7 +17,6 @@ import { formatENJ, truncateAddress, validatorExplorerUrl } from '../utils/forma
 
 export default function ValidatorCard({ validator, eraCount, latestEra, onRetry }) {
   const [open, setOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState('era')
   const [copied, setCopied] = useState(false)
 
   const {
@@ -140,84 +139,165 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
         </div>
       </article>
 
-      <DetailModal
+      <ValidatorDetailsModal
         open={open}
         onClose={() => setOpen(false)}
-        title={displayName}
-        subtitle={`Validator ${truncateAddress(address)} · ${latestStatus}`}
-        actions={renderActions()}
-      >
-        <div className="space-y-5">
-          <div className="grid gap-3 md:grid-cols-4">
-            <PreviewMetric label="Commission" value={`${commission}%`} accent="text-primary" />
-            <PreviewMetric label="Bonded" value={formatENJ(bondedTotal, 2)} accent="text-cyan" />
-            <PreviewMetric label="Nominators" value={nominatorCount.toLocaleString('en')} accent="text-text" />
-            <PreviewMetric
-              label="Reward Gaps"
-              value={hasMissed ? missedEras.length.toLocaleString('en') : '0'}
-              accent={hasMissed ? 'text-warning' : 'text-success'}
-            />
-          </div>
-
-          <div className="flex rounded-[1rem] bg-[#05070f] p-2">
-            <TabButton
-              active={activeTab === 'era'}
-              onClick={() => setActiveTab('era')}
-              icon={<BarChart3 size={14} />}
-              label="Era Rewards"
-              badge={missedEras?.length ? `${missedEras.length} missed` : eraStat?.length ? `${eraStat.length} eras` : null}
-              badgeVariant={missedEras?.length ? 'warn' : 'neutral'}
-            />
-            <TabButton
-              active={activeTab === 'nom'}
-              onClick={() => setActiveTab('nom')}
-              icon={<Users size={14} />}
-              label="Nominators"
-              badge={nominators ? String(nominators.length) : countNominators ? String(countNominators) : null}
-              badgeVariant="neutral"
-            />
-          </div>
-
-          <div className="rounded-[1.25rem] bg-term/40 p-4 sm:p-5">
-            {activeTab === 'era' && (
-              <>
-                {loading && !eraStat
-                  ? <LoadingPlaceholder label="Fetching era stats…" />
-                  : hasError && !eraStat
-                    ? <ErrorPlaceholder label="Era stat fetch failed." onRetry={() => onRetry?.(address)} />
-                    : (
-                      <EraStatTable
-                        eraStat={eraStat}
-                        missedEras={missedEras}
-                        eraCount={eraCount}
-                        latestEra={latestEra}
-                      />
-                    )
-                }
-              </>
-            )}
-
-            {activeTab === 'nom' && (
-              <>
-                {loading && !nominators
-                  ? <LoadingPlaceholder label="Fetching nominators…" />
-                  : hasError && !nominators
-                    ? <ErrorPlaceholder label="Nominator fetch failed." onRetry={() => onRetry?.(address)} />
-                    : (
-                      <NominatorsTable
-                        nominators={nominators}
-                        onRetry={onRetry}
-                        validatorAddress={address}
-                        validatorFetchStatus={fetchStatus}
-                      />
-                    )
-                }
-              </>
-            )}
-          </div>
-        </div>
-      </DetailModal>
+        validator={validator}
+        eraCount={eraCount}
+        latestEra={latestEra}
+        onRetry={onRetry}
+      />
     </>
+  )
+}
+
+export function ValidatorDetailsModal({ open, onClose, validator, eraCount, latestEra, onRetry }) {
+  const [activeTab, setActiveTab] = useState('era')
+  const [copied, setCopied] = useState(false)
+
+  if (!validator) return null
+
+  const {
+    address, display, commission, bondedTotal,
+    isActive, nominators, eraStat, missedEras,
+    fetchStatus, countNominators,
+  } = validator
+
+  const hasMissed = missedEras?.length > 0
+  const loading = fetchStatus === 'loading'
+  const hasError = fetchStatus === 'error' || fetchStatus === 'failed'
+  const displayName = display || truncateAddress(address)
+  const nominatorCount = nominators?.length ?? countNominators ?? 0
+  const latestStatus = loading
+    ? 'Loading validator details'
+    : hasError
+      ? 'Needs retry'
+      : hasMissed
+        ? `${missedEras.length} missed era${missedEras.length !== 1 ? 's' : ''}`
+        : 'No missed eras detected'
+
+  async function copyAddress() {
+    try {
+      await navigator.clipboard.writeText(address)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard access denied.
+    }
+  }
+
+  function renderActions() {
+    return (
+      <>
+        {hasError && (
+          <button
+            type="button"
+            onClick={() => onRetry?.(address)}
+            className="btn-icon bg-card/75"
+            aria-label={`Retry fetching data for ${displayName}`}
+          >
+            <RefreshCw size={14} className="text-danger" />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={copyAddress}
+          className="btn-icon bg-card/75"
+          aria-label={`Copy address of ${displayName}`}
+        >
+          {copied ? <CheckCircle2 size={14} className="text-success" /> : <Copy size={14} />}
+        </button>
+        <a
+          href={validatorExplorerUrl(address)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn-icon bg-card/75"
+          aria-label={`Open ${displayName} on Subscan`}
+        >
+          <ExternalLink size={14} />
+        </a>
+      </>
+    )
+  }
+
+  return (
+    <DetailModal
+      open={open}
+      onClose={onClose}
+      title={displayName}
+      subtitle={`Validator ${truncateAddress(address)} · ${latestStatus}`}
+      actions={renderActions()}
+    >
+      <div className="space-y-5">
+        <div className="grid gap-3 md:grid-cols-4">
+          <PreviewMetric label="Commission" value={`${commission}%`} accent="text-primary" />
+          <PreviewMetric label="Bonded" value={formatENJ(bondedTotal, 2)} accent="text-cyan" />
+          <PreviewMetric label="Nominators" value={nominatorCount.toLocaleString('en')} accent="text-text" />
+          <PreviewMetric
+            label="Reward Gaps"
+            value={hasMissed ? missedEras.length.toLocaleString('en') : '0'}
+            accent={hasMissed ? 'text-warning' : 'text-success'}
+          />
+        </div>
+
+        <div className="flex rounded-[1rem] bg-[#05070f] p-2">
+          <TabButton
+            active={activeTab === 'era'}
+            onClick={() => setActiveTab('era')}
+            icon={<BarChart3 size={14} />}
+            label="Era Rewards"
+            badge={missedEras?.length ? `${missedEras.length} missed` : eraStat?.length ? `${eraStat.length} eras` : null}
+            badgeVariant={missedEras?.length ? 'warn' : 'neutral'}
+          />
+          <TabButton
+            active={activeTab === 'nom'}
+            onClick={() => setActiveTab('nom')}
+            icon={<Users size={14} />}
+            label="Nominators"
+            badge={nominators ? String(nominators.length) : countNominators ? String(countNominators) : null}
+            badgeVariant="neutral"
+          />
+        </div>
+
+        <div className="rounded-[1.25rem] bg-term/40 p-4 sm:p-5">
+          {activeTab === 'era' && (
+            <>
+              {loading && !eraStat
+                ? <LoadingPlaceholder label="Fetching era stats…" />
+                : hasError && !eraStat
+                  ? <ErrorPlaceholder label="Era stat fetch failed." onRetry={() => onRetry?.(address)} />
+                  : (
+                    <EraStatTable
+                      eraStat={eraStat}
+                      missedEras={missedEras}
+                      eraCount={eraCount}
+                      latestEra={latestEra}
+                    />
+                  )
+              }
+            </>
+          )}
+
+          {activeTab === 'nom' && (
+            <>
+              {loading && !nominators
+                ? <LoadingPlaceholder label="Fetching nominators…" />
+                : hasError && !nominators
+                  ? <ErrorPlaceholder label="Nominator fetch failed." onRetry={() => onRetry?.(address)} />
+                  : (
+                    <NominatorsTable
+                      nominators={nominators}
+                      onRetry={onRetry}
+                      validatorAddress={address}
+                      validatorFetchStatus={fetchStatus}
+                    />
+                  )
+              }
+            </>
+          )}
+        </div>
+      </div>
+    </DetailModal>
   )
 }
 

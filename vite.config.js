@@ -188,38 +188,75 @@ function createEtherscanDevDetailsPlugin(apiKey, alchemyRpcUrl) {
       ))
   }
 
+  function parseInfusionEthCall(rawBody) {
+    let payload
+    try {
+      payload = JSON.parse(rawBody.toString('utf8'))
+    } catch (error) {
+      throw new Error('Invalid JSON-RPC body.')
+    }
+
+    if (payload?.method !== 'eth_call') throw new Error('Only eth_call is allowed.')
+    const call = payload.params?.[0] || {}
+    if (String(call.to || '').toLowerCase() !== ENJIN_CRYPTOITEMS_CONTRACT) {
+      throw new Error('Only the configured Enjin ERC-1155 contract calls are allowed.')
+    }
+    if (!/^0x[0-9a-fA-F]+$/.test(String(call.data || ''))) {
+      throw new Error('Missing or invalid eth_call data.')
+    }
+
+    return { id: payload.id ?? 1, data: call.data }
+  }
+
+  async function etherscanEthCallFallback(rawBody) {
+    const { id, data } = parseInfusionEthCall(rawBody)
+    const result = await ethCall(data)
+    return JSON.stringify({ jsonrpc: '2.0', id, result })
+  }
+
   async function proxyAlchemyEthCall(req, res) {
     try {
+      const chunks = []
+      for await (const chunk of req) chunks.push(chunk)
+      const rawBody = Buffer.concat(chunks)
+      const finish = (status, body, contentType = 'application/json; charset=utf-8', provider = '') => {
+        res.statusCode = status
+        res.setHeader('Content-Type', contentType)
+        if (provider) res.setHeader('X-RPC-Provider', provider)
+        res.end(body)
+      }
+
       const rpcUrl = alchemyRpcUrl || ''
       if (!rpcUrl) {
-        res.statusCode = 503
-        res.setHeader('Content-Type', 'application/json; charset=utf-8')
-        res.end(JSON.stringify({ error: 'ALCHEMY_ETH_RPC_URL is not configured.' }))
+        try {
+          finish(200, await etherscanEthCallFallback(rawBody), 'application/json; charset=utf-8', 'Etherscan')
+        } catch (error) {
+          finish(503, JSON.stringify({ error: `No Ethereum RPC provider available. ${error.message}` }))
+        }
         return
       }
 
       const targetUrl = new URL(rpcUrl)
       if (targetUrl.protocol !== 'https:') {
-        res.statusCode = 500
-        res.setHeader('Content-Type', 'application/json; charset=utf-8')
-        res.end(JSON.stringify({ error: 'ALCHEMY_ETH_RPC_URL must use https.' }))
-        return
+        throw new Error('ALCHEMY_ETH_RPC_URL must use https.')
       }
 
-      const chunks = []
-      for await (const chunk of req) chunks.push(chunk)
       const upstreamRes = await fetch(targetUrl, {
         method: 'POST',
         headers: {
           accept: 'application/json',
           'content-type': 'application/json',
         },
-        body: Buffer.concat(chunks),
+        body: rawBody,
       })
 
-      res.statusCode = upstreamRes.status
-      res.setHeader('Content-Type', upstreamRes.headers.get('content-type') || 'application/json; charset=utf-8')
-      res.end(await upstreamRes.text())
+      const text = await upstreamRes.text()
+      if (upstreamRes.ok) {
+        finish(upstreamRes.status, text, upstreamRes.headers.get('content-type') || 'application/json; charset=utf-8', 'Alchemy')
+        return
+      }
+
+      finish(200, await etherscanEthCallFallback(rawBody), 'application/json; charset=utf-8', 'Etherscan')
     } catch (error) {
       res.statusCode = 502
       res.setHeader('Content-Type', 'application/json; charset=utf-8')

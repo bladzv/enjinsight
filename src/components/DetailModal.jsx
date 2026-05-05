@@ -8,6 +8,7 @@ export default function DetailModal({
   onClose,
   children,
   actions = null,
+  eyebrow = 'Detailed View',
   widthClass = 'max-w-6xl',
 }) {
   useEffect(() => {
@@ -42,14 +43,14 @@ export default function DetailModal({
         className={`relative z-10 flex max-h-[min(90vh,64rem)] w-full flex-col overflow-hidden rounded-[1.75rem] bg-card shadow-[0_32px_80px_rgba(0,0,0,0.45)] ${widthClass}`}
         style={{ border: '1px solid rgba(70,71,82,0.16)' }}
       >
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/8 bg-[#05070f] px-5 py-4 sm:px-6">
+        <div className="relative border-b border-white/8 bg-[#05070f] px-5 py-4 pr-24 sm:px-6 sm:pr-28">
           <div className="min-w-0">
-            <p className="section-label">Detailed View</p>
-            <h2 className="mt-2 break-words font-headline text-2xl font-bold text-text">{title}</h2>
+            {eyebrow ? <p className="section-label">{eyebrow}</p> : null}
+            <h2 className={`${eyebrow ? 'mt-2' : ''} break-words font-headline text-2xl font-bold text-text`}>{title}</h2>
             {subtitle ? <p className="mt-2 break-words text-sm text-text-secondary">{subtitle}</p> : null}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="absolute right-5 top-4 flex items-center gap-2 sm:right-6">
             {actions}
             <button
               type="button"
