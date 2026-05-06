@@ -88,11 +88,14 @@ function fmtDateUtc(utcStr) {
   }
 }
 
-function StatCard({ label, value, accent = false, sub = null }) {
+function StatCard({ label, value, accent = false, sub = null, loading = false }) {
   return (
     <div className="metric-card text-left">
       <p className="metric-label">{label}</p>
-      <p className={`metric-value break-all text-3xl ${accent ? 'text-cyan' : 'text-text'}`}>{value}</p>
+      {loading
+        ? <div className="skeleton h-9 w-20" aria-hidden="true" />
+        : <p className={`metric-value break-all text-3xl ${accent ? 'text-cyan' : 'text-text'}`}>{value}</p>
+      }
       {sub ? <p className="mt-2 whitespace-normal break-all font-mono text-[10px] leading-tight text-muted" title={sub}>{sub}</p> : null}
     </div>
   )
@@ -167,33 +170,22 @@ export default function EraBlockExplorer() {
                     <span>{statusCfg.label}</span>
                   </div>
                   <div className="space-y-4">
-                    <h1 className="hero-title text-balance">Active Blockchain State</h1>
+                    <h1 className="hero-title text-balance">Relaychain State</h1>
                     <p className="hero-copy">
                       Live relaychain heartbeat, current era telemetry, and archival lookup for any completed era from the same explorer surface.
                     </p>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="metric-card metric-card-left-primary">
-                    <p className="metric-label">Relaychain</p>
-                    <p className="metric-value text-primary">Live</p>
-                  </div>
-                  <div className="metric-card metric-card-left-cyan">
-                    <p className="metric-label">Cached Eras</p>
-                    <p className="metric-value text-cyan">{fmt(csvCount)}</p>
                   </div>
                 </div>
               </div>
 
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_320px]">
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  <StatCard label="Active Era" value={fmt(era)} accent />
-                  <StatCard label="Session" value={fmt(session)} />
-                  <StatCard label="Current Block" value={fmt(block)} accent />
-                  <StatCard label="Era Starts" value={eraStartLabel} />
-                  <StatCard label="Era Ends" value={eraEndLabel} />
-                  <StatCard label="Blocks Left" value={fmt(remaining)} />
+                  <StatCard label="Active Era" value={fmt(era)} accent loading={era == null} />
+                  <StatCard label="Session" value={fmt(session)} loading={session == null} />
+                  <StatCard label="Current Block" value={fmt(block)} accent loading={block == null} />
+                  <StatCard label="Era Starts" value={eraStartLabel} loading={eraStart == null} />
+                  <StatCard label="Era Ends" value={eraEndLabel} loading={eraEnd == null} />
+                  <StatCard label="Blocks Left" value={fmt(remaining)} loading={remaining == null} />
                 </div>
 
                 <div className="flex flex-col gap-4">
@@ -237,11 +229,11 @@ export default function EraBlockExplorer() {
             </div>
           </section>
 
-          <div className="overflow-hidden rounded-[1.5rem] border border-white/6 bg-term">
+          <div className="overflow-hidden rounded-[1.5rem] border border-border/40 bg-term">
             <button
               type="button"
               onClick={() => setShowDebug(value => !value)}
-              className="flex w-full items-center gap-2 bg-[#05070f] px-4 py-3 text-left transition-colors hover:bg-surface-high"
+              className="flex w-full items-center gap-2 bg-surface-high px-4 py-3 text-left transition-colors hover:bg-surface-highest"
               aria-expanded={showDebug}
               aria-label={showDebug ? 'Collapse debug panel' : 'Expand debug panel'}
             >
@@ -263,9 +255,9 @@ export default function EraBlockExplorer() {
                   ['Session raw', debug.sessRaw],
                   ['Last error', debug.lastError],
                 ].map(([key, value]) => (
-                  <div key={key} className="flex justify-between gap-2 py-0.5">
+                  <div key={key} className="flex flex-col gap-0.5 py-0.5 sm:flex-row sm:justify-between sm:gap-2">
                     <span className="text-muted">{key}</span>
-                    <span className="max-w-[60%] whitespace-normal break-all text-right text-text">{value}</span>
+                    <span className="whitespace-normal break-all text-left text-text sm:max-w-[60%] sm:text-right">{value}</span>
                   </div>
                 ))}
                 <div className="col-span-2 mt-1">
@@ -278,36 +270,52 @@ export default function EraBlockExplorer() {
         </div>
 
         <div className="data-panel space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-2">
               <h2 className="font-headline text-2xl font-bold text-text">Past Era Lookup</h2>
+              {csvCount > 0 ? (
+                <div className="inline-flex items-center gap-2 rounded-full border border-success/20 bg-success/10 px-3 py-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-success" style={{ boxShadow: '0 0 6px rgba(142,255,113,0.7)' }} />
+                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-success">{csvCount} Eras Cached</span>
+                </div>
+              ) : (
+                <div className="inline-flex items-center gap-2 rounded-full border border-border/40 bg-card px-3 py-1">
+                  <span className="skeleton h-1.5 w-1.5 rounded-full" aria-hidden="true" />
+                  <span className="skeleton h-3 w-24 rounded-full" aria-hidden="true" />
+                </div>
+              )}
             </div>
-            {csvCount > 0 ? (
-              <div className="inline-flex items-center gap-2 rounded-full border border-success/20 bg-success/10 px-3 py-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-success" style={{ boxShadow: '0 0 6px rgba(142,255,113,0.7)' }} />
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-success">Ready</span>
-                <span className="font-mono text-[10px] text-text-secondary">· {csvCount} eras</span>
-              </div>
-            ) : (
-              <div className="inline-flex items-center gap-2 rounded-full border border-warning/20 bg-warning/10 px-3 py-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-warning animate-pulse" />
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-warning">Loading</span>
-              </div>
-            )}
-            <div className="ml-auto mr-2 flex items-center gap-1.5">
+
+            <div
+              className="inline-flex items-center rounded-full border border-white/10 bg-card p-1"
+              role="group"
+              aria-label="Timezone selector"
+            >
               <button
                 type="button"
-                onClick={() => setLocalTime(value => !value)}
-                title={localTime ? 'Showing local timezone — click for UTC' : 'Showing UTC — click for local timezone'}
-                className={`flex min-h-[2rem] items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors ${
+                onClick={() => setLocalTime(false)}
+                className={`inline-flex min-h-[1.9rem] items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors ${
+                  !localTime
+                    ? 'bg-primary/20 text-primary'
+                    : 'text-text-secondary hover:text-text'
+                }`}
+                aria-pressed={!localTime}
+              >
+                <Clock size={11} />
+                UTC
+              </button>
+              <button
+                type="button"
+                onClick={() => setLocalTime(true)}
+                className={`inline-flex min-h-[1.9rem] items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors ${
                   localTime
-                    ? 'border-cyan/20 bg-cyan/10 text-cyan'
-                    : 'border-white/8 bg-card text-text-secondary hover:text-text'
+                    ? 'bg-cyan/20 text-cyan'
+                    : 'text-text-secondary hover:text-text'
                 }`}
                 aria-pressed={localTime}
               >
-                {localTime ? <Globe size={11} /> : <Clock size={11} />}
-                {localTime ? 'Local' : 'UTC'}
+                <Globe size={11} />
+                Local
               </button>
             </div>
           </div>

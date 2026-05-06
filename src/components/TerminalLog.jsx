@@ -31,8 +31,8 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
 
   const lastLog = logs[logs.length - 1]
   const wrapClass = sticky
-    ? 'fixed inset-x-0 bottom-0 z-30 overflow-hidden border-t border-white/[0.08] bg-term/95 font-mono text-xs backdrop-blur-md'
-    : 'overflow-hidden rounded-sm border border-white/[0.06] bg-term font-mono text-xs'
+    ? 'terminal-sticky fixed bottom-0 z-30 overflow-hidden border-t border-border/40 bg-term/95 font-mono text-xs backdrop-blur-md'
+    : 'overflow-hidden rounded-sm border border-border/40 bg-term font-mono text-xs'
 
   // Reflect terminal drawer height in body padding so fixed dock never
   // overlaps page content.
@@ -57,7 +57,7 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
   return (
     <div ref={wrapRef} className={wrapClass}>
       <div
-        className="flex cursor-pointer select-none items-center justify-between gap-4 border-t border-white/[0.04] bg-[#040407] px-4 py-2.5"
+        className="flex cursor-pointer select-none items-center justify-between gap-4 border-t border-border/30 bg-surface-high px-4 py-2.5"
         role="button"
         tabIndex={0}
         onClick={toggle}
@@ -67,7 +67,7 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
         aria-label={expanded ? 'Collapse logs drawer' : 'Expand logs drawer'}
       >
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-7 w-7 items-center justify-center rounded-sm border border-white/[0.06] bg-card text-primary">
+          <div className="flex h-7 w-7 items-center justify-center rounded-sm border border-border/40 bg-card text-primary">
             <Terminal size={13} />
           </div>
           <div className="flex min-w-0 items-center gap-2">
@@ -93,7 +93,7 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
-          <span className="rounded-sm border border-white/[0.06] bg-card/60 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-text-secondary">
+          <span className="rounded-sm border border-border/40 bg-card/60 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-text-secondary">
             {logs.length} ln
           </span>
           <span className="text-text-secondary" aria-hidden="true">
