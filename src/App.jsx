@@ -512,7 +512,7 @@ function ResultsPagination({ page, totalPages, totalItems, itemLabel, onPageChan
       <span>
         {totalItems.toLocaleString('en')} {itemLabel}
       </span>
-      <div className="flex items-center gap-1.5">
+      <div className="flex max-w-full flex-wrap items-center justify-end gap-1.5">
         <button
           type="button"
           onClick={() => onPageChange(1)}

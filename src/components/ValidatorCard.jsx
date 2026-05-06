@@ -240,7 +240,7 @@ export function ValidatorDetailsModal({ open, onClose, validator, eraCount, late
           />
         </div>
 
-        <div className="flex rounded-[1rem] bg-[#05070f] p-2">
+        <div className="flex flex-col gap-2 rounded-[1rem] bg-[#05070f] p-2 sm:flex-row">
           <TabButton
             active={activeTab === 'era'}
             onClick={() => setActiveTab('era')}
@@ -312,7 +312,7 @@ function MetricRow({ label, value, accent = 'text-text' }) {
 
 function PreviewMetric({ label, value, accent = 'text-text' }) {
   return (
-    <div className="rounded-[1rem] bg-card/85 px-3 py-2.5">
+    <div className="min-w-0 rounded-[1rem] bg-card/85 px-3 py-2.5">
       <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-text-secondary">{label}</p>
       <p className={`mt-1.5 font-headline text-lg font-bold ${accent}`}>{value}</p>
     </div>
@@ -334,7 +334,7 @@ function TabButton({ active, onClick, icon, label, badge, badgeVariant }) {
         <span className="whitespace-normal break-words text-left">{label}</span>
       </span>
       {badge && (
-        <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+        <span className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
           badgeVariant === 'warn' ? 'bg-warning/15 text-warning' : 'bg-surface-high text-text-secondary'
         }`}>
           {badge}
