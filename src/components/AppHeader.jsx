@@ -32,7 +32,7 @@ export default function AppHeader({ status, view, onBack, onNavigate, onAbout })
   return (
     <header className="sticky top-0 z-40 border-b border-white/5 bg-ink/80 backdrop-blur-2xl">
       <div className="mx-auto flex max-w-[104rem] flex-col gap-3 px-4 py-3 sm:px-6">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center justify-between gap-3 sm:gap-4">
           <button
             type="button"
             onClick={() => handleNav('home')}
@@ -54,7 +54,7 @@ export default function AppHeader({ status, view, onBack, onNavigate, onAbout })
               href={README_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn-icon flex items-center gap-2 px-3"
+              className="btn-icon hidden items-center gap-2 px-3 sm:flex"
               aria-label="Open README on GitHub"
             >
               <BookOpen size={16} />
@@ -65,7 +65,7 @@ export default function AppHeader({ status, view, onBack, onNavigate, onAbout })
             <button
               type="button"
               onClick={handleAbout}
-              className="btn-icon flex items-center gap-2 px-3"
+              className="btn-icon hidden items-center gap-2 px-3 sm:flex"
               aria-label="About EnjinSight"
             >
               <Info size={16} />
@@ -77,7 +77,7 @@ export default function AppHeader({ status, view, onBack, onNavigate, onAbout })
               href={GITHUB_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn-icon flex items-center gap-2 px-3"
+              className="btn-icon hidden items-center gap-2 px-3 sm:flex"
               aria-label="Open source on GitHub"
             >
               <Github size={16} />
@@ -118,7 +118,7 @@ export default function AppHeader({ status, view, onBack, onNavigate, onAbout })
 
       {/* Dropdown — visible below lg when menu is open */}
       {menuOpen && (
-        <div className="lg:hidden border-t border-white/5 bg-ink/95 backdrop-blur-2xl px-4 py-3 flex flex-col gap-1">
+        <div className="lg:hidden flex max-h-[calc(100dvh-4.75rem)] flex-col gap-1 overflow-y-auto border-t border-white/5 bg-ink/95 px-4 py-3 backdrop-blur-2xl">
           {NAV_ITEMS.map(item => {
             const isActive = view === item.key
             return (
