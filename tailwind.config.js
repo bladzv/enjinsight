@@ -4,54 +4,55 @@ export default {
   theme: {
     extend: {
       colors: {
-        // ── Kinetic Ledger design system ────────────────────────────────
-        // Surface hierarchy (layered depth, no-line rule)
-        ink:     '#0c0e17',           // base layer (background)
-        surface: '#11131d',           // section layer
-        card:    '#171924',           // component layer (surface-container)
-        border:  '#464752',           // ghost borders at 15% opacity
-        rim:     '#282b3a',           // surface-bright / interaction layer
+        // ── Foundry design system ─────────────────────────────────────────
+        // Warm-charcoal monochrome with a violet-purple accent matching the brand logo.
 
-        // Primary palette
-        primary:       '#b6a0ff',
-        'primary-dim': '#8051ff',
-        'primary-glow':'#aa8fff',     // primary-fixed
+        // Surface stack — deep indigo-black with a faint purple-blue undertone
+        ink:               '#08080f',
+        surface:           '#0d0d16',
+        card:              '#12121e',
+        'surface-high':    '#181828',
+        'surface-highest': '#1f1f30',
+        'surface-bright':  '#27273a',
+        rim:               '#27273a',
+        border:            '#29293c',
+        term:              '#04040b',
+
+        // Brand accent — violet/purple (left side of logo gradient)
+        primary:        '#7C3AED',
+        'primary-dim':  '#6D28D9',
+        'primary-glow': '#c4b5fd',
+        'on-primary':   '#fafafa',
 
         // Signal accents
-        cyan:      '#00eefc',         // secondary / data viz
-        'cyan-dim':'#00deec',
-        success:   '#8eff71',         // tertiary
-        'success-dim': '#2be800',
-        warning:   '#F59E0B',
-        danger:    '#ff6e84',         // error
-        'danger-dim': '#d73357',
+        // cyan = blue side of logo gradient (royal blue)
+        cyan:           '#60a5fa',
+        'cyan-dim':     '#3b82f6',
+        success:        '#a3e635',
+        'success-dim':  '#65a30d',
+        warning:        '#facc15',
+        'warning-dim':  '#eab308',
+        danger:         '#f43f5e',
+        'danger-dim':   '#e11d48',
 
         // Text hierarchy
-        text:             '#f0f0fd',  // on-surface — primary text
-        'text-secondary': '#aaaab7',  // on-surface-variant
-        dim:              '#aaaab7',  // secondary text
-        muted:            '#737580',  // outline
-
-        // Semantic surface tokens
-        'surface-high':    '#1c1f2b', // surface-container-high
-        'surface-highest': '#222532', // surface-container-highest
-        'surface-bright':  '#282b3a', // hover / interaction
-        term:              '#000000', // terminal background (surface-container-lowest)
-
-        // Legacy compatibility aliases
-        'on-primary': '#350090',
+        text:             '#fafafa',
+        'text-secondary': '#a8a8c0',
+        dim:              '#a8a8c0',
+        muted:            '#52527a',
       },
       fontFamily: {
-        sans:     ['Inter', 'system-ui', 'sans-serif'],
-        headline: ['"Space Grotesk"', 'system-ui', 'sans-serif'],
-        brand:    ['"Space Grotesk"', 'Inter', 'system-ui', 'sans-serif'],
-        mono:     ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', '"Liberation Mono"', '"Courier New"', 'monospace'],
+        sans:     ['"Inter"', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Helvetica', 'Arial', 'sans-serif'],
+        headline: ['"Inter Tight"', '"Inter"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        brand:    ['"Inter Tight"', '"Inter"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono:     ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', '"Liberation Mono"', '"Courier New"', 'monospace'],
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'fade-in':    'fadeIn 0.3s ease-out',
+        'fade-in':    'fadeIn 0.25s ease-out',
         'slide-down': 'slideDown 0.25s ease-out',
         'blink':      'blink 1.2s step-end infinite',
+        'tick':       'tick 1.2s steps(2, end) infinite',
       },
       keyframes: {
         fadeIn: {
@@ -66,20 +67,27 @@ export default {
           '0%, 100%': { opacity: 1 },
           '50%':      { opacity: 0 },
         },
+        tick: {
+          '0%, 49%':   { opacity: 1 },
+          '50%, 100%': { opacity: 0.35 },
+        },
       },
       boxShadow: {
-        'primary-glow': '0 0 20px rgba(182,160,255,0.25)',
-        'cyan-glow':    '0 0 20px rgba(0,238,252,0.15)',
-        'card':         '0 4px 24px rgba(0,0,0,0.3)',
-        'float':        '0 8px 48px rgba(0,0,0,0.3)',
-        'ambient':      '0 24px 64px rgba(5, 8, 18, 0.45)',
-        'inset-soft':   'inset 0 1px 0 rgba(255,255,255,0.04)',
+        'primary-glow': '0 0 20px rgba(124, 58, 237, 0.25)',
+        'cyan-glow':    '0 0 18px rgba(96, 165, 250, 0.20)',
+        'card':         '0 1px 0 rgba(255,255,255,0.02) inset',
+        'float':        '0 8px 24px rgba(0,0,0,0.45)',
+        'ambient':      '0 1px 0 rgba(255,255,255,0.02) inset',
+        'inset-soft':   'inset 0 1px 0 rgba(255,255,255,0.03)',
       },
       borderRadius: {
-        DEFAULT: '0.375rem',     // md
+        DEFAULT: '0.25rem',
         sm:      '0.125rem',
-        lg:      '0.5rem',
-        xl:      '0.75rem',
+        lg:      '0.25rem',
+        xl:      '0.375rem',
+      },
+      letterSpacing: {
+        tightest: '-0.04em',
       },
     },
   },
