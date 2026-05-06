@@ -8,19 +8,17 @@ const BRAND_NAME_URL = '/assets/brand/enjinsight_brand.png'
 export function DisclaimerContent({ compact = false } = {}) {
   return (
     <div className={`rounded-[1.15rem] border border-warning/20 bg-warning/5 sm:rounded-[1.5rem] ${compact ? 'p-4' : 'p-4 sm:p-5'}`}>
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-warning/10 text-warning sm:h-10 sm:w-10 sm:rounded-2xl">
+      <div className="flex items-center gap-2.5">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-warning/10 text-warning">
           <AlertTriangle size={16} />
         </div>
-        <div className="min-w-0 space-y-2">
-          <p className="section-label text-warning">Disclaimer</p>
-          <p className="text-sm leading-6 text-text-secondary">
-            EnjinSight is unofficial third-party tooling and is not developed by or affiliated with the Enjin development team.
-            The information shown here is assembled from public chain data and should be treated as a research aid, not a guarantee.
-            Verify important operational, accounting, or tax decisions against your own records.
-          </p>
-        </div>
+        <p className="font-headline text-base font-bold text-warning">Disclaimer</p>
       </div>
+      <p className="mt-2.5 text-sm leading-6 text-text-secondary">
+        EnjinSight is unofficial third-party tooling and is not developed by or affiliated with the Enjin development team.
+        The information shown here is assembled from public chain data and should be treated as a research aid, not a guarantee.
+        Verify important operational, accounting, or tax decisions against your own records.
+      </p>
     </div>
   )
 }
@@ -72,7 +70,7 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
   }, [seconds, isFirstVisit])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden p-2 sm:items-center sm:p-4" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden p-2 sm:p-4" role="dialog" aria-modal="true">
       <div
         className="absolute inset-0 bg-ink/80 backdrop-blur-sm"
         onClick={isFirstVisit ? undefined : onClose}
@@ -99,31 +97,12 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
         )}
 
         <div className="relative z-10 min-h-0 space-y-5 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-8">
-          <div className="rounded-[1.15rem] bg-card/80 p-4 shadow-inset-soft sm:rounded-[1.5rem] sm:p-6">
-            <div className="space-y-2">
-              {!isFirstVisit && (
-                <div className="mb-4 flex items-center gap-3">
-                  <img src={BRAND_LOGO_URL} alt="EnjinSight logo" className="h-12 w-12 rounded-2xl" />
-                  <img src={BRAND_NAME_URL} alt="EnjinSight" className="h-9 w-auto max-w-[13rem]" />
-                </div>
-              )}
-              {isFirstVisit && (
-                <p className="section-label">
-                  Before You Continue
-                </p>
-              )}
-              {isFirstVisit && (
-                <h2 className="font-headline text-2xl font-bold tracking-tight text-text sm:text-3xl">
-                  Read This First
-                </h2>
-              )}
-              <div className="space-y-2">
-                <p className="max-w-2xl text-sm leading-6 text-text-secondary">
-                  EnjinSight is a read-only research workspace. It never asks you to connect a wallet, but the data still deserves verification before you act on it.
-                </p>
-              </div>
+          {!isFirstVisit && (
+            <div className="flex items-center gap-3">
+              <img src={BRAND_LOGO_URL} alt="EnjinSight logo" className="h-12 w-12 rounded-2xl" />
+              <img src={BRAND_NAME_URL} alt="EnjinSight" className="h-9 w-auto max-w-[13rem]" />
             </div>
-          </div>
+          )}
 
           <FirstVisitContent />
 
@@ -178,11 +157,13 @@ function FirstVisitContent() {
 function FirstVisitCard({ icon: Icon, title, text }) {
   return (
     <div className="min-w-0 rounded-[1rem] bg-card px-4 py-4 shadow-inset-soft sm:rounded-[1.25rem]">
-      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary sm:h-10 sm:w-10 sm:rounded-2xl">
-        <Icon size={17} />
+      <div className="flex items-center gap-2.5">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Icon size={16} />
+        </div>
+        <h3 className="font-headline text-base font-bold text-text">{title}</h3>
       </div>
-      <h3 className="mt-3 font-headline text-lg font-bold text-text">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-text-secondary">{text}</p>
+      <p className="mt-2.5 text-sm leading-6 text-text-secondary">{text}</p>
     </div>
   )
 }

@@ -20,7 +20,6 @@ import TerminalLog         from './components/TerminalLog.jsx'
 import SummarySection      from './components/SummarySection.jsx'
 import PoolSummarySection  from './components/PoolSummarySection.jsx'
 import PhaseProgressCards  from './components/PhaseProgressCards.jsx'
-import PointerAura         from './components/PointerAura.jsx'
 
 const VALIDATOR_PREVIEW_PHASES = [
   { key: 'probe', label: 'Check API Endpoints', total: 1, completed: 0, status: 'pending' },
@@ -207,49 +206,45 @@ export default function App() {
   }, [mode])
 
   return (
-    <div className="relative min-h-dvh overflow-x-hidden bg-ink">
-      <div className="pointer-events-none fixed inset-0 z-0">
-        <div className="absolute left-[-10rem] top-[8rem] h-[24rem] w-[24rem] rounded-full bg-primary/10 blur-[120px]" />
-        <div className="absolute right-[-8rem] top-[20rem] h-[22rem] w-[22rem] rounded-full bg-cyan/10 blur-[120px]" />
-        <PointerAura />
-      </div>
-
+    <div className="app-shell relative min-h-dvh bg-ink">
       <AppHeader status={status} view={view} onBack={handleBack} onNavigate={handleNavigate} onAbout={() => setShowAbout(true)} />
+
+      <div className="relative flex min-w-0 flex-col">
 
       {/* ── Era Block Explorer ────────────────────────────────────── */}
       {view === 'era' && <EraBlockExplorer />}
 
       {/* ── Balance Viewer ──────────────────────────────────────────── */}
       {view === 'balance' && (
-        <main className="relative z-10 mx-auto max-w-[104rem] px-4 py-6 sm:px-6 sm:py-8 pb-24 sm:pb-28">
+        <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
           <BalanceExplorer />
         </main>
       )}
 
       {/* ── Reward History Viewer ─────────────────────────────────────────── */}
       {view === 'reward-history' && (
-        <main className="relative z-10 mx-auto max-w-[104rem] px-4 py-6 sm:px-6 sm:py-8 pb-24 sm:pb-28">
+        <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
           <RewardHistoryViewer />
         </main>
       )}
 
       {/* ── ENJ Infusion Checker ─────────────────────────────────────────── */}
       {view === 'infusion' && (
-        <main className="relative z-10 mx-auto max-w-[104rem] px-4 py-6 sm:px-6 sm:py-8 pb-24 sm:pb-28">
+        <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
           <InfusionChecker />
         </main>
       )}
 
       {/* ── Home / Landing ──────────────────────────────────────────── */}
       {view === 'home' && (
-        <main className="relative z-10 mx-auto max-w-[104rem] px-4 py-6 sm:px-6 sm:py-8 pb-16 sm:pb-20">
+        <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-6 sm:px-6 sm:py-8 pb-16 sm:pb-20">
           <LandingPage onNavigate={handleNavigate} />
         </main>
       )}
 
       {/* ── Staking view ────────────────────────────────────────────── */}
       {view === 'staking' && (
-      <main className="relative z-10 mx-auto max-w-[104rem] px-4 py-5 sm:px-6 sm:py-7 pb-32 space-y-5">
+      <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-32 space-y-5">
 
         <section className="page-hero">
           <div className="relative z-10 grid gap-6 xl:grid-cols-[minmax(0,1.18fr)_minmax(320px,0.82fr)] xl:items-end">
@@ -297,7 +292,7 @@ export default function App() {
         {/* ── Validator mode content ──────────────────────────────── */}
         {isValidatorMode && validators.length > 0 && (
           <section id="validators-panel" aria-labelledby="validators-heading">
-            <div className="overflow-hidden rounded-[1.35rem] bg-surface shadow-ambient">
+            <div className="overflow-hidden rounded-sm border border-white/[0.06] bg-surface">
               <button
                 type="button"
                 onClick={() => setShowValidatorResults(open => !open)}
@@ -372,7 +367,7 @@ export default function App() {
         {/* ── Pool mode content ───────────────────────────────────── */}
         {!isValidatorMode && pools.length > 0 && (
           <section id="pools-panel" aria-labelledby="pools-heading">
-            <div className="overflow-hidden rounded-[1.35rem] bg-surface shadow-ambient">
+            <div className="overflow-hidden rounded-sm border border-white/[0.06] bg-surface">
               <button
                 type="button"
                 onClick={() => setShowPoolResults(open => !open)}
@@ -450,7 +445,7 @@ export default function App() {
 
         {/* ── Empty / error states ────────────────────────────────── */}
         {status === 'idle' && activeRecords.length > 0 && (
-          <div className="rounded-[1.35rem] bg-surface px-6 py-12 text-center shadow-ambient sm:py-16">
+          <div className="rounded-sm border border-white/[0.06] bg-surface px-6 py-12 text-center shadow-ambient sm:py-16">
             <div className="w-16 h-16 mx-auto mb-5 rounded-xl bg-card
                             flex items-center justify-center">
               <svg viewBox="0 0 32 32" className="w-8 h-8 fill-primary/60">
@@ -470,7 +465,7 @@ export default function App() {
         )}
 
         {status === 'error' && (
-          <div className="rounded-[1.35rem] bg-surface px-6 py-10 text-center shadow-ambient">
+          <div className="rounded-sm border border-white/[0.06] bg-surface px-6 py-10 text-center shadow-ambient">
             <p className="text-sm text-danger mb-3">
               {isValidatorMode ? 'Failed to fetch validator list.' : 'Failed to fetch nomination pools.'}
             </p>
@@ -484,6 +479,8 @@ export default function App() {
         )}
       </main>
       )}
+
+      </div>{/* /right column */}
 
       {/* Sticky terminal log — always shown on staking view */}
       {view === 'staking' && (
@@ -508,7 +505,7 @@ export default function App() {
 
 function ResultsPagination({ page, totalPages, totalItems, itemLabel, onPageChange }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.15rem] bg-card px-4 py-3 text-xs text-text-secondary">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-white/[0.06] bg-card px-4 py-3 text-xs text-text-secondary">
       <span>
         {totalItems.toLocaleString('en')} {itemLabel}
       </span>
