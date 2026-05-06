@@ -116,7 +116,7 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
         <div
           id="terminal-body"
           className="overflow-y-auto bg-term scrollbar-thin"
-          style={{ maxHeight: sticky ? 'min(360px, 48vh)' : '340px' }}
+          style={{ maxHeight: sticky ? 'min(320px, 42dvh)' : '340px' }}
           role="log"
           aria-live="polite"
           aria-label="Logs output"
@@ -128,7 +128,7 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
               {logs.map(entry => {
                 const isRetry = typeof entry.message === 'string' && /Retry\s+\d+\/\d+/i.test(entry.message)
                 return (
-                  <div key={entry.id} className="grid grid-cols-[auto_auto_minmax(0,1fr)] gap-4 leading-relaxed">
+                  <div key={entry.id} className="grid grid-cols-[auto_auto_minmax(0,1fr)] gap-x-2 gap-y-1 leading-relaxed sm:gap-x-4">
                     <span className="select-none text-muted">{entry.ts}</span>
                     <span className={`select-none ${LEVEL_CLASS[entry.level]}`}>[{entry.level}]</span>
                     <span className={`break-all text-text ${isRetry ? 'log-retry' : ''}`}>

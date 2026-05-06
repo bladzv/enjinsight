@@ -590,7 +590,7 @@ function PoolMultiSelect({ pools, value, onChange }) {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 max-h-64 min-w-[220px] overflow-y-auto rounded-[1rem] bg-card py-1 shadow-xl shadow-black/40">
+        <div className="absolute right-0 top-full z-50 mt-1 max-h-64 min-w-[220px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-[1rem] bg-card py-1 shadow-xl shadow-black/40 sm:left-0 sm:right-auto">
           {/* Select All / Clear */}
           <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-bright rounded-t-lg">
             <button

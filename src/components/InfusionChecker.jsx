@@ -915,7 +915,7 @@ export default function InfusionChecker() {
         )}
 
         <div className="data-table-wrap">
-          <table className="data-table">
+          <table className="data-table min-w-[760px]">
             <thead className="data-table-head">
               <tr>
                 {renderSortableHeader('tokenId')}

@@ -10,7 +10,6 @@ const FEATURES = [
     label: 'Launch Explorer',
     resource: 'Relaychain RPC Endpoint',
     accent: 'text-primary',
-    glow: 'from-primary/20 to-transparent',
   },
   {
     key: 'staking',
@@ -21,7 +20,6 @@ const FEATURES = [
     label: 'View Cadence',
     resource: 'Subscan API Endpoint',
     accent: 'text-cyan',
-    glow: 'from-cyan/20 to-transparent',
   },
   {
     key: 'balance',
@@ -32,7 +30,6 @@ const FEATURES = [
     label: 'Track Address',
     resource: 'Archive RPC Endpoint',
     accent: 'text-warning',
-    glow: 'from-warning/20 to-transparent',
   },
   {
     key: 'reward-history',
@@ -43,7 +40,6 @@ const FEATURES = [
     label: 'Audit History',
     resource: 'Archive RPC + Subscan',
     accent: 'text-success',
-    glow: 'from-success/20 to-transparent',
   },
   {
     key: 'infusion',
@@ -54,91 +50,58 @@ const FEATURES = [
     label: 'Check Infusion',
     resource: 'Ethereum RPC + Etherscan',
     accent: 'text-primary',
-    glow: 'from-primary/20 to-transparent',
   },
-]
-
-const SIGNALS = [
-  { label: 'Tool Modules', value: '5', tone: 'text-primary', accent: 'metric-card-left-primary' },
-  { label: 'Access Mode', value: 'Read-only', tone: 'text-cyan', accent: 'metric-card-left-cyan' },
-  { label: 'Wallet Required', value: 'None', tone: 'text-success', accent: 'metric-card-left-success' },
-  { label: 'Sources', value: 'RPC + Indexers', tone: 'text-text', accent: 'metric-card-left-warning' },
 ]
 
 export default function LandingPage({ onNavigate }) {
   return (
     <div className="space-y-8 pb-12 sm:space-y-10 sm:pb-16 lg:space-y-12">
-      <section className="page-hero">
-        <div className="relative z-10 grid gap-10 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] lg:items-start">
-          <div className="space-y-6">
-            <div className="space-y-5 max-w-2xl">
-              <div className="hero-kicker">
-                <span className="hero-dot" />
-                Network Active
-              </div>
-              <h2 className="hero-title text-balance">
-                Enjin blockchain analytics with a sharper lens.
-              </h2>
-              <p className="hero-copy">
-                Read-only monitoring utilities for the Enjin ecosystem, designed to make dense on-chain data feel legible.
-                Jump straight into era tracking, staking diagnostics, balance archaeology, reward audits, or ERC-20 ENJ infusion checks.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[360px]">
-            {SIGNALS.map(signal => (
-              <div
-                key={signal.label}
-                className={`metric-card ${signal.accent} p-4 backdrop-blur-sm text-sm flex flex-col justify-center`}
-              >
-                <p className="metric-label">{signal.label}</p>
-                <p className={`metric-value text-lg ${signal.tone}`}>{signal.value}</p>
-              </div>
-            ))}
-          </div>
-
-        </div>
+      <section className="max-w-3xl">
+        <p className="text-sm leading-6 text-text-secondary sm:text-base sm:leading-7">
+          Read-only monitoring utilities for the Enjin ecosystem, designed to make dense on-chain data feel legible.
+          Jump straight into era tracking, staking diagnostics, balance archaeology, reward audits, or ERC-20 ENJ infusion checks.
+        </p>
       </section>
 
       <section className="space-y-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="section-label">Toolset</p>
-            <h3 className="section-title">Choose an analytics workflow</h3>
+            <h3 className="section-title">Toolset</h3>
           </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          {FEATURES.map(({ key, icon: Icon, title, description, label, resource, accent, glow }) => (
+          {FEATURES.map(({ key, icon: Icon, title, description, label, resource, accent }) => (
             <article
               key={key}
-              className="group relative overflow-hidden rounded-[1.5rem] border border-white/6 bg-surface p-6 shadow-ambient transition-transform duration-200 hover:-translate-y-1"
+              className="group flex min-h-[19rem] min-w-0 flex-col rounded-[1.25rem] border border-white/6 bg-surface p-5 shadow-ambient transition-all duration-200 hover:-translate-y-1 hover:border-cyan/20 hover:bg-card"
             >
-              <div className={`absolute inset-x-0 top-0 h-24 bg-gradient-to-b ${glow} opacity-80`} />
-              <div className="relative z-10 flex h-full flex-col gap-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className={`flex h-12 w-12 items-center justify-center rounded-2xl bg-card ${accent}`}>
-                    <Icon size={22} />
-                  </div>
-                  <span className="mini-chip">{resource}</span>
+              <div className="flex min-w-0 items-center gap-3">
+                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-card ${accent}`}>
+                  <Icon size={20} />
                 </div>
+                <h4 className="min-w-0 break-words font-headline text-xl font-bold leading-tight text-text">
+                  {title}
+                </h4>
+              </div>
 
-                <div className="space-y-3">
-                  <h4 className="font-headline text-2xl font-bold leading-tight text-text">{title}</h4>
-                  <p className="text-sm leading-6 text-text-secondary">{description}</p>
-                </div>
+              <p className="mt-4 text-xs font-semibold leading-5 text-text-secondary">
+                <span className="text-text">Source:</span> {resource}
+              </p>
 
-                <div className="mt-auto flex items-center justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => onNavigate(key)}
-                    className="btn-secondary px-4 py-2 text-xs"
-                    aria-label={label}
-                  >
-                    {label}
-                  </button>
-                </div>
+              <p className="mt-4 text-sm leading-6 text-text-secondary">
+                {description}
+              </p>
+
+              <div className="mt-auto flex justify-center pt-6">
+                <button
+                  type="button"
+                  onClick={() => onNavigate(key)}
+                  className="btn-secondary px-4 py-2 text-xs"
+                  aria-label={label}
+                >
+                  {label}
+                </button>
               </div>
             </article>
           ))}
