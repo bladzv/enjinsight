@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { DEFAULT_ERA_COUNT } from './constants.js'
 import { useValidatorChecker } from './hooks/useValidatorChecker.js'
@@ -51,6 +51,12 @@ export default function App() {
   const [validatorPage, setValidatorPage] = useState(1)
   const [poolPage, setPoolPage] = useState(1)
   const [selectedPoolId, setSelectedPoolId] = useState(null)
+  const [theme, setTheme] = useState(() => {
+    const storedTheme = window.localStorage.getItem('enjinsight-theme')
+    if (storedTheme === 'light' || storedTheme === 'dark') return storedTheme
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+  })
+  const previousStakingStatusRef = useRef(null)
   const { show: showFirstVisit, accept: acceptFirstVisit } = useFirstVisitDisclaimer()
 
   // Sync URL hash when view changes
@@ -60,6 +66,15 @@ export default function App() {
       view === 'home' ? window.location.pathname : `#${view}`
     )
   }, [view])
+
+  useEffect(() => {
+    const root = document.documentElement
+    root.setAttribute('data-theme', theme)
+    root.classList.add('theme-switching')
+    const timer = window.setTimeout(() => root.classList.remove('theme-switching'), 700)
+    window.localStorage.setItem('enjinsight-theme', theme)
+    return () => window.clearTimeout(timer)
+  }, [theme])
 
   // Validator hook
   const {
@@ -193,6 +208,15 @@ export default function App() {
     setSelectedPoolId(poolId)
   }
 
+  function handleToggleTheme() {
+    setTheme(current => (current === 'dark' ? 'light' : 'dark'))
+  }
+
+  function handleThemeChange(nextTheme) {
+    if (nextTheme !== 'dark' && nextTheme !== 'light') return
+    setTheme(nextTheme)
+  }
+
   useEffect(() => {
     if (safeValidatorPage !== validatorPage) setValidatorPage(safeValidatorPage)
   }, [safeValidatorPage, validatorPage])
@@ -205,9 +229,31 @@ export default function App() {
     setSelectedPoolId(null)
   }, [mode])
 
+  useEffect(() => {
+    const prevStatus = previousStakingStatusRef.current
+    previousStakingStatusRef.current = status
+
+    if (view !== 'staking') return
+    if (!(prevStatus === 'loading' && status === 'done')) return
+
+    const summaryId = isValidatorMode ? 'staking-validator-summary' : 'staking-pool-summary'
+    const resultsId = isValidatorMode ? 'validators-panel' : 'pools-panel'
+    const target = document.getElementById(summaryId) || document.getElementById(resultsId)
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [view, status, isValidatorMode])
+
   return (
-    <div className="app-shell relative min-h-dvh bg-ink">
-      <AppHeader status={status} view={view} onBack={handleBack} onNavigate={handleNavigate} onAbout={() => setShowAbout(true)} />
+    <div className="app-shell relative min-h-dvh">
+      <AppHeader
+        status={status}
+        view={view}
+        onBack={handleBack}
+        onNavigate={handleNavigate}
+        onAbout={() => setShowAbout(true)}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
+        onThemeChange={handleThemeChange}
+      />
 
       <div className="relative flex min-w-0 flex-col">
 
@@ -255,10 +301,10 @@ export default function App() {
               </div>
               <div className="max-w-3xl space-y-3">
                 <h1 className="hero-title text-balance">
-                  Staking rewards cadence with live operator context.
+                  Staking rewards cadence.
                 </h1>
                 <p className="hero-copy">
-                  Scan validator or pool reward cadence, then inspect the raw detail tables below without burning space on duplicate summary blocks.
+                  Scan validator or pool reward cadence, then inspect the raw detail tables.
                 </p>
               </div>
 
@@ -356,12 +402,14 @@ export default function App() {
         )}
 
         {isValidatorMode && isDone && validators.length > 0 && (
-          <SummarySection
-            validators={validators}
-            eraCount={lastEraCount}
-            latestEra={validatorLatestEra}
-            onRetry={vRetryValidator}
-          />
+          <section id="staking-validator-summary">
+            <SummarySection
+              validators={validators}
+              eraCount={lastEraCount}
+              latestEra={validatorLatestEra}
+              onRetry={vRetryValidator}
+            />
+          </section>
         )}
 
         {/* ── Pool mode content ───────────────────────────────────── */}
@@ -436,11 +484,13 @@ export default function App() {
         )}
 
         {!isValidatorMode && isDone && pools.length > 0 && (
-          <PoolSummarySection
-            pools={pools}
-            eraCount={lastEraCount}
-            onPoolSelect={handleSelectPool}
-          />
+          <section id="staking-pool-summary">
+            <PoolSummarySection
+              pools={pools}
+              eraCount={lastEraCount}
+              onPoolSelect={handleSelectPool}
+            />
+          </section>
         )}
 
         {/* ── Empty / error states ────────────────────────────────── */}
