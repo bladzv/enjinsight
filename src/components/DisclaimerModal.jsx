@@ -7,12 +7,12 @@ const BRAND_NAME_URL = '/assets/brand/enjinsight_brand.png'
 
 export function DisclaimerContent({ compact = false } = {}) {
   return (
-    <div className={`rounded-[1.5rem] border border-warning/20 bg-warning/5 ${compact ? 'p-4' : 'p-5'}`}>
+    <div className={`rounded-[1.15rem] border border-warning/20 bg-warning/5 sm:rounded-[1.5rem] ${compact ? 'p-4' : 'p-4 sm:p-5'}`}>
       <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-warning/10 text-warning">
+        <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-warning/10 text-warning sm:h-10 sm:w-10 sm:rounded-2xl">
           <AlertTriangle size={16} />
         </div>
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <p className="section-label text-warning">Disclaimer</p>
           <p className="text-sm leading-6 text-text-secondary">
             EnjinSight is unofficial third-party tooling and is not developed by or affiliated with the Enjin development team.
@@ -51,20 +51,35 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
   const [seconds, setSeconds] = useState(5)
 
   useEffect(() => {
+    const prevOverflow = document.body.style.overflow
+    const onKeyDown = (event) => {
+      if (!isFirstVisit && event.key === 'Escape') onClose?.()
+    }
+
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKeyDown)
+
+    return () => {
+      document.body.style.overflow = prevOverflow
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [isFirstVisit, onClose])
+
+  useEffect(() => {
     if (!isFirstVisit || seconds <= 0) return
     const t = setTimeout(() => setSeconds(s => s - 1), 1000)
     return () => clearTimeout(t)
   }, [seconds, isFirstVisit])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden p-2 sm:items-center sm:p-4" role="dialog" aria-modal="true">
       <div
         className="absolute inset-0 bg-ink/80 backdrop-blur-sm"
         onClick={isFirstVisit ? undefined : onClose}
       />
 
       <div
-        className="relative z-10 w-full max-w-2xl animate-fade-in overflow-hidden rounded-[2rem] bg-surface shadow-float"
+        className="relative z-10 flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl animate-fade-in flex-col overflow-hidden rounded-[1.25rem] bg-surface shadow-float sm:max-h-[calc(100dvh-2rem)] sm:rounded-[2rem]"
         style={{ border: '1px solid rgba(70,71,82,0.14)' }}
       >
         <div
@@ -83,8 +98,8 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
           </button>
         )}
 
-        <div className="relative z-10 space-y-6 p-6 sm:p-8">
-          <div className="rounded-[1.5rem] bg-card/80 p-5 shadow-inset-soft sm:p-6">
+        <div className="relative z-10 min-h-0 space-y-5 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-8">
+          <div className="rounded-[1.15rem] bg-card/80 p-4 shadow-inset-soft sm:rounded-[1.5rem] sm:p-6">
             <div className="space-y-2">
               {!isFirstVisit && (
                 <div className="mb-4 flex items-center gap-3">
@@ -98,7 +113,7 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
                 </p>
               )}
               {isFirstVisit && (
-                <h2 className="font-headline text-3xl font-bold tracking-tight text-text">
+                <h2 className="font-headline text-2xl font-bold tracking-tight text-text sm:text-3xl">
                   Read This First
                 </h2>
               )}
@@ -112,7 +127,7 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
 
           <FirstVisitContent />
 
-          <div className="flex justify-end">
+          <div className="flex justify-end pb-1">
             {isFirstVisit ? (
               <button
                 type="button"
@@ -162,8 +177,8 @@ function FirstVisitContent() {
 
 function FirstVisitCard({ icon: Icon, title, text }) {
   return (
-    <div className="rounded-[1.25rem] bg-card px-4 py-4 shadow-inset-soft">
-      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+    <div className="min-w-0 rounded-[1rem] bg-card px-4 py-4 shadow-inset-soft sm:rounded-[1.25rem]">
+      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary sm:h-10 sm:w-10 sm:rounded-2xl">
         <Icon size={17} />
       </div>
       <h3 className="mt-3 font-headline text-lg font-bold text-text">{title}</h3>
