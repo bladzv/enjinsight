@@ -8,38 +8,38 @@ export default {
         // Warm-charcoal monochrome with a violet-purple accent matching the brand logo.
 
         // Surface stack — deep indigo-black with a faint purple-blue undertone
-        ink:               '#08080f',
-        surface:           '#0d0d16',
-        card:              '#12121e',
-        'surface-high':    '#181828',
-        'surface-highest': '#1f1f30',
-        'surface-bright':  '#27273a',
-        rim:               '#27273a',
-        border:            '#29293c',
-        term:              '#04040b',
+        ink:               'rgb(var(--ink-rgb) / <alpha-value>)',
+        surface:           'rgb(var(--surface-rgb) / <alpha-value>)',
+        card:              'rgb(var(--card-rgb) / <alpha-value>)',
+        'surface-high':    'rgb(var(--surface-high-rgb) / <alpha-value>)',
+        'surface-highest': 'rgb(var(--surface-highest-rgb) / <alpha-value>)',
+        'surface-bright':  'rgb(var(--surface-bright-rgb) / <alpha-value>)',
+        rim:               'rgb(var(--rim-rgb) / <alpha-value>)',
+        border:            'rgb(var(--border-rgb) / <alpha-value>)',
+        term:              'rgb(var(--term-rgb) / <alpha-value>)',
 
         // Brand accent — violet/purple (left side of logo gradient)
-        primary:        '#7C3AED',
-        'primary-dim':  '#6D28D9',
-        'primary-glow': '#c4b5fd',
-        'on-primary':   '#fafafa',
+        primary:        'rgb(var(--primary-rgb) / <alpha-value>)',
+        'primary-dim':  'rgb(var(--primary-dim-rgb) / <alpha-value>)',
+        'primary-glow': 'rgb(var(--primary-glow-rgb) / <alpha-value>)',
+        'on-primary':   'rgb(var(--on-primary-rgb) / <alpha-value>)',
 
         // Signal accents
         // cyan = blue side of logo gradient (royal blue)
-        cyan:           '#60a5fa',
-        'cyan-dim':     '#3b82f6',
-        success:        '#a3e635',
-        'success-dim':  '#65a30d',
-        warning:        '#facc15',
-        'warning-dim':  '#eab308',
-        danger:         '#f43f5e',
-        'danger-dim':   '#e11d48',
+        cyan:           'rgb(var(--cyan-rgb) / <alpha-value>)',
+        'cyan-dim':     'rgb(var(--cyan-dim-rgb) / <alpha-value>)',
+        success:        'rgb(var(--success-rgb) / <alpha-value>)',
+        'success-dim':  'rgb(var(--success-dim-rgb) / <alpha-value>)',
+        warning:        'rgb(var(--warning-rgb) / <alpha-value>)',
+        'warning-dim':  'rgb(var(--warning-dim-rgb) / <alpha-value>)',
+        danger:         'rgb(var(--danger-rgb) / <alpha-value>)',
+        'danger-dim':   'rgb(var(--danger-dim-rgb) / <alpha-value>)',
 
         // Text hierarchy
-        text:             '#fafafa',
-        'text-secondary': '#a8a8c0',
-        dim:              '#a8a8c0',
-        muted:            '#52527a',
+        text:             'rgb(var(--text-rgb) / <alpha-value>)',
+        'text-secondary': 'rgb(var(--text-secondary-rgb) / <alpha-value>)',
+        dim:              'rgb(var(--dim-rgb) / <alpha-value>)',
+        muted:            'rgb(var(--muted-rgb) / <alpha-value>)',
       },
       fontFamily: {
         sans:     ['"Inter"', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Helvetica', 'Arial', 'sans-serif'],

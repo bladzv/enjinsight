@@ -103,14 +103,14 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
           <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-card text-primary">
               {loading
-                ? <Loader2 size={16} className="animate-spin text-dim" />
+                ? <span className="skeleton h-5 w-5 rounded-md" aria-hidden="true" />
                 : isActive
                   ? <Shield size={16} className="text-success" />
                   : <Clock size={16} className="text-text-secondary" />
               }
             </div>
             {hasMissed && <span className="sev-high">{missedEras.length} missed</span>}
-            {!hasMissed && !hasError && loading && <span className="badge-waiting">Loading</span>}
+            {!hasMissed && !hasError && loading && <span className="skeleton skeleton-pill" aria-hidden="true" />}
             {!loading && !hasMissed && !hasError && isActive && <span className="badge-active">Active</span>}
             {!loading && !hasMissed && !hasError && !isActive && <span className="badge-waiting">Inactive</span>}
           </div>
@@ -126,9 +126,9 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
         </div>
 
         <div className="mt-4 divide-y divide-white/5 rounded-[1rem] bg-card/85 overflow-hidden">
-          <MetricRow label="Commission" value={`${commission}%`} accent="text-primary" />
-          <MetricRow label="Bonded" value={formatENJ(bondedTotal, 2)} accent="text-cyan" />
-          <MetricRow label="Nominators" value={nominatorCount.toLocaleString('en')} accent="text-text" />
+          <MetricRow label="Commission" value={`${commission}%`} accent="text-primary" loading={loading} />
+          <MetricRow label="Bonded" value={formatENJ(bondedTotal, 2)} accent="text-cyan" loading={loading} />
+          <MetricRow label="Nominators" value={nominatorCount.toLocaleString('en')} accent="text-text" loading={loading} />
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/6 pt-3">
@@ -301,11 +301,14 @@ export function ValidatorDetailsModal({ open, onClose, validator, eraCount, late
   )
 }
 
-function MetricRow({ label, value, accent = 'text-text' }) {
+function MetricRow({ label, value, accent = 'text-text', loading = false }) {
   return (
     <div className="flex items-center justify-between px-3 py-2.5">
       <span className="text-xs text-text-secondary">{label}</span>
-      <span className={`text-sm font-bold font-headline ${accent}`}>{value}</span>
+      {loading
+        ? <span className="skeleton skeleton-value" aria-hidden="true" />
+        : <span className={`text-sm font-bold font-headline ${accent}`}>{value}</span>
+      }
     </div>
   )
 }
@@ -346,9 +349,11 @@ function TabButton({ active, onClick, icon, label, badge, badgeVariant }) {
 
 function LoadingPlaceholder({ label }) {
   return (
-    <div className="flex items-center justify-center gap-2 py-8 text-xs text-text-secondary">
-      <Loader2 size={14} className="animate-spin" />
-      {label}
+    <div className="space-y-3 py-2">
+      <p className="text-xs text-text-secondary">{label}</p>
+      <div className="skeleton skeleton-line" aria-hidden="true" />
+      <div className="skeleton skeleton-line w-11/12" aria-hidden="true" />
+      <div className="skeleton skeleton-line w-4/5" aria-hidden="true" />
     </div>
   )
 }

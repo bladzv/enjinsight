@@ -9,6 +9,7 @@ import {
   Layers,
   LineChart,
   Menu,
+  SunMoon,
   TrendingUp,
   X,
 } from 'lucide-react'
@@ -31,7 +32,7 @@ const BRAND_LOGO_URL = '/assets/brand/enjinsight_brand.png'
  * the existing import path stable, but the visual + structural role is now
  * a persistent left-rail with a slide-out drawer below the lg breakpoint.
  */
-export default function AppHeader({ status, view, onNavigate, onAbout }) {
+export default function AppHeader({ status, view, onNavigate, onAbout, theme = 'dark', onToggleTheme, onThemeChange }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const isLoading = status === 'loading'
 
@@ -75,11 +76,17 @@ export default function AppHeader({ status, view, onNavigate, onAbout }) {
           workspace={workspace}
           onNavigate={handleNav}
           onAbout={handleAbout}
+          theme={theme}
+          onToggleTheme={onToggleTheme}
+          onThemeChange={onThemeChange}
         />
       </aside>
 
       {/* ── Mobile top header (only below lg) ───────────────────────── */}
-      <header className="lg:hidden sticky top-0 z-40 flex items-center justify-between border-b border-white/[0.06] bg-ink/85 px-4 py-2.5 backdrop-blur-xl">
+      <header
+        className="lg:hidden sticky top-0 z-40 flex items-center justify-between px-4 py-2.5 backdrop-blur-xl"
+        style={{ borderBottom: '1px solid var(--hairline)', background: 'color-mix(in srgb, var(--surface) 88%, transparent)' }}
+      >
         <button
           type="button"
           onClick={() => handleNav('home')}
@@ -109,7 +116,7 @@ export default function AppHeader({ status, view, onNavigate, onAbout }) {
             aria-hidden="true"
           />
           <aside className="rail-mobile-drawer lg:hidden" aria-label="Primary">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+            <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--hairline)' }}>
               <button
                 type="button"
                 onClick={() => handleNav('home')}
@@ -135,6 +142,9 @@ export default function AppHeader({ status, view, onNavigate, onAbout }) {
                 workspace={workspace}
                 onNavigate={handleNav}
                 onAbout={handleAbout}
+                theme={theme}
+                onToggleTheme={onToggleTheme}
+                onThemeChange={onThemeChange}
                 mobile
               />
             </div>
@@ -145,11 +155,19 @@ export default function AppHeader({ status, view, onNavigate, onAbout }) {
   )
 }
 
-function RailContent({ view, isLoading, tools, workspace, onNavigate, onAbout, mobile = false }) {
+function RailContent({ view, isLoading, tools, workspace, onNavigate, onAbout, theme, onToggleTheme, onThemeChange, mobile = false }) {
+  function selectTheme(nextTheme) {
+    if (typeof onThemeChange === 'function') {
+      onThemeChange(nextTheme)
+      return
+    }
+    if (typeof onToggleTheme === 'function') onToggleTheme()
+  }
+
   return (
     <>
       {!mobile && (
-        <div className="flex items-center px-4 py-4 border-b border-white/[0.06]">
+        <div className="flex items-center px-4 py-4" style={{ borderBottom: '1px solid var(--hairline)' }}>
           <BrandMark loading={isLoading} />
         </div>
       )}
@@ -169,6 +187,31 @@ function RailContent({ view, isLoading, tools, workspace, onNavigate, onAbout, m
         </ul>
       </nav>
 
+      <section className="px-2 pb-3" aria-label="Appearance">
+        <div className="space-y-2 px-1">
+          <p className="rail-section-label px-2">Theme</p>
+          <div className="flex items-center rounded-sm border p-1" style={{ borderColor: 'var(--hairline)', background: 'var(--card)' }} role="group" aria-label="Theme switch">
+            <button
+              type="button"
+              onClick={() => selectTheme('dark')}
+              className={`inline-flex min-h-[2rem] flex-1 items-center justify-center gap-1 rounded-sm px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${theme === 'dark' ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:text-text'}`}
+              aria-pressed={theme === 'dark'}
+            >
+              <SunMoon size={13} strokeWidth={2} className="opacity-90" />
+              Dark
+            </button>
+            <button
+              type="button"
+              onClick={() => selectTheme('light')}
+              className={`inline-flex min-h-[2rem] flex-1 items-center justify-center rounded-sm px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${theme === 'light' ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:text-text'}`}
+              aria-pressed={theme === 'light'}
+            >
+              Light
+            </button>
+          </div>
+        </div>
+      </section>
+
       <nav className="px-2 pb-3" aria-label="Tools">
         <p className="rail-section-label">Tools</p>
         <ul className="mt-1 space-y-0.5">
@@ -186,7 +229,7 @@ function RailContent({ view, isLoading, tools, workspace, onNavigate, onAbout, m
 
       <div className="mt-auto" />
 
-      <div className="px-2 py-3 border-t border-white/[0.06]">
+      <div className="px-2 py-3" style={{ borderTop: '1px solid var(--hairline)' }}>
         <p className="rail-section-label">Resources</p>
         <ul className="mt-1 space-y-0.5">
           <li>

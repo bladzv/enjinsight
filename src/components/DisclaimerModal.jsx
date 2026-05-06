@@ -80,11 +80,6 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
         className="relative z-10 flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl animate-fade-in flex-col overflow-hidden rounded-[1.25rem] bg-surface shadow-float sm:max-h-[calc(100dvh-2rem)] sm:rounded-[2rem]"
         style={{ border: '1px solid rgba(70,71,82,0.14)' }}
       >
-        <div
-          className="pointer-events-none absolute inset-x-0 top-0 h-48"
-          style={{ background: 'radial-gradient(circle at top left, rgba(0,238,252,0.12), transparent 58%), radial-gradient(circle at top right, rgba(255,197,61,0.10), transparent 45%)' }}
-        />
-
         {!isFirstVisit && (
           <button
             type="button"
@@ -97,12 +92,10 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
         )}
 
         <div className="relative z-10 min-h-0 space-y-5 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-8">
-          {!isFirstVisit && (
-            <div className="flex items-center gap-3">
-              <img src={BRAND_LOGO_URL} alt="EnjinSight logo" className="h-12 w-12 rounded-2xl" />
-              <img src={BRAND_NAME_URL} alt="EnjinSight" className="h-9 w-auto max-w-[13rem]" />
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            <img src={BRAND_LOGO_URL} alt="EnjinSight logo" className="h-12 w-12 rounded-2xl" />
+            <img src={BRAND_NAME_URL} alt="EnjinSight" className="h-9 w-auto max-w-[13rem]" />
+          </div>
 
           <FirstVisitContent />
 
