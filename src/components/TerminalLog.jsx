@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
-import { ChevronDown, ChevronUp, Terminal, Waves } from 'lucide-react'
+import { ChevronDown, ChevronUp, Terminal } from 'lucide-react'
 
 const LEVEL_CLASS = {
   INFO: 'log-info',
@@ -31,12 +31,11 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
 
   const lastLog = logs[logs.length - 1]
   const wrapClass = sticky
-    ? 'fixed inset-x-0 bottom-0 z-30 overflow-hidden border-t border-white/8 bg-term/95 font-mono text-xs shadow-[0_-18px_48px_rgba(5,8,18,0.55)] backdrop-blur-xl'
-    : 'overflow-hidden rounded-[1.25rem] border border-white/8 bg-term font-mono text-xs'
+    ? 'fixed inset-x-0 bottom-0 z-30 overflow-hidden border-t border-white/[0.08] bg-term/95 font-mono text-xs backdrop-blur-md'
+    : 'overflow-hidden rounded-sm border border-white/[0.06] bg-term font-mono text-xs'
 
-  // Keep page content visible by adding bottom padding to body equal to
-  // the terminal's current height when the terminal is sticky. This prevents
-  // the fixed terminal from overlapping page elements.
+  // Reflect terminal drawer height in body padding so fixed dock never
+  // overlaps page content.
   useEffect(() => {
     if (!sticky) return
     function updateBodyPadding() {
@@ -47,13 +46,10 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
         document.body.style.paddingBottom = `${h}px`
       } catch (e) {}
     }
-    // initial set
     updateBodyPadding()
-    // update on resize
     window.addEventListener('resize', updateBodyPadding)
     return () => {
       window.removeEventListener('resize', updateBodyPadding)
-      // restore
       try { document.body.style.paddingBottom = '' } catch (e) {}
     }
   }, [sticky, expanded])
@@ -61,7 +57,7 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
   return (
     <div ref={wrapRef} className={wrapClass}>
       <div
-        className="flex cursor-pointer select-none items-center justify-between gap-4 bg-[#05070f] px-4 py-3"
+        className="flex cursor-pointer select-none items-center justify-between gap-4 border-t border-white/[0.04] bg-[#040407] px-4 py-2.5"
         role="button"
         tabIndex={0}
         onClick={toggle}
@@ -70,25 +66,19 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
         aria-controls="terminal-body"
         aria-label={expanded ? 'Collapse logs drawer' : 'Expand logs drawer'}
       >
-        <div className="flex min-w-0 items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-card text-primary">
-              <Terminal size={16} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-primary">LOGS</p>
-                <span className="h-1.5 w-1.5 rounded-full bg-success shadow-[0_0_10px_rgba(142,255,113,0.45)]" />
-              </div>
-              <p className="text-[11px] uppercase tracking-[0.18em] text-text-secondary">
-                {sticky ? 'Activity Stream' : 'Session activity'}
-              </p>
-            </div>
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-7 w-7 items-center justify-center rounded-sm border border-white/[0.06] bg-card text-primary">
+            <Terminal size={13} />
+          </div>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-primary">
+              {sticky ? '$ logs' : 'session'}
+            </span>
+            <span className={`h-1 w-1 rounded-full ${logs.length ? 'bg-success animate-pulse' : 'bg-muted'}`} />
           </div>
 
           <div className="hidden min-w-0 items-center gap-2 lg:flex">
-            <Waves size={13} className="shrink-0 text-cyan" />
-            <span className="text-[11px] leading-5 text-text-secondary whitespace-normal break-words">
+            <span className="font-mono text-[11px] leading-4 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis max-w-[60ch]">
               {lastLog
                 ? (
                   <>
@@ -97,17 +87,17 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
                     <span>{lastLog.message}</span>
                   </>
                 )
-                : 'No output yet.'}
+                : '(no output)'}
             </span>
           </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
-          <span className="rounded-full bg-card px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-text-secondary">
-            {logs.length} lines
+          <span className="rounded-sm border border-white/[0.06] bg-card/60 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-text-secondary">
+            {logs.length} ln
           </span>
           <span className="text-text-secondary" aria-hidden="true">
-            {expanded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+            {expanded ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
           </span>
         </div>
       </div>
@@ -122,13 +112,13 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
           aria-label="Logs output"
         >
           {logs.length === 0 ? (
-            <p className="px-4 py-4 text-muted italic">No output yet.</p>
+            <p className="px-4 py-4 text-muted italic">// no output yet</p>
           ) : (
-            <div className="space-y-1 px-4 py-4">
+            <div className="space-y-0.5 px-4 py-3">
               {logs.map(entry => {
                 const isRetry = typeof entry.message === 'string' && /Retry\s+\d+\/\d+/i.test(entry.message)
                 return (
-                  <div key={entry.id} className="grid grid-cols-[auto_auto_minmax(0,1fr)] gap-x-2 gap-y-1 leading-relaxed sm:gap-x-4">
+                  <div key={entry.id} className="grid grid-cols-[auto_auto_minmax(0,1fr)] gap-x-2 gap-y-1 leading-relaxed sm:gap-x-3">
                     <span className="select-none text-muted">{entry.ts}</span>
                     <span className={`select-none ${LEVEL_CLASS[entry.level]}`}>[{entry.level}]</span>
                     <span className={`break-all text-text ${isRetry ? 'log-retry' : ''}`}>
