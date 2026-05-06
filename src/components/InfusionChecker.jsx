@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown, Database, ExternalLink, ImageIcon, Loader2, RefreshCw, Search, Wallet } from 'lucide-react'
 import DetailModal from './DetailModal.jsx'
 import PhaseProgressCards from './PhaseProgressCards.jsx'
@@ -300,6 +300,9 @@ export default function InfusionChecker() {
   const [bulkFailureMessage, setBulkFailureMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [logs, setLogs] = useState([])
+  const singleResultRef = useRef(null)
+  const bulkResultRef = useRef(null)
+  const previousLoadingRef = useRef(false)
 
   const log = useCallback((level, msg) => {
     setLogs(prev => {
@@ -381,6 +384,22 @@ export default function InfusionChecker() {
   }, [bulkPageSize, filteredSortedRows, safeBulkPage])
   const failedBulkRows = useMemo(() => rows.filter(row => row.error), [rows])
   const hasRetryingRows = retryingTokenIds.size > 0
+
+  useEffect(() => {
+    const wasLoading = previousLoadingRef.current
+    previousLoadingRef.current = isLoading
+
+    if (!(wasLoading && !isLoading)) return
+
+    if (mode === 'wallet' && bulkStarted) {
+      bulkResultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+
+    if (mode === 'single' && singleStarted) {
+      singleResultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [isLoading, mode, bulkStarted, singleStarted])
 
   function appendRow(row) {
     setRows(current => [...current, row])
@@ -688,7 +707,7 @@ export default function InfusionChecker() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 overflow-x-hidden">
       <section className="page-hero">
         <div className="relative z-10">
           <div className="space-y-4">
@@ -731,7 +750,7 @@ export default function InfusionChecker() {
             <div className="rounded-[1rem] bg-cyan/5 px-4 py-3 ring-1 ring-cyan/15 md:col-span-3">
               <p className="metric-label text-cyan">Wallet Scan Note</p>
               <p className="mt-2 text-sm leading-6 text-text-secondary">
-                Wallet token lists can be incomplete. If a token is missing, use Token ID scan with its Etherscan NFT URL or paste the token ID found after <code className="rounded-md bg-term/80 px-1.5 py-0.5 font-mono text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>.
+                Wallet token lists can be incomplete. If a token is missing, use Token ID scan with its Etherscan NFT URL or paste the token ID found after: <code className="block break-all rounded-md bg-term/80 px-1.5 py-0.5 font-mono text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>
               </p>
             </div>
           </div>
@@ -816,7 +835,7 @@ export default function InfusionChecker() {
             )}
           </div>
 
-          <div className="data-panel space-y-4" aria-live="polite">
+          <div ref={singleResultRef} className="data-panel space-y-4" aria-live="polite">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="section-title">Infusion value</h2>
@@ -849,7 +868,7 @@ export default function InfusionChecker() {
       </section>
 
       {mode === 'wallet' && bulkStarted && (
-      <section className="data-panel space-y-4">
+      <section ref={bulkResultRef} className="data-panel space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="section-label">Bulk Results</p>
@@ -861,7 +880,7 @@ export default function InfusionChecker() {
         </div>
 
         <div className="data-toolbar">
-          <label className="min-w-[14rem] flex-1 sm:max-w-sm">
+          <label className="w-full min-w-0 sm:min-w-[14rem] sm:flex-1 sm:max-w-sm">
             <span className="input-label mb-1">Search token name or ID</span>
             <div className="relative">
               <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />

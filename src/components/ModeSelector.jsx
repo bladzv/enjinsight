@@ -21,9 +21,6 @@ export default function ModeSelector({ mode, onModeChange, disabled }) {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="font-headline text-xl font-bold tracking-tight text-text sm:text-[1.6rem]">Scan Mode</h2>
-          <p className="mt-1 max-w-xl text-sm leading-6 text-text-secondary">
-            Switch between validator diagnostics and nomination pool diagnostics.
-          </p>
         </div>
       </div>
 

@@ -276,6 +276,8 @@ export default function BalanceExplorer() {
 
   // Track active quick-range preset (null = custom / manual)
   const [activePreset, setActivePreset] = useState(null)
+  const resultsRef = useRef(null)
+  const previousStatusRef = useRef(null)
 
   // Address validation note
   const [addressNote, setAddressNote] = useState(null)
@@ -523,6 +525,16 @@ export default function BalanceExplorer() {
   const minBlk  = hasResults ? Math.min(...blks) : null
   const maxBlk  = hasResults ? Math.max(...blks) : null
   const hasNewFmt = hasResults && records.some(d => d.newFormat)
+
+  useEffect(() => {
+    const prevStatus = previousStatusRef.current
+    previousStatusRef.current = status
+
+    if (!(prevStatus === STATUS.QUERYING && (status === STATUS.DONE || status === STATUS.CANCELLED))) return
+    if (!hasResults) return
+
+    resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [status, hasResults])
 
   // ── Real-time range validation ────────────────────────────────────────────
   const blockErr = (() => {
@@ -1142,7 +1154,7 @@ export default function BalanceExplorer() {
 
       {/* ── Results (shown for any data source; also visible DURING query) ── */}
       {(hasResults || isLoading) && (
-        <>
+        <section ref={resultsRef} className="space-y-4">
           {/* Records summary bar */}
           {hasResults && (
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-[1.5rem] bg-surface px-5 py-4 shadow-ambient">
@@ -1208,7 +1220,7 @@ export default function BalanceExplorer() {
           {dataSource === 'query' && hasResults && (status === STATUS.DONE || status === STATUS.CANCELLED) && (
             <div className="md:w-1/2"><BalanceExportPanel records={records} rpcMeta={rpcMetaRef.current} /></div>
           )}
-        </>
+        </section>
       )}
 
       {/* ── Sticky terminal log ── */}

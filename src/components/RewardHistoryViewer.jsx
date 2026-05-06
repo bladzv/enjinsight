@@ -1184,6 +1184,8 @@ export default function RewardHistoryViewer() {
 
   // Filtered rows (from table, drives chart + summary)
   const [filteredRows, setFilteredRows] = useState([])
+  const resultsRef = useRef(null)
+  const previousStatusRef = useRef(null)
 
   // Log drawer expanded state — used to push content above the fixed overlay
   const [logExpanded, setLogExpanded] = useState(false)
@@ -1337,6 +1339,16 @@ export default function RewardHistoryViewer() {
   }
 
   const showResults = (isLoading || isDone || isStopped || isError || importedResults) && activeResults.length > 0
+
+  useEffect(() => {
+    const prevStatus = previousStatusRef.current
+    previousStatusRef.current = status
+
+    if (!(prevStatus === RH_STATUS.LOADING && (status === RH_STATUS.DONE || status === RH_STATUS.STOPPED))) return
+    if (!activeResults.length) return
+
+    resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [status, activeResults.length])
 
   return (
     <div className={`space-y-4 transition-[padding] duration-200 ${logExpanded ? 'pb-[380px]' : 'pb-16'}`}>
@@ -1685,7 +1697,7 @@ export default function RewardHistoryViewer() {
 
       {/* ── Results section ── */}
       {showResults && (
-        <>
+        <section ref={resultsRef} className="space-y-4">
           {/* Address summary bar */}
           {(() => { const dispAddr = importedResults ? importedAddress : address; return dispAddr ? (
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-[1.5rem] bg-surface px-5 py-4 shadow-ambient">
@@ -1711,7 +1723,7 @@ export default function RewardHistoryViewer() {
               <button onClick={() => setImportedResults(null)} className="text-violet-400 hover:underline">Clear import</button>
             </div>
           )}
-        </>
+        </section>
       )}
 
       {/* ── Sticky terminal log — always visible ── */}
