@@ -56,6 +56,12 @@ export default function App() {
     if (storedTheme === 'light' || storedTheme === 'dark') return storedTheme
     return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
   })
+  const [balanceScanActive, setBalanceScanActive] = useState(false)
+  const [rewardScanActive, setRewardScanActive] = useState(false)
+  const [infusionScanActive, setInfusionScanActive] = useState(false)
+  const [scanToastVisible, setScanToastVisible] = useState(false)
+  const scanToastTimerRef = useRef(null)
+  const previousNavigationLockRef = useRef(false)
   const previousStakingStatusRef = useRef(null)
   const { show: showFirstVisit, accept: acceptFirstVisit } = useFirstVisitDisclaimer()
 
@@ -131,6 +137,8 @@ export default function App() {
     : null
 
   const validatorLatestEra = resolveLatestEra(validators)
+  const isNavigationLocked = isLoading || balanceScanActive || rewardScanActive || infusionScanActive
+  const headerStatus = isNavigationLocked ? 'loading' : status
   const activeRecords = isValidatorMode ? validators : pools
   const validatorPages = Math.max(1, Math.ceil(validators.length / STAKING_RESULTS_PAGE_SIZE))
   const safeValidatorPage = Math.min(validatorPage, validatorPages)
@@ -144,6 +152,27 @@ export default function App() {
     (safePoolPage - 1) * STAKING_RESULTS_PAGE_SIZE,
     safePoolPage * STAKING_RESULTS_PAGE_SIZE,
   )
+
+  function showScanLockToast() {
+    window.clearTimeout(scanToastTimerRef.current)
+    setScanToastVisible(true)
+    scanToastTimerRef.current = window.setTimeout(() => {
+      setScanToastVisible(false)
+    }, 4200)
+  }
+
+  useEffect(() => {
+    if (isNavigationLocked && !previousNavigationLockRef.current) {
+      showScanLockToast()
+    }
+    previousNavigationLockRef.current = isNavigationLocked
+  }, [isNavigationLocked])
+
+  useEffect(() => {
+    return () => {
+      window.clearTimeout(scanToastTimerRef.current)
+    }
+  }, [])
 
   // Dynamically load Vercel Analytics React component if the package is installed.
   const [AnalyticsComponent, setAnalyticsComponent] = useState(null)
@@ -181,20 +210,29 @@ export default function App() {
   }
 
   function handleModeChange(newMode) {
-    if (status === 'loading') return // block switch during scan
+    if (isNavigationLocked) {
+      showScanLockToast()
+      return
+    }
     setMode(newMode)
     setSelectedPoolId(null)
   }
 
   function handleNavigate(dest) {
-    if (status === 'loading') return // block navigation during active scan
+    if (isNavigationLocked) {
+      showScanLockToast()
+      return
+    }
     if (view === 'staking' && dest !== 'staking') handleReset()
     setView(dest)
     window.scrollTo(0, 0)
   }
 
   function handleBack() {
-    if (status === 'loading') return
+    if (isNavigationLocked) {
+      showScanLockToast()
+      return
+    }
     if (view === 'staking') handleReset()
     setView('home')
     window.scrollTo(0, 0)
@@ -245,7 +283,7 @@ export default function App() {
   return (
     <div className="app-shell relative min-h-dvh">
       <AppHeader
-        status={status}
+        status={headerStatus}
         view={view}
         onBack={handleBack}
         onNavigate={handleNavigate}
@@ -263,21 +301,21 @@ export default function App() {
       {/* ── Balance Viewer ──────────────────────────────────────────── */}
       {view === 'balance' && (
         <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
-          <BalanceExplorer />
+          <BalanceExplorer onScanStateChange={setBalanceScanActive} />
         </main>
       )}
 
       {/* ── Reward History Viewer ─────────────────────────────────────────── */}
       {view === 'reward-history' && (
         <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
-          <RewardHistoryViewer />
+          <RewardHistoryViewer onScanStateChange={setRewardScanActive} />
         </main>
       )}
 
       {/* ── ENJ Infusion Checker ─────────────────────────────────────────── */}
       {view === 'infusion' && (
         <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
-          <InfusionChecker />
+          <InfusionChecker onScanStateChange={setInfusionScanActive} />
         </main>
       )}
 
@@ -290,31 +328,21 @@ export default function App() {
 
       {/* ── Staking view ────────────────────────────────────────────── */}
       {view === 'staking' && (
-      <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-32 space-y-5">
+      <main className="relative z-10 mx-auto w-full max-w-[100rem] space-y-4 px-3 py-4 pb-32 sm:px-6 sm:py-6 sm:space-y-5">
 
         <section className="page-hero">
-          <div className="relative z-10 grid gap-6 xl:grid-cols-[minmax(0,1.18fr)_minmax(320px,0.82fr)] xl:items-end">
-            <div className="space-y-4">
-              <div className="hero-kicker">
-                <span className="hero-dot" />
-                STAKING DIAGNOSTICS
-              </div>
-              <div className="max-w-3xl space-y-3">
-                <h1 className="hero-title text-balance">
-                  Staking rewards cadence.
-                </h1>
-                <p className="hero-copy">
-                  Scan validator or pool reward cadence, then inspect the raw detail tables.
-                </p>
-              </div>
-
+          <div className="relative z-10 flex flex-col gap-2">
+            <div className="hero-kicker self-start">
+              <span className="hero-dot" />
+              STAKING DIAGNOSTICS
             </div>
-
+            <h1 className="hero-title">Staking rewards cadence</h1>
+            <p className="hero-copy">Scan validator or pool reward cadence, then drill into the raw detail tables.</p>
           </div>
         </section>
 
         {/* Mode selector tabs + scan controls */}
-        <div className="grid gap-4 xl:grid-cols-3 xl:items-stretch">
+        <div className="grid gap-3 xl:grid-cols-3 xl:items-stretch sm:gap-4">
           <ModeSelector mode={mode} onModeChange={handleModeChange} disabled={isLoading} />
           <ControlPanel
             mode={mode}
@@ -337,68 +365,32 @@ export default function App() {
 
         {/* ── Validator mode content ──────────────────────────────── */}
         {isValidatorMode && validators.length > 0 && (
-          <section id="validators-panel" aria-labelledby="validators-heading">
-            <div className="overflow-hidden rounded-sm border border-white/[0.06] bg-surface">
-              <button
-                type="button"
-                onClick={() => setShowValidatorResults(open => !open)}
-                className="flex w-full flex-wrap items-center gap-3 bg-card px-4 py-3.5 text-left transition-colors hover:bg-surface-high sm:px-5"
-                aria-expanded={showValidatorResults}
-              >
-                <div>
-                  <p className="section-label">Results</p>
-                  <h2 id="validators-heading" className="section-title">Validators</h2>
-                </div>
-                {isLoading && (
-                  <span className="text-xs text-text-secondary">
-                    {validators.filter(v => v.fetchStatus === 'done').length} / {validators.length} loaded
-                  </span>
-                )}
-                <div className="ml-auto flex flex-wrap items-center gap-3">
-                  <span className="text-xs font-mono text-muted">
-                    {validators.length} validator{validators.length !== 1 ? 's' : ''} scanned
-                  </span>
-                  {validatorPages > 1 && (
-                    <div className="flex items-center gap-1 text-xs" onClick={e => e.stopPropagation()}>
-                      <button type="button" onClick={() => setValidatorPage(1)} disabled={safeValidatorPage === 1} className="btn-ghost disabled:opacity-30" aria-label="First page">«</button>
-                      <button type="button" onClick={() => setValidatorPage(Math.max(1, safeValidatorPage - 1))} disabled={safeValidatorPage === 1} className="btn-ghost disabled:opacity-30" aria-label="Previous page">‹ Prev</button>
-                      <span className="px-2">{safeValidatorPage} / {validatorPages}</span>
-                      <button type="button" onClick={() => setValidatorPage(Math.min(validatorPages, safeValidatorPage + 1))} disabled={safeValidatorPage === validatorPages} className="btn-ghost disabled:opacity-30" aria-label="Next page">Next ›</button>
-                      <button type="button" onClick={() => setValidatorPage(validatorPages)} disabled={safeValidatorPage === validatorPages} className="btn-ghost disabled:opacity-30" aria-label="Last page">»</button>
-                    </div>
-                  )}
-                </div>
-                <span className="text-text-secondary" aria-hidden="true">
-                  {showValidatorResults ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </span>
-              </button>
-
-              {showValidatorResults && (
-                <div className="space-y-4 px-4 py-4 sm:px-5">
-                  <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-4">
-                    {visibleValidators.map(v => (
-                      <ValidatorCard
-                        key={v.address}
-                        validator={v}
-                        eraCount={lastEraCount}
-                        latestEra={validatorLatestEra}
-                        onRetry={vRetryValidator}
-                      />
-                    ))}
-                  </div>
-                  {validatorPages > 1 && (
-                    <ResultsPagination
-                      page={safeValidatorPage}
-                      totalPages={validatorPages}
-                      totalItems={validators.length}
-                      itemLabel="validators"
-                      onPageChange={setValidatorPage}
-                    />
-                  )}
-                </div>
-              )}
+          <ResultsPanel
+            id="validators-panel"
+            heading="Validators"
+            headingId="validators-heading"
+            count={validators.length}
+            countLabel="validator"
+            isLoading={isLoading}
+            loadingLabel={isLoading ? `${validators.filter(v => v.fetchStatus === 'done').length} / ${validators.length} loaded` : null}
+            page={safeValidatorPage}
+            pages={validatorPages}
+            onPageChange={setValidatorPage}
+            open={showValidatorResults}
+            onToggleOpen={() => setShowValidatorResults(open => !open)}
+          >
+            <div className="grid gap-2 sm:gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+              {visibleValidators.map(v => (
+                <ValidatorCard
+                  key={v.address}
+                  validator={v}
+                  eraCount={lastEraCount}
+                  latestEra={validatorLatestEra}
+                  onRetry={vRetryValidator}
+                />
+              ))}
             </div>
-          </section>
+          </ResultsPanel>
         )}
 
         {isValidatorMode && isDone && validators.length > 0 && (
@@ -414,73 +406,34 @@ export default function App() {
 
         {/* ── Pool mode content ───────────────────────────────────── */}
         {!isValidatorMode && pools.length > 0 && (
-          <section id="pools-panel" aria-labelledby="pools-heading">
-            <div className="overflow-hidden rounded-sm border border-white/[0.06] bg-surface">
-              <button
-                type="button"
-                onClick={() => setShowPoolResults(open => !open)}
-                className="flex w-full flex-wrap items-center gap-3 bg-card px-4 py-3.5 text-left transition-colors hover:bg-surface-high sm:px-5"
-                aria-expanded={showPoolResults}
-              >
-                <div>
-                  <p className="section-label">Results</p>
-                  <h2 id="pools-heading" className="section-title">Nomination Pools</h2>
-                </div>
-                {isLoading && (
-                  <span className="text-xs text-text-secondary">
-                    {pools.filter(p => p.fetchStatus === 'done').length} / {pools.length} loaded
-                  </span>
-                )}
-                <div className="ml-auto flex flex-wrap items-center gap-3">
-                  <span className="text-xs font-mono text-muted">
-                    {pools.length} pool{pools.length !== 1 ? 's' : ''} scanned
-                  </span>
-                  {poolPages > 1 && (
-                    <div className="flex items-center gap-1 text-xs" onClick={e => e.stopPropagation()}>
-                      <button type="button" onClick={() => setPoolPage(1)} disabled={safePoolPage === 1} className="btn-ghost disabled:opacity-30" aria-label="First page">«</button>
-                      <button type="button" onClick={() => setPoolPage(Math.max(1, safePoolPage - 1))} disabled={safePoolPage === 1} className="btn-ghost disabled:opacity-30" aria-label="Previous page">‹ Prev</button>
-                      <span className="px-2">{safePoolPage} / {poolPages}</span>
-                      <button type="button" onClick={() => setPoolPage(Math.min(poolPages, safePoolPage + 1))} disabled={safePoolPage === poolPages} className="btn-ghost disabled:opacity-30" aria-label="Next page">Next ›</button>
-                      <button type="button" onClick={() => setPoolPage(poolPages)} disabled={safePoolPage === poolPages} className="btn-ghost disabled:opacity-30" aria-label="Last page">»</button>
-                    </div>
-                  )}
-                </div>
-                <span className="text-text-secondary" aria-hidden="true">
-                  {showPoolResults ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </span>
-              </button>
-
-              {showPoolResults && (
-                <div className="space-y-4 px-4 py-4 sm:px-5">
-                  <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-4">
-                    {visiblePools.map(p => (
-                      <PoolCard
-                        key={p.poolId}
-                        pool={p}
-                        eraCount={lastEraCount}
-                        latestEra={poolLatestEra}
-                        onRetry={pRetryPoolValidator}
-                        open={selectedPoolId === p.poolId}
-                        onOpenChange={next => setSelectedPoolId(next ? p.poolId : null)}
-                      />
-                    ))}
-                  </div>
-                  {poolPages > 1 && (
-                    <ResultsPagination
-                      page={safePoolPage}
-                      totalPages={poolPages}
-                      totalItems={pools.length}
-                      itemLabel="pools"
-                      onPageChange={nextPage => {
-                        setSelectedPoolId(null)
-                        setPoolPage(nextPage)
-                      }}
-                    />
-                  )}
-                </div>
-              )}
+          <ResultsPanel
+            id="pools-panel"
+            heading="Nomination Pools"
+            headingId="pools-heading"
+            count={pools.length}
+            countLabel="pool"
+            isLoading={isLoading}
+            loadingLabel={isLoading ? `${pools.filter(p => p.fetchStatus === 'done').length} / ${pools.length} loaded` : null}
+            page={safePoolPage}
+            pages={poolPages}
+            onPageChange={(nextPage) => { setSelectedPoolId(null); setPoolPage(nextPage) }}
+            open={showPoolResults}
+            onToggleOpen={() => setShowPoolResults(open => !open)}
+          >
+            <div className="grid gap-2 sm:gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+              {visiblePools.map(p => (
+                <PoolCard
+                  key={p.poolId}
+                  pool={p}
+                  eraCount={lastEraCount}
+                  latestEra={poolLatestEra}
+                  onRetry={pRetryPoolValidator}
+                  open={selectedPoolId === p.poolId}
+                  onOpenChange={next => setSelectedPoolId(next ? p.poolId : null)}
+                />
+              ))}
             </div>
-          </section>
+          </ResultsPanel>
         )}
 
         {!isValidatorMode && isDone && pools.length > 0 && (
@@ -496,7 +449,7 @@ export default function App() {
         {/* ── Empty / error states ────────────────────────────────── */}
         {status === 'idle' && activeRecords.length > 0 && (
           <div className="rounded-sm border border-white/[0.06] bg-surface px-6 py-12 text-center shadow-ambient sm:py-16">
-            <div className="w-16 h-16 mx-auto mb-5 rounded-xl bg-card
+            <div className="w-16 h-16 mx-auto mb-5 rounded-sm bg-card
                             flex items-center justify-center">
               <svg viewBox="0 0 32 32" className="w-8 h-8 fill-primary/60">
                 <circle cx="16" cy="16" r="4"/>
@@ -547,9 +500,58 @@ export default function App() {
         <DisclaimerModal mode="about" onClose={() => setShowAbout(false)} />
       )}
 
+      {scanToastVisible && (
+        <div className="pointer-events-none fixed bottom-6 left-1/2 z-[120] w-[min(92vw,44rem)] -translate-x-1/2 rounded-sm border border-warning/40 bg-card/95 px-4 py-3 shadow-ambient backdrop-blur-sm">
+          <p className="text-sm font-medium text-warning">Scan in progress.</p>
+          <p className="text-xs text-text-secondary">If you want to open another tool or page, stop the current scan first.</p>
+        </div>
+      )}
+
       {/* Vercel Analytics (lazy-loaded if dependency installed) */}
       {AnalyticsComponent && <AnalyticsComponent />}
     </div>
+  )
+}
+
+function ResultsPanel({ id, heading, headingId, count, countLabel, isLoading, loadingLabel, page, pages, onPageChange, open, onToggleOpen, children }) {
+  return (
+    <section id={id} aria-labelledby={headingId} className="overflow-hidden rounded-sm border border-[var(--hairline)] bg-surface">
+      <button
+        type="button"
+        onClick={onToggleOpen}
+        className="flex w-full items-center gap-2 bg-card px-3 py-2.5 text-left transition-colors hover:bg-surface-high sm:px-4 sm:py-3"
+        aria-expanded={open}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="section-label">Results</p>
+          <h2 id={headingId} className="font-headline text-base font-bold text-text sm:text-xl">{heading}</h2>
+        </div>
+        <span className="hidden text-[11px] font-mono text-muted sm:inline">
+          {count.toLocaleString('en')} {countLabel}{count !== 1 ? 's' : ''}
+        </span>
+        {isLoading && loadingLabel && (
+          <span className="text-[11px] text-text-secondary">{loadingLabel}</span>
+        )}
+        <span className="text-text-secondary" aria-hidden="true">
+          {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </span>
+      </button>
+
+      {open && (
+        <div className="space-y-3 px-3 py-3 sm:px-4 sm:py-4">
+          {children}
+          {pages > 1 && (
+            <ResultsPagination
+              page={page}
+              totalPages={pages}
+              totalItems={count}
+              itemLabel={`${countLabel}s`}
+              onPageChange={onPageChange}
+            />
+          )}
+        </div>
+      )}
+    </section>
   )
 }
 

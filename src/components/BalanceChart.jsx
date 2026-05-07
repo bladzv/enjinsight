@@ -274,56 +274,49 @@ export default function BalanceChart({ records }) {
   ]
 
   return (
-    <div className="animate-fade-in rounded-[1.35rem] bg-surface p-5 shadow-ambient">
+    <div className="animate-fade-in data-panel">
       {/* Card header */}
       <div className="data-toolbar">
         <div>
           <p className="section-label">Visualization</p>
-          <h3 className="mt-2 font-headline text-xl font-bold text-text sm:text-[1.6rem]">Aggregated Asset Flow</h3>
-          <p className="mt-2 text-sm text-text-secondary">Archive snapshots across the selected balance range.</p>
+          <h3 className="mt-1 font-headline text-base font-bold text-text sm:text-lg">Aggregated Asset Flow</h3>
+          <p className="mt-1 text-xs leading-snug text-text-secondary sm:text-sm">Archive snapshots across the selected balance range.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           {isDecimated && (
             <span className="mini-chip">
-              ~{CHART_MAX_PTS} sampled of {records.length.toLocaleString('en')}
+              ~{CHART_MAX_PTS} of {records.length.toLocaleString('en')}
             </span>
           )}
-          {/* Height zoom controls */}
-          <div className="flex items-center gap-1" title="Chart height">
+          <div className="flex items-center gap-0.5 rounded-sm border border-[var(--hairline)] bg-card p-0.5" title="Chart height">
             <button
-              className="w-6 h-6 rounded bg-card text-text-secondary text-sm font-bold
-                         flex items-center justify-center hover:text-cyan transition-colors"
+              className="flex h-6 w-6 items-center justify-center rounded-sm text-xs font-bold text-text-secondary transition-colors hover:text-cyan disabled:opacity-40"
               onClick={() => setZoomIdx(i => Math.max(0, i - 1))}
               aria-label="Chart zoom out"
               disabled={zoomIdx === 0}
             >−</button>
-            <span className="font-mono text-[11px] text-text-secondary w-9 text-center">{zoomPct}%</span>
+            <span className="w-9 text-center font-mono text-[10px] text-text-secondary">{zoomPct}%</span>
             <button
-              className="w-6 h-6 rounded bg-card text-text-secondary text-sm font-bold
-                         flex items-center justify-center hover:text-cyan transition-colors"
+              className="flex h-6 w-6 items-center justify-center rounded-sm text-xs font-bold text-text-secondary transition-colors hover:text-cyan disabled:opacity-40"
               onClick={() => setZoomIdx(i => Math.min(ZOOM_STEPS.length - 1, i + 1))}
               aria-label="Chart zoom in"
               disabled={zoomIdx === ZOOM_STEPS.length - 1}
             >+</button>
-            <button
-              className="w-6 h-6 rounded bg-card text-[10px] text-text-secondary font-bold
-                         flex items-center justify-center hover:text-cyan transition-colors"
-              onClick={() => setZoomIdx(DEFAULT_ZOOM_IDX)}
-              aria-label="Reset chart zoom"
-            >⊙</button>
           </div>
         </div>
       </div>
 
       {/* Mode toggles */}
-      <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Chart mode">
+      <div className="mb-3 flex flex-wrap gap-1" role="group" aria-label="Chart mode">
         {modeButtons.map(({ key, label, activeColour }) => (
           <button
             key={key}
-            className={`rounded-full border px-3 py-1.5 text-xs font-bold tracking-wide transition-all
-                        ${mode === key
-                          ? activeColour
-                          : 'border-[rgba(70,71,82,0.10)] text-text-secondary hover:text-text bg-transparent'}`}
+            className={`rounded-sm border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors ${
+              mode === key
+                ? activeColour
+                : 'border-[var(--hairline)] bg-card text-text-secondary hover:text-text'
+            }`}
+            style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}
             onClick={() => setMode(key)}
           >
             {label}
