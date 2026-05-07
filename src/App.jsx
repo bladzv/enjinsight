@@ -501,7 +501,7 @@ export default function App() {
       )}
 
       {scanToastVisible && (
-        <div className="pointer-events-none fixed bottom-6 left-1/2 z-[120] w-[min(92vw,44rem)] -translate-x-1/2 rounded-sm border border-warning/40 bg-card/95 px-4 py-3 shadow-ambient backdrop-blur-sm">
+        <div className="pointer-events-none fixed top-6 left-1/2 z-[120] w-[min(92vw,44rem)] -translate-x-1/2 rounded-sm border border-warning/40 bg-card/95 px-4 py-3 shadow-ambient backdrop-blur-sm">
           <p className="text-sm font-medium text-warning">Scan in progress.</p>
           <p className="text-xs text-text-secondary">If you want to open another tool or page, stop the current scan first.</p>
         </div>
