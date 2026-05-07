@@ -30,6 +30,35 @@ Set these in Vercel Project Settings -> Environment Variables:
   - Recommended value: `enjin.api.subscan.io`
 - `PROXY_SECRET` (optional but recommended)
   - If set, requests to proxy must include `x-proxy-secret`
+- `ETHERSCAN_API_KEY`
+  - Required for ENJ Infusion wallet/token detail discovery
+- `ALCHEMY_ETH_RPC_URL` (recommended)
+  - Used for Ethereum RPC reads and wallet discovery fallback
+- `OPENSEA_API_KEY` (recommended)
+  - Used server-side for metadata fallback when token URI metadata is unavailable
+- `OPENSEA_API_KEY_EXPIRES_AT` (optional)
+  - ISO-8601 timestamp for operations visibility
+
+## OpenSea Key Rotation (Every ~20 Days)
+
+This repository includes a scheduled workflow at `.github/workflows/rotate-opensea-key.yml`.
+
+What it does:
+
+1. Calls OpenSea instant-key API (`POST /api/v2/auth/keys`)
+2. Parses `api_key` and `expires_at`
+3. Replaces `OPENSEA_API_KEY` and `OPENSEA_API_KEY_EXPIRES_AT` in Vercel production env
+
+GitHub Secrets required by the workflow:
+
+- `VERCEL_TOKEN`
+- `VERCEL_PROJECT_ID`
+- `VERCEL_TEAM_ID` (set when project is under a team)
+
+Security note:
+
+- Never commit OpenSea keys to source control.
+- Keep all API keys server-side only.
 
 ## Routing / Proxy Notes
 
