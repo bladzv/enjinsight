@@ -52,50 +52,16 @@ jobs:
             -H "Authorization: Bearer ${VERCEL_TOKEN}" \
             "${BASE_URL}/v9/projects/${VERCEL_PROJECT_ID}/env${TEAM_QUERY}")"
 
-          ENVS_JSON="$ENVS_JSON" python - <<'PY'
-import json
-import os
-import subprocess
-import sys
-
-key_name = os.environ['KEY_NAME']
-envs = json.loads(os.environ['ENVS_JSON']).get('envs', [])
-project_id = os.environ['VERCEL_PROJECT_ID']
-token = os.environ['VERCEL_TOKEN']
-team = os.environ.get('VERCEL_TEAM_ID', '')
-base = 'https://api.vercel.com'
-q = f'?teamId={team}' if team else ''
-
-for env in envs:
-  if env.get('key') != key_name or not env.get('id'):
-    continue
-
-  proc = subprocess.run(
-    [
-      'curl',
-      '--fail-with-body',
-      '-sS',
-      '-X',
-      'DELETE',
-      '-H',
-      f'Authorization: Bearer {token}',
-      f"{base}/v9/projects/{project_id}/env/{env.get('id')}{q}",
-    ],
-    text=True,
-    capture_output=True,
-    check=False,
-  )
-
-  if proc.returncode == 0:
-    continue
-
-  output = (proc.stdout or '') + (proc.stderr or '')
-  if '"code":"not_found"' in output or 'Project Environment Variable not found' in output:
-    continue
-
-  sys.stderr.write(output)
-  sys.exit(proc.returncode)
-PY
+          IDS=$(echo "$ENVS_JSON" | jq -r --arg key "$KEY_NAME" '.envs[] | select(.key==$key) | .id // empty')
+          for ID in $IDS; do
+            HTTP_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" -X DELETE \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+              "${BASE_URL}/v9/projects/${VERCEL_PROJECT_ID}/env/${ID}${TEAM_QUERY}" || true)
+            if [ "$HTTP_STATUS" != "200" ] && [ "$HTTP_STATUS" != "204" ] && [ "$HTTP_STATUS" != "404" ]; then
+              echo "ERROR: DELETE env id=${ID} returned HTTP ${HTTP_STATUS}"
+              exit 1
+            fi
+          done
 
           curl --fail-with-body -sS -X POST \
             -H "Authorization: Bearer ${VERCEL_TOKEN}" \
@@ -124,50 +90,16 @@ PY
             -H "Authorization: Bearer ${VERCEL_TOKEN}" \
             "${BASE_URL}/v9/projects/${VERCEL_PROJECT_ID}/env${TEAM_QUERY}")"
 
-          ENVS_JSON="$ENVS_JSON" python - <<'PY'
-import json
-import os
-import subprocess
-import sys
-
-key_name = os.environ['KEY_NAME']
-envs = json.loads(os.environ['ENVS_JSON']).get('envs', [])
-project_id = os.environ['VERCEL_PROJECT_ID']
-token = os.environ['VERCEL_TOKEN']
-team = os.environ.get('VERCEL_TEAM_ID', '')
-base = 'https://api.vercel.com'
-q = f'?teamId={team}' if team else ''
-
-for env in envs:
-  if env.get('key') != key_name or not env.get('id'):
-    continue
-
-  proc = subprocess.run(
-    [
-      'curl',
-      '--fail-with-body',
-      '-sS',
-      '-X',
-      'DELETE',
-      '-H',
-      f'Authorization: Bearer {token}',
-      f"{base}/v9/projects/{project_id}/env/{env.get('id')}{q}",
-    ],
-    text=True,
-    capture_output=True,
-    check=False,
-  )
-
-  if proc.returncode == 0:
-    continue
-
-  output = (proc.stdout or '') + (proc.stderr or '')
-  if '"code":"not_found"' in output or 'Project Environment Variable not found' in output:
-    continue
-
-  sys.stderr.write(output)
-  sys.exit(proc.returncode)
-PY
+          IDS=$(echo "$ENVS_JSON" | jq -r --arg key "$KEY_NAME" '.envs[] | select(.key==$key) | .id // empty')
+          for ID in $IDS; do
+            HTTP_STATUS=$(curl -sS -o /dev/null -w "%{http_code}" -X DELETE \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+              "${BASE_URL}/v9/projects/${VERCEL_PROJECT_ID}/env/${ID}${TEAM_QUERY}" || true)
+            if [ "$HTTP_STATUS" != "200" ] && [ "$HTTP_STATUS" != "204" ] && [ "$HTTP_STATUS" != "404" ]; then
+              echo "ERROR: DELETE env id=${ID} returned HTTP ${HTTP_STATUS}"
+              exit 1
+            fi
+          done
 
           curl --fail-with-body -sS -X POST \
             -H "Authorization: Bearer ${VERCEL_TOKEN}" \
