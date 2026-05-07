@@ -33,8 +33,10 @@ const SINGLE_PROGRESS_PHASES = [
 ]
 const BULK_PROGRESS_PHASES = [
   { key: 'wallet', label: 'Fetch Wallet Tokens', total: 1, completed: 0, status: 'pending' },
+  { key: 'metadata', label: 'Fetch Token Metadata', total: 1, completed: 0, status: 'pending' },
   { key: 'infusions', label: 'Read Infusions', total: 1, completed: 0, status: 'pending' },
   { key: 'review', label: 'Review Results', total: 1, completed: 0, status: 'pending' },
+  { key: 'retries', label: 'Retry Failed Reads', total: 0, completed: 0, status: 'pending' },
 ]
 
 const RPC_ENDPOINTS = [
@@ -273,11 +275,12 @@ function mergeTokenMetadata(base, detail) {
     quantity: detail.quantity || base.quantity,
     name: detail.name || base.name,
     previewImage: detail.previewImage || base.previewImage,
+    imageUrl: detail.imageUrl || base.imageUrl,
     description: detail.description || base.description,
     properties: detail.properties?.length ? detail.properties : base.properties,
     tokenUri: detail.tokenUri || base.tokenUri,
     metadataError: detail.metadataError || base.metadataError,
-    source: detail.tokenUri ? 'etherscan-api-eth-call' : base.source,
+    source: detail.source || (detail.tokenUri ? 'etherscan-api-eth-call' : base.source),
   }
 }
 
@@ -304,6 +307,8 @@ export default function InfusionChecker({ onScanStateChange }) {
   const [rows, setRows] = useState([])
   const [bulkStarted, setBulkStarted] = useState(false)
   const [bulkExpectedTotal, setBulkExpectedTotal] = useState(0)
+  const [metadataProgress, setMetadataProgress] = useState({ total: 0, completed: 0 })
+  const [retryProgress, setRetryProgress] = useState({ total: 0, completed: 0, active: false })
   const [bulkPage, setBulkPage] = useState(1)
   const [bulkPageSize, setBulkPageSize] = useState(10)
   const [bulkSearch, setBulkSearch] = useState('')
@@ -358,22 +363,70 @@ export default function InfusionChecker({ onScanStateChange }) {
     if (!bulkStarted) return BULK_PROGRESS_PHASES
     const checked = rows.length
     const total = Math.max(1, bulkExpectedTotal)
+    const metadataTotal = Math.max(1, metadataProgress.total || bulkExpectedTotal || 1)
+    const metadataDone = Math.min(metadataProgress.completed, metadataTotal)
     const finished = bulkExpectedTotal > 0 && checked >= bulkExpectedTotal && !isLoading
+    const reviewDone = !isLoading && (rows.length > 0 || bulkExpectedTotal === 0)
+
+    const walletStatus = bulkExpectedTotal > 0
+      ? 'completed'
+      : isLoading
+        ? 'in_progress'
+        : 'pending'
+
+    const metadataStatus = metadataDone >= metadataTotal && metadataProgress.total > 0
+      ? 'completed'
+      : metadataDone > 0 || (isLoading && bulkExpectedTotal > 0)
+        ? 'in_progress'
+        : 'pending'
+
+    const retryTotal = Math.max(0, retryProgress.total)
+    const retryDone = Math.min(retryProgress.completed, retryTotal)
+    const retryStatus = retryProgress.active
+      ? 'in_progress'
+      : retryTotal > 0 && retryDone >= retryTotal
+        ? 'completed'
+        : 'pending'
 
     return [
-      { ...BULK_PROGRESS_PHASES[0], completed: bulkExpectedTotal > 0 ? 1 : 0, status: bulkExpectedTotal > 0 ? 'completed' : 'in_progress' },
+      { ...BULK_PROGRESS_PHASES[0], completed: bulkExpectedTotal > 0 ? 1 : 0, status: walletStatus },
       {
         ...BULK_PROGRESS_PHASES[1],
+        total: metadataTotal,
+        completed: metadataDone,
+        status: metadataStatus,
+      },
+      {
+        ...BULK_PROGRESS_PHASES[2],
         total,
         completed: Math.min(checked, total),
         status: finished ? 'completed' : checked > 0 || isLoading ? 'in_progress' : 'pending',
       },
-      { ...BULK_PROGRESS_PHASES[2], completed: finished ? 1 : 0, status: finished ? 'completed' : 'pending' },
+      { ...BULK_PROGRESS_PHASES[3], completed: reviewDone ? 1 : 0, status: reviewDone ? 'completed' : 'pending' },
+      {
+        ...BULK_PROGRESS_PHASES[4],
+        total: retryTotal,
+        completed: retryDone,
+        status: retryStatus,
+      },
     ]
-  }, [amount, bulkExpectedTotal, bulkStarted, isLoading, mode, rows.length, singleStarted])
+  }, [
+    amount,
+    bulkExpectedTotal,
+    bulkStarted,
+    isLoading,
+    metadataProgress.completed,
+    metadataProgress.total,
+    mode,
+    retryProgress.active,
+    retryProgress.completed,
+    retryProgress.total,
+    rows.length,
+    singleStarted,
+  ])
   const progressTitle = 'Scan Progress'
   const progressSummary = mode === 'wallet' && bulkStarted && bulkExpectedTotal > 0
-    ? `${rows.length} / ${bulkExpectedTotal} token reads completed.`
+    ? `${rows.length} / ${bulkExpectedTotal} infusion reads, ${Math.min(metadataProgress.completed, metadataProgress.total || bulkExpectedTotal)} / ${Math.max(metadataProgress.total || bulkExpectedTotal, 1)} metadata lookups.`
     : null
   const filteredSortedRows = useMemo(() => {
     const query = bulkSearch.trim().toLowerCase()
@@ -535,15 +588,23 @@ export default function InfusionChecker({ onScanStateChange }) {
 
         try {
           const parsedTokenId = validateTokenId(token.tokenId)
+          const detailPromise = fetchTokenDetails(token.metadata.owner, token.tokenId, signal)
+            .then(details => ({ details }))
+            .catch(error => ({ detailsError: error.message }))
+            .finally(() => {
+              setMetadataProgress(current => ({
+                ...current,
+                completed: Math.min(current.total || tokens.length, current.completed + 1),
+              }))
+            })
+
           const [raw, detailResult] = await Promise.all([
             readInfusion(parsedTokenId, event => {
               if (event.phase === 'start') log('info', `Token ${formatTokenId(token.tokenId)}: querying ${event.label}`)
               if (event.phase === 'success') log('ok', `Token ${formatTokenId(token.tokenId)}: RPC response from ${event.label}`)
               if (event.phase === 'error') log('warn', `Token ${formatTokenId(token.tokenId)}: ${event.label}: ${event.error}`)
             }, signal),
-            fetchTokenDetails(token.metadata.owner, token.tokenId, signal)
-              .then(details => ({ details }))
-              .catch(error => ({ detailsError: error.message })),
+            detailPromise,
           ])
           const metadata = mergeTokenMetadata(token.metadata, detailResult.details)
 
@@ -592,6 +653,9 @@ export default function InfusionChecker({ onScanStateChange }) {
   async function retryBulkRow(row) {
     if (!row?.tokenId || retryingTokenIds.has(row.tokenId)) return false
 
+    if (!isRetryingAllFailed) {
+      setRetryProgress({ total: 1, completed: 0, active: true })
+    }
     setRetryingTokenIds(current => new Set(current).add(row.tokenId))
     setBulkFailureMessage('')
     log('info', `Retrying token ${formatTokenId(row.tokenId)}`)
@@ -637,6 +701,9 @@ export default function InfusionChecker({ onScanStateChange }) {
       log('err', `Retry ${formatTokenId(row.tokenId)} failed: ${error.message}`)
       return false
     } finally {
+      if (!isRetryingAllFailed) {
+        setRetryProgress(current => ({ ...current, completed: current.total, active: false }))
+      }
       setRetryingTokenIds(current => {
         const next = new Set(current)
         next.delete(row.tokenId)
@@ -652,6 +719,7 @@ export default function InfusionChecker({ onScanStateChange }) {
     if (!failedRows.length) return
 
     setIsRetryingAllFailed(true)
+    setRetryProgress({ total: failedRows.length, completed: 0, active: true })
     setBulkFailureMessage('')
     setBulkStatus(`Retrying ${failedRows.length} failed token read${failedRows.length === 1 ? '' : 's'}.`)
     log('info', `Retrying ${failedRows.length} failed token read${failedRows.length === 1 ? '' : 's'}.`)
@@ -664,6 +732,10 @@ export default function InfusionChecker({ onScanStateChange }) {
         const ok = await retryBulkRow(row)
         if (ok) succeeded += 1
         else failed += 1
+        setRetryProgress(current => ({
+          ...current,
+          completed: Math.min(current.total, current.completed + 1),
+        }))
       }
 
       setRows(current => {
@@ -686,6 +758,7 @@ export default function InfusionChecker({ onScanStateChange }) {
       })
       log(failed === 0 ? 'ok' : 'warn', `Retry all finished: ${succeeded} succeeded, ${failed} failed.`)
     } finally {
+      setRetryProgress(current => ({ ...current, active: false }))
       setIsRetryingAllFailed(false)
     }
   }
@@ -703,6 +776,8 @@ export default function InfusionChecker({ onScanStateChange }) {
       setRows([])
       setBulkStarted(true)
       setBulkExpectedTotal(0)
+      setMetadataProgress({ total: 0, completed: 0 })
+      setRetryProgress({ total: 0, completed: 0, active: false })
       setBulkPage(1)
       setBulkSearch('')
       setBulkSort({ key: '', direction: 'asc' })
@@ -724,6 +799,7 @@ export default function InfusionChecker({ onScanStateChange }) {
       }
 
       setBulkExpectedTotal(tokens.length)
+      setMetadataProgress({ total: tokens.length, completed: 0 })
       setRawValue(`Found ${tokens.length} token IDs. Reading infusion values.`)
       log('ok', `Found ${tokens.length} token IDs. Reading infusion values (concurrency=${BULK_RPC_CONCURRENCY}).`)
 
@@ -1203,6 +1279,8 @@ function TokenDetailsModal({ row, onClose }) {
               <DetailField label="Token ID" value={metadata?.tokenId || row.tokenId} />
               <DetailField label="Token Standard" value={metadata?.tokenStandard} />
               <DetailField label="Quantity" value={metadata?.quantity} />
+              <DetailField label="Metadata URI" value={metadata?.tokenUri} />
+              <DetailField label="Image URL" value={metadata?.imageUrl || metadata?.previewImage} />
             </div>
           </div>
 

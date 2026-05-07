@@ -1,0 +1,137 @@
+name: Rotate OpenSea API Key
+
+on:
+  schedule:
+    - cron: '0 3 1,21 * *'
+  workflow_dispatch:
+
+jobs:
+  rotate-opensea-key:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Request new OpenSea instant key
+        id: opensea
+        run: |
+          set -euo pipefail
+          RESPONSE="$(curl -sS -X POST https://api.opensea.io/api/v2/auth/keys)"
+          echo "$RESPONSE" > opensea_response.json
+
+          API_KEY="$(python - <<'PY'
+import json
+with open('opensea_response.json', 'r', encoding='utf-8') as f:
+    data = json.load(f)
+print(data.get('api_key', ''))
+PY
+)"
+          EXPIRES_AT="$(python - <<'PY'
+import json
+with open('opensea_response.json', 'r', encoding='utf-8') as f:
+    data = json.load(f)
+print(data.get('expires_at', ''))
+PY
+)"
+
+          if [ -z "$API_KEY" ] || [ -z "$EXPIRES_AT" ]; then
+            echo "OpenSea key creation failed: $(cat opensea_response.json)"
+            exit 1
+          fi
+
+          echo "api_key=$API_KEY" >> "$GITHUB_OUTPUT"
+          echo "expires_at=$EXPIRES_AT" >> "$GITHUB_OUTPUT"
+
+      - name: Upsert OPENSEA_API_KEY in Vercel production env
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          NEW_VALUE: ${{ steps.opensea.outputs.api_key }}
+          KEY_NAME: OPENSEA_API_KEY
+        run: |
+          set -euo pipefail
+          BASE_URL="https://api.vercel.com"
+          TEAM_QUERY=""
+          if [ -n "${VERCEL_TEAM_ID:-}" ]; then TEAM_QUERY="?teamId=${VERCEL_TEAM_ID}"; fi
+
+          ENVS_JSON="$(curl -sS -X GET \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            "${BASE_URL}/v9/projects/${VERCEL_PROJECT_ID}/env${TEAM_QUERY}")"
+
+          python - <<'PY'
+import json, os, subprocess
+key_name = os.environ['KEY_NAME']
+envs = json.loads(os.environ['ENVS_JSON']).get('envs', [])
+project_id = os.environ['VERCEL_PROJECT_ID']
+token = os.environ['VERCEL_TOKEN']
+team = os.environ.get('VERCEL_TEAM_ID', '')
+base = 'https://api.vercel.com'
+q = f'?teamId={team}' if team else ''
+for env in envs:
+    if env.get('key') != key_name:
+        continue
+    env_id = env.get('id')
+    if not env_id:
+        continue
+    subprocess.run([
+        'curl','-sS','-X','DELETE',
+        '-H', f'Authorization: Bearer {token}',
+        f'{base}/v9/projects/{project_id}/env/{env_id}{q}'
+    ], check=True)
+PY
+
+          curl -sS -X POST \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${BASE_URL}/v10/projects/${VERCEL_PROJECT_ID}/env${TEAM_QUERY}" \
+            --data "{\"key\":\"${KEY_NAME}\",\"value\":\"${NEW_VALUE}\",\"type\":\"encrypted\",\"target\":[\"production\"]}" >/dev/null
+
+      - name: Upsert OPENSEA_API_KEY_EXPIRES_AT in Vercel production env
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+          NEW_VALUE: ${{ steps.opensea.outputs.expires_at }}
+          KEY_NAME: OPENSEA_API_KEY_EXPIRES_AT
+        run: |
+          set -euo pipefail
+          BASE_URL="https://api.vercel.com"
+          TEAM_QUERY=""
+          if [ -n "${VERCEL_TEAM_ID:-}" ]; then TEAM_QUERY="?teamId=${VERCEL_TEAM_ID}"; fi
+
+          ENVS_JSON="$(curl -sS -X GET \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            "${BASE_URL}/v9/projects/${VERCEL_PROJECT_ID}/env${TEAM_QUERY}")"
+
+          python - <<'PY'
+import json, os, subprocess
+key_name = os.environ['KEY_NAME']
+envs = json.loads(os.environ['ENVS_JSON']).get('envs', [])
+project_id = os.environ['VERCEL_PROJECT_ID']
+token = os.environ['VERCEL_TOKEN']
+team = os.environ.get('VERCEL_TEAM_ID', '')
+base = 'https://api.vercel.com'
+q = f'?teamId={team}' if team else ''
+for env in envs:
+    if env.get('key') != key_name:
+        continue
+    env_id = env.get('id')
+    if not env_id:
+        continue
+    subprocess.run([
+        'curl','-sS','-X','DELETE',
+        '-H', f'Authorization: Bearer {token}',
+        f'{base}/v9/projects/{project_id}/env/{env_id}{q}'
+    ], check=True)
+PY
+
+          curl -sS -X POST \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "${BASE_URL}/v10/projects/${VERCEL_PROJECT_ID}/env${TEAM_QUERY}" \
+            --data "{\"key\":\"${KEY_NAME}\",\"value\":\"${NEW_VALUE}\",\"type\":\"encrypted\",\"target\":[\"production\"]}" >/dev/null
+
+      - name: Summary
+        run: |
+          echo "Rotated OpenSea API key and updated production env values in Vercel."
