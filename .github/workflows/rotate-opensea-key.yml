@@ -8,6 +8,7 @@ on:
 jobs:
   rotate-opensea-key:
     runs-on: ubuntu-latest
+    environment: Production
     permissions:
       contents: read
 
@@ -39,6 +40,10 @@ jobs:
           KEY_NAME: OPENSEA_API_KEY
         run: |
           set -euo pipefail
+          if [ -z "${VERCEL_TOKEN}" ] || [ -z "${VERCEL_PROJECT_ID}" ]; then
+            echo "ERROR: VERCEL_TOKEN and VERCEL_PROJECT_ID secrets must be set."
+            exit 1
+          fi
           BASE_URL="https://api.vercel.com"
           TEAM_QUERY=""
           if [ -n "${VERCEL_TEAM_ID:-}" ]; then TEAM_QUERY="?teamId=${VERCEL_TEAM_ID}"; fi
@@ -64,6 +69,10 @@ jobs:
           KEY_NAME: OPENSEA_API_KEY_EXPIRES_AT
         run: |
           set -euo pipefail
+          if [ -z "${VERCEL_TOKEN}" ] || [ -z "${VERCEL_PROJECT_ID}" ]; then
+            echo "ERROR: VERCEL_TOKEN and VERCEL_PROJECT_ID secrets must be set."
+            exit 1
+          fi
           BASE_URL="https://api.vercel.com"
           TEAM_QUERY=""
           if [ -n "${VERCEL_TEAM_ID:-}" ]; then TEAM_QUERY="?teamId=${VERCEL_TEAM_ID}"; fi
