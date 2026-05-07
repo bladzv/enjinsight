@@ -50,10 +50,12 @@ const ENJ_TOKEN_DETAILS_PATH = '/api/enj-token-details'
 const ENJIN_CRYPTOITEMS_CONTRACT = '0xfaafdc07907ff5120a76b34b731b278c38d6043c'
 const ETHERSCAN_API_URL = 'https://api.etherscan.io/v2/api'
 const ETHERSCAN_CHAIN_ID = '1'
+const OPENSEA_API_URL = 'https://api.opensea.io/api/v2'
 const ETHERSCAN_DETAIL_TTL_MS = 5 * 60 * 1000
 const ETHERSCAN_CONTRACT_TTL_MS = 24 * 60 * 60 * 1000
 const URI_SELECTOR = '0x0e89341c'
 const BALANCE_OF_SELECTOR = '0x00fdd58e'
+const ALCHEMY_TRANSFER_SELECTOR = 'alchemy_getAssetTransfers'
 
 // Etherscan and Alchemy are capped at 3 calls/sec per warm function instance.
 // Truly global coordination would require a shared store such as Redis/KV.
@@ -67,6 +69,12 @@ const _alchemyBucket = {
   tokens: 3,
   max: 3,
   rate: 3,
+  lastRefill: Date.now(),
+}
+const _openSeaBucket = {
+  tokens: 1,
+  max: 1,
+  rate: 1,
   lastRefill: Date.now(),
 }
 let _contractCreatorPromise = null
@@ -138,6 +146,34 @@ function takeAlchemyToken() {
   return takeApiToken(_alchemyBucket)
 }
 
+function takeOpenSeaToken() {
+  return takeApiToken(_openSeaBucket)
+}
+
+async function fetchWithRetries(url, options, retryOptions = {}) {
+  const {
+    attempts = 3,
+    baseDelayMs = 400,
+    allowStatuses = [],
+  } = retryOptions
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const response = await fetch(url, options)
+    if (allowStatuses.includes(response.status)) return response
+
+    const retryable = response.status === 429 || (response.status >= 500 && response.status < 600)
+    if (!retryable || attempt === attempts) return response
+
+    const retryAfter = Number(response.headers.get('retry-after') || '')
+    const delayMs = Number.isFinite(retryAfter) && retryAfter > 0
+      ? retryAfter * 1000
+      : Math.round(baseDelayMs * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.2))
+    await delay(delayMs)
+  }
+
+  return fetch(url, options)
+}
+
 function encodeUint256(value) {
   return BigInt(value).toString(16).padStart(64, '0')
 }
@@ -164,11 +200,31 @@ function decodeUint256(hex) {
 
 function normalizeMetadataUrl(uri, tokenId) {
   if (!uri) return ''
-  const tokenHex = BigInt(tokenId).toString(16).padStart(64, '0').toLowerCase()
+  const tokenHex = tokenId && /^\d+$/.test(String(tokenId))
+    ? BigInt(tokenId).toString(16).padStart(64, '0').toLowerCase()
+    : ''
   const resolved = uri.replaceAll('{id}', tokenHex)
   if (resolved.startsWith('ipfs://')) return `https://ipfs.io/ipfs/${resolved.slice('ipfs://'.length)}`
   if (resolved.startsWith('ipns://')) return `https://ipfs.io/ipns/${resolved.slice('ipns://'.length)}`
   if (/^https:\/\//i.test(resolved)) return resolved
+  return ''
+}
+
+function parseBigIntValue(raw, defaultValue = 0n) {
+  if (raw == null) return defaultValue
+  const value = String(raw).trim()
+  if (!value) return defaultValue
+  if (/^0x[0-9a-f]+$/i.test(value)) return BigInt(value)
+  if (/^\d+$/.test(value)) return BigInt(value)
+  return defaultValue
+}
+
+function normalizeTokenId(raw) {
+  if (raw == null) return ''
+  const value = String(raw).trim().toLowerCase()
+  if (!value) return ''
+  if (/^0x[0-9a-f]+$/.test(value)) return BigInt(value).toString()
+  if (/^\d+$/.test(value)) return value
   return ''
 }
 
@@ -186,6 +242,7 @@ function normalizeMetadataJson(body, tokenId) {
     tokenId,
     name: typeof body.name === 'string' ? body.name : '',
     previewImage: normalizeMetadataUrl(typeof body.image === 'string' ? body.image : '', tokenId),
+    imageUrl: normalizeMetadataUrl(typeof body.image === 'string' ? body.image : '', tokenId),
     description: typeof body.description === 'string' ? body.description : '',
     properties: attributes,
   }
@@ -195,30 +252,54 @@ async function fetchEtherscanApi(params, options = {}) {
   const apiKey = process.env.ETHERSCAN_API_KEY || ''
   if (!apiKey) throw new Error('ETHERSCAN_API_KEY is not configured.')
 
-  await takeEtherscanToken()
-
   const url = new URL(ETHERSCAN_API_URL)
   url.searchParams.set('chainid', ETHERSCAN_CHAIN_ID)
   Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value))
   url.searchParams.set('apikey', apiKey)
 
-  const response = await fetch(url)
-  if (!response.ok) throw new Error(`Etherscan API returned HTTP ${response.status}.`)
+  const attempts = options.attempts ?? 3
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    await takeEtherscanToken()
+    const response = await fetchWithRetries(url, undefined, { attempts: 1 })
 
-  const body = await response.json()
-  if (
-    body.status === '0' &&
-    options.allowNoTransactions &&
-    /no transactions found/i.test(String(body.result || body.message || ''))
-  ) {
-    return { ...body, result: [] }
+    if (!response.ok) {
+      if ((response.status === 429 || response.status >= 500) && attempt < attempts) {
+        const retryAfter = Number(response.headers.get('retry-after') || '')
+        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter * 1000
+          : Math.round(500 * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.25))
+        await delay(waitMs)
+        continue
+      }
+      throw new Error(`Etherscan API returned HTTP ${response.status}.`)
+    }
+
+    const body = await response.json()
+    if (
+      body.status === '0' &&
+      options.allowNoTransactions &&
+      /no transactions found/i.test(String(body.result || body.message || ''))
+    ) {
+      return { ...body, result: [] }
+    }
+
+    if (body.status === '0') {
+      const message = body.result || body.message || 'Etherscan API returned an error.'
+      if (attempt < attempts && /rate limit|max rate|too many/i.test(String(message))) {
+        await delay(Math.round(500 * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.25)))
+        continue
+      }
+      throw new Error(message)
+    }
+
+    if (body.error) throw new Error(body.error.message || 'Etherscan API returned an error.')
+    return body
   }
-  if (body.status === '0') throw new Error(body.result || body.message || 'Etherscan API returned an error.')
-  if (body.error) throw new Error(body.error.message || 'Etherscan API returned an error.')
-  return body
+
+  throw new Error('Etherscan API retries exhausted.')
 }
 
-function toTokenMetadata(owner, tokenId, tokenName, tokenSymbol, quantity) {
+function toTokenMetadata(owner, tokenId, tokenName, tokenSymbol, quantity, creator = '', source = 'etherscan-api-token1155tx') {
   const label = tokenName || tokenSymbol
 
   return {
@@ -227,16 +308,115 @@ function toTokenMetadata(owner, tokenId, tokenName, tokenSymbol, quantity) {
       tokenId,
       name: label ? `${label} #${tokenId}` : `Token ${tokenId.length > 12 ? `${tokenId.slice(0, 5)}...${tokenId.slice(-5)}` : tokenId}`,
       previewImage: '',
+      imageUrl: '',
       owner,
       contractAddress: ENJIN_CRYPTOITEMS_CONTRACT,
-      creator: '',
+      creator,
       tokenStandard: 'ERC-1155',
       quantity: quantity.toString(),
       properties: [],
       description: '',
-      source: 'etherscan-api-token1155tx',
+      source,
     },
   }
+}
+
+async function alchemyRpcCall(method, params) {
+  const rpcUrl = process.env.ALCHEMY_ETH_RPC_URL || ''
+  if (!rpcUrl) throw new Error('ALCHEMY_ETH_RPC_URL is not configured.')
+
+  const targetUrl = new URL(rpcUrl)
+  if (targetUrl.protocol !== 'https:') {
+    throw new Error('ALCHEMY_ETH_RPC_URL must use https.')
+  }
+
+  const attempts = 3
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    await takeAlchemyToken()
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    })
+
+    if ((response.status === 429 || (response.status >= 500 && response.status < 600)) && attempt < attempts) {
+      const retryAfter = Number(response.headers.get('retry-after') || '')
+      const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+        ? retryAfter * 1000
+        : Math.round(500 * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.25))
+      await delay(waitMs)
+      continue
+    }
+
+    if (!response.ok) throw new Error(`Alchemy RPC returned HTTP ${response.status}.`)
+    const body = await response.json()
+    if (body.error) throw new Error(body.error.message || 'Alchemy RPC returned an error.')
+    return body.result
+  }
+
+  throw new Error('Alchemy RPC retries exhausted.')
+}
+
+async function fetchWalletTokensViaAlchemy(owner) {
+  const balances = new Map()
+  const directions = ['incoming', 'outgoing']
+  const maxPagesPerDirection = 20
+
+  for (const direction of directions) {
+    let pageKey = ''
+    for (let page = 0; page < maxPagesPerDirection; page += 1) {
+      const payload = {
+        fromBlock: '0x0',
+        toBlock: 'latest',
+        category: ['erc1155'],
+        withMetadata: false,
+        excludeZeroValue: false,
+        maxCount: '0x3e8',
+        contractAddresses: [ENJIN_CRYPTOITEMS_CONTRACT],
+      }
+      if (direction === 'incoming') payload.toAddress = owner
+      else payload.fromAddress = owner
+      if (pageKey) payload.pageKey = pageKey
+
+      const result = await alchemyRpcCall(ALCHEMY_TRANSFER_SELECTOR, [payload])
+      const transfers = Array.isArray(result?.transfers) ? result.transfers : []
+
+      for (const transfer of transfers) {
+        const tokenEntries = Array.isArray(transfer?.erc1155Metadata) ? transfer.erc1155Metadata : []
+        for (const entry of tokenEntries) {
+          const tokenId = normalizeTokenId(entry?.tokenId)
+          if (!tokenId) continue
+
+          const quantity = parseBigIntValue(entry?.value, 1n)
+          const current = balances.get(tokenId) || 0n
+          balances.set(tokenId, direction === 'incoming' ? current + quantity : current - quantity)
+        }
+      }
+
+      pageKey = String(result?.pageKey || '')
+      if (!pageKey) break
+      if (page === maxPagesPerDirection - 1) {
+        throw new Error('Alchemy transfer history exceeded pagination limit for wallet scan.')
+      }
+    }
+  }
+
+  const creatorResult = await getContractCreator().catch(() => ({ creator: '' }))
+  return [...balances.entries()]
+    .filter(([, quantity]) => quantity > 0n)
+    .sort(([a], [b]) => (BigInt(a) < BigInt(b) ? -1 : 1))
+    .map(([tokenId, quantity]) => toTokenMetadata(
+      owner,
+      tokenId,
+      '',
+      '',
+      quantity,
+      creatorResult.creator || '',
+      'alchemy-asset-transfers',
+    ))
 }
 
 async function fetchCurrentWalletTokens(owner) {
@@ -294,6 +474,7 @@ async function fetchCurrentWalletTokens(owner) {
     }
   }
 
+  const creatorResult = await getContractCreator().catch(() => ({ creator: '' }))
   return [...balances.entries()]
     .filter(([, balance]) => balance.quantity > 0n)
     .sort(([a], [b]) => BigInt(a) < BigInt(b) ? -1 : 1)
@@ -303,6 +484,8 @@ async function fetchCurrentWalletTokens(owner) {
       balance.tokenName || lastTokenName,
       balance.tokenSymbol || lastTokenSymbol,
       balance.quantity,
+      creatorResult.creator || '',
+      'etherscan-api-token1155tx',
     ))
 }
 
@@ -330,13 +513,22 @@ async function proxyEnjWalletTokens(req, res) {
   }
 
   try {
-    const tokens = await fetchCurrentWalletTokens(owner)
+    let tokens = []
+    let provider = 'etherscan'
+
+    try {
+      tokens = await fetchCurrentWalletTokens(owner)
+    } catch (error) {
+      tokens = await fetchWalletTokensViaAlchemy(owner)
+      provider = 'alchemy'
+    }
     const body = JSON.stringify({ owner, contractAddress: ENJIN_CRYPTOITEMS_CONTRACT, tokens })
 
     cacheSet(cacheKey, { body, status: 200, contentType: 'application/json; charset=utf-8' })
     res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '')
     res.setHeader('Vary', 'Origin')
     res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('X-Token-List-Provider', provider)
     res.setHeader('Cache-Control', 'private, max-age=300')
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.statusCode = 200
@@ -443,6 +635,77 @@ async function etherscanEthCall(data) {
   return body.result || ''
 }
 
+async function fetchOpenSeaTokenMetadata(tokenId, owner) {
+  const apiKey = process.env.OPENSEA_API_KEY || ''
+  if (!apiKey) throw new Error('OPENSEA_API_KEY is not configured.')
+
+  const cacheKey = `opensea:token:${tokenId}`
+  const hit = cacheGet(cacheKey, ETHERSCAN_DETAIL_TTL_MS)
+  if (hit) return JSON.parse(hit.body)
+
+  const url = `${OPENSEA_API_URL}/chain/ethereum/contract/${ENJIN_CRYPTOITEMS_CONTRACT}/nfts/${tokenId}`
+  const attempts = 3
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    await takeOpenSeaToken()
+    const response = await fetchWithRetries(url, {
+      headers: {
+        accept: 'application/json',
+        'x-api-key': apiKey,
+      },
+    }, { attempts: 1 })
+
+    if (!response.ok) {
+      if ((response.status === 429 || (response.status >= 500 && response.status < 600)) && attempt < attempts) {
+        const retryAfter = Number(response.headers.get('retry-after') || '')
+        const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter * 1000
+          : Math.round(1000 * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.25))
+        await delay(waitMs)
+        continue
+      }
+      throw new Error(`OpenSea API returned HTTP ${response.status}.`)
+    }
+
+    const body = await response.json()
+    const nft = body?.nft || {}
+    const owners = Array.isArray(nft.owners) ? nft.owners : []
+    const ownerEntry = owners.find(item => String(item.address || '').toLowerCase() === owner.toLowerCase())
+    const quantity = ownerEntry ? parseBigIntValue(ownerEntry.quantity, 0n).toString() : ''
+    const properties = Array.isArray(nft.traits)
+      ? nft.traits.map(item => ({
+        trait: String(item?.trait_type ?? '').trim(),
+        value: String(item?.value ?? '').trim(),
+        rarity: String(item?.display_type ?? '').trim(),
+      })).filter(item => item.trait || item.value || item.rarity)
+      : []
+
+    const result = {
+      tokenId,
+      owner,
+      tokenUri: normalizeMetadataUrl(String(nft.metadata_url || ''), tokenId),
+      name: String(nft.name || '').trim(),
+      previewImage: normalizeMetadataUrl(String(nft.display_image_url || nft.image_url || ''), tokenId),
+      imageUrl: normalizeMetadataUrl(String(nft.image_url || nft.original_image_url || ''), tokenId),
+      description: String(nft.description || '').trim(),
+      properties,
+      creator: String(nft.creator || '').trim(),
+      tokenStandard: String(nft.token_standard || 'erc1155').toUpperCase(),
+      quantity,
+      source: 'opensea-api',
+    }
+
+    cacheSet(cacheKey, {
+      body: JSON.stringify(result),
+      status: 200,
+      contentType: 'application/json; charset=utf-8',
+    })
+    return result
+  }
+
+  throw new Error('OpenSea API retries exhausted.')
+}
+
 async function fetchJsonMetadata(uri, tokenId) {
   const url = normalizeMetadataUrl(uri, tokenId)
   if (!url) return {}
@@ -523,16 +786,36 @@ async function proxyEnjTokenDetails(req, res) {
       etherscanEthCall(`${BALANCE_OF_SELECTOR}${encodeAddress(owner)}${encodedTokenId}`).catch(() => ''),
     ])
     const uri = decodeAbiString(uriHex)
-    const jsonMetadata = await fetchJsonMetadata(uri, tokenId).catch(error => ({ metadataError: error.message }))
+    const uriMetadata = await fetchJsonMetadata(uri, tokenId).catch(error => ({ metadataError: error.message }))
+    const shouldTryOpenSea = !uri || !uriMetadata.name || uriMetadata.metadataError
+    const openSeaMetadata = shouldTryOpenSea
+      ? await fetchOpenSeaTokenMetadata(tokenId, owner).catch(error => ({ metadataError: error.message }))
+      : {}
+
+    const metadata = {
+      ...uriMetadata,
+      ...openSeaMetadata,
+      name: openSeaMetadata.name || uriMetadata.name || '',
+      previewImage: openSeaMetadata.previewImage || uriMetadata.previewImage || '',
+      imageUrl: openSeaMetadata.imageUrl || uriMetadata.imageUrl || '',
+      description: openSeaMetadata.description || uriMetadata.description || '',
+      properties: openSeaMetadata.properties?.length ? openSeaMetadata.properties : (uriMetadata.properties || []),
+    }
+
+    const metadataError = !metadata.name && !metadata.previewImage
+      ? (openSeaMetadata.metadataError || uriMetadata.metadataError || null)
+      : null
     const result = {
       tokenId,
       owner,
       contractAddress: ENJIN_CRYPTOITEMS_CONTRACT,
-      creator: creatorResult.creator || '',
-      tokenStandard: 'ERC-1155',
-      quantity: decodeUint256(quantityHex),
-      tokenUri: uri,
-      ...jsonMetadata,
+      creator: creatorResult.creator || openSeaMetadata.creator || '',
+      tokenStandard: openSeaMetadata.tokenStandard || 'ERC-1155',
+      quantity: decodeUint256(quantityHex) || openSeaMetadata.quantity || '',
+      tokenUri: openSeaMetadata.tokenUri || uri,
+      source: openSeaMetadata.source || 'etherscan-api-eth-call',
+      ...metadata,
+      metadataError,
     }
     const body = JSON.stringify(result)
 

@@ -235,7 +235,9 @@ Do not prefix these values with `VITE_`; they must not be embedded into the brow
 |----------|--------------|-------------|
 | `SUBSCAN_API_KEY` | Staking cadence, reward-history Subscan calls | Injected server-side into Subscan requests. |
 | `ETHERSCAN_API_KEY` | ENJ Infusion wallet scan, token details, Etherscan RPC fallback | Used server-side for Etherscan V2 API calls. |
-| `ALCHEMY_ETH_RPC_URL` | Optional ENJ Infusion preferred RPC | Full HTTPS Alchemy Mainnet RPC URL, for example `https://eth-mainnet.g.alchemy.com/v2/<key>`. |
+| `ALCHEMY_ETH_RPC_URL` | Optional ENJ Infusion preferred RPC and wallet-scan fallback | Full HTTPS Alchemy Mainnet RPC URL, for example `https://eth-mainnet.g.alchemy.com/v2/<key>`. |
+| `OPENSEA_API_KEY` | ENJ Infusion metadata fallback when on-chain URI is empty/unreachable | Server-side OpenSea API key used only by `api/[...proxy].js`. |
+| `OPENSEA_API_KEY_EXPIRES_AT` | Optional operations metadata | ISO-8601 timestamp used for ops visibility and rotation checks. |
 | `PROXY_ALLOWLIST` | Optional proxy hardening | Comma-separated allowed upstream hostnames for encoded Subscan proxy targets. Defaults to `enjin.api.subscan.io`. |
 | `PROXY_SECRET` | Optional proxy hardening | If set, encoded-target proxy calls require matching `x-proxy-secret`. Browser app flows generally leave this unset. |
 
@@ -256,8 +258,8 @@ The browser never receives Subscan, Etherscan, or Alchemy secrets. Local develop
 | Browser Route | Purpose | Upstream |
 |---------------|---------|----------|
 | `POST /api/<encoded-url>` | Encoded Subscan proxy for staking and reward-history API calls | `https://enjin.api.subscan.io` |
-| `GET /api/enj-wallet-tokens?address=...` | Current ERC-1155 token discovery for ENJ Infusion wallet scans | Etherscan `account/token1155tx` |
-| `GET /api/enj-token-details?owner=...&tokenId=...` | Token creator, owner quantity, URI, and URI metadata enrichment | Etherscan `proxy/eth_call`, `contract/getcontractcreation`, token URI |
+| `GET /api/enj-wallet-tokens?address=...` | Current ERC-1155 token discovery for ENJ Infusion wallet scans | Etherscan `account/token1155tx`, Alchemy `alchemy_getAssetTransfers` fallback |
+| `GET /api/enj-token-details?owner=...&tokenId=...` | Token creator, owner quantity, URI, and metadata enrichment with OpenSea fallback | Etherscan `proxy/eth_call`, `contract/getcontractcreation`, token URI JSON, OpenSea NFT API |
 | `POST /api/eth-call` | Same-origin `eth_call` for ENJ Infusion contract reads | Alchemy when configured, then Etherscan fallback |
 | `GET /__enj-wallet-tokens` | Local dev equivalent | Vite middleware |
 | `GET /__enj-token-details` | Local dev equivalent | Vite middleware |
@@ -278,6 +280,12 @@ The ENJ Infusion Ethereum RPC route:
 - Uses Alchemy first when configured
 - Falls back to Etherscan `proxy/eth_call`
 - Returns an `X-RPC-Provider` header so the terminal log can show whether Alchemy or Etherscan answered
+
+The ENJ Infusion metadata path:
+
+- Uses on-chain `uri(tokenId)` and token URI JSON as the first source
+- Falls back to OpenSea metadata when on-chain URI metadata is empty/unreachable
+- Applies provider throttles in serverless runtime: 3 req/s for Etherscan/Alchemy paths, 1 req/s for OpenSea metadata requests
 
 Balance and era archive queries use WebSocket RPC directly from the browser because they do not require secrets.
 
@@ -316,8 +324,9 @@ Balance and era archive queries use WebSocket RPC directly from the browser beca
 | Step | Phase | Description |
 |------|-------|-------------|
 | 0 | Validate token / fetch wallet tokens | Parses a token ID or discovers current wallet token IDs |
-| 1 | Read infusions | Calls `typeData(uint256)` through Ethereum RPC providers |
-| 2 | Review results | Displays totals, raw values, retry controls, and detail modals |
+| 1 | Fetch metadata | Reads token URI metadata, then OpenSea fallback if needed |
+| 2 | Read infusions | Calls `typeData(uint256)` through Ethereum RPC providers |
+| 3 | Review results | Displays totals, raw values, retry controls, and detail modals |
 
 ## Python Scripts
 
@@ -386,7 +395,9 @@ The app is deployed on Vercel as a static Vite build plus one serverless catch-a
 |----------|----------|-------|
 | `SUBSCAN_API_KEY` | Yes for staking and reward-history Subscan calls | Set in Vercel project environment variables |
 | `ETHERSCAN_API_KEY` | Yes for ENJ Infusion wallet scan/details and Etherscan RPC fallback | Set in Vercel project environment variables |
-| `ALCHEMY_ETH_RPC_URL` | Recommended for ENJ Infusion reliability | Full HTTPS Ethereum Mainnet Alchemy RPC URL |
+| `ALCHEMY_ETH_RPC_URL` | Recommended for ENJ Infusion reliability and wallet fallback coverage | Full HTTPS Ethereum Mainnet Alchemy RPC URL |
+| `OPENSEA_API_KEY` | Recommended for ENJ Infusion metadata enrichment | Server-side only; used for metadata fallback when URI metadata is empty/unreachable |
+| `OPENSEA_API_KEY_EXPIRES_AT` | Optional but recommended | Track key expiry for operations and scheduled rotation visibility |
 | `PROXY_ALLOWLIST` | Optional | Defaults to `enjin.api.subscan.io` |
 | `PROXY_SECRET` | Optional | Usually unset for the browser app |
 
