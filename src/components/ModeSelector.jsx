@@ -17,14 +17,12 @@ const MODES = [
 
 export default function ModeSelector({ mode, onModeChange, disabled }) {
   return (
-    <div className="flex flex-col gap-3 h-full rounded-[1.35rem] bg-surface px-4 py-4 sm:px-5" role="tablist" aria-label="Scan mode">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="font-headline text-xl font-bold tracking-tight text-text sm:text-[1.6rem]">Scan Mode</h2>
-        </div>
+    <div className="data-panel flex h-full flex-col gap-3" role="tablist" aria-label="Scan mode">
+      <div>
+        <h2 className="font-headline text-lg font-bold tracking-tight text-text sm:text-xl">Scan Mode</h2>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
         {MODES.map(({ key, label, icon: Icon, description }) => {
           const isActive = mode === key
           const panelId = key === 'validators' ? 'validators-panel' : 'pools-panel'
@@ -40,23 +38,17 @@ export default function ModeSelector({ mode, onModeChange, disabled }) {
               aria-selected={isActive}
               aria-controls={panelId}
               tabIndex={isActive ? 0 : -1}
-              className={`flex w-full items-start gap-3.5 rounded-[1.15rem] border px-4 py-3.5 text-left transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
-                isActive
-                  ? 'border-primary/30 bg-primary/10 shadow-primary-glow'
-                  : 'border-white/8 bg-card hover:border-cyan/20 hover:bg-surface-bright'
-              }`}
+              className={`range-mode-option ${isActive ? 'range-mode-option-active' : 'range-mode-option-idle'}`}
             >
-              <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl ${
-                isActive ? 'bg-primary text-on-primary' : 'bg-surface text-text-secondary'
-              }`}>
-                <Icon size={16} />
+              <div className="range-mode-badge">
+                <Icon size={14} />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-3">
-                  <span className={`font-headline text-base font-bold ${isActive ? 'text-text' : 'text-text-secondary'}`}>{label}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`font-headline text-sm font-bold sm:text-base ${isActive ? 'text-text' : 'text-text-secondary'}`}>{label}</span>
                   {isActive && <span className="mini-chip text-primary">Selected</span>}
                 </div>
-                <p className="mt-1.5 text-sm leading-6 text-text-secondary">{description}</p>
+                <p className="mt-1 text-xs leading-snug text-text-secondary sm:text-sm sm:leading-6">{description}</p>
               </div>
             </button>
           )

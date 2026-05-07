@@ -72,23 +72,22 @@ export default function BalanceTable({ records, isLoading = false }) {
   }
 
   return (
-    <div className="animate-fade-in rounded-[1.35rem] bg-surface p-5 shadow-ambient">
+    <div className="animate-fade-in data-panel">
       {/* Header */}
       <div className="data-toolbar">
         <div>
           <p className="section-label">Ledger View</p>
-          <h3 className="mt-2 font-headline text-xl font-bold text-text sm:text-[1.6rem]">Block-by-block log</h3>
+          <h3 className="mt-1 font-headline text-base font-bold text-text sm:text-lg">Block-by-block log</h3>
           {isLoading && (
-            <span className="mt-2 inline-block text-[10px] text-cyan animate-pulse font-mono">Populating…</span>
+            <span className="mt-1 inline-block text-[10px] text-cyan animate-pulse font-mono">Populating…</span>
           )}
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="mini-chip">
             {records.length.toLocaleString('en')} record{records.length !== 1 ? 's' : ''}
           </span>
-          {/* Page size selector */}
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-text-secondary">Per page:</span>
+            <span className="text-[11px] text-text-secondary">Per page</span>
             <select
               value={pageSize}
               onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
@@ -100,31 +99,22 @@ export default function BalanceTable({ records, isLoading = false }) {
               ))}
             </select>
           </div>
-          {/* Table zoom */}
-          <div className="flex items-center gap-1" title="Table text size">
+          <div className="flex items-center gap-0.5 rounded-sm border border-[var(--hairline)] bg-card p-0.5" title="Table text size">
             <button
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-card text-sm font-bold text-text-secondary
-                         flex items-center justify-center hover:text-cyan transition-colors"
+              className="flex h-6 w-6 items-center justify-center rounded-sm text-xs font-bold text-text-secondary transition-colors hover:text-cyan disabled:opacity-40"
               onClick={() => setZoomIdx(i => Math.max(0, i - 1))}
               aria-label="Zoom out table"
               disabled={zoomIdx === 0}
             >−</button>
-            <span className="font-mono text-[11px] text-text-secondary w-9 text-center">
+            <span className="w-6 text-center font-mono text-[10px] text-text-secondary">
               {['S', 'M', 'L'][zoomIdx]}
             </span>
             <button
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-card text-sm font-bold text-text-secondary
-                         flex items-center justify-center hover:text-cyan transition-colors"
+              className="flex h-6 w-6 items-center justify-center rounded-sm text-xs font-bold text-text-secondary transition-colors hover:text-cyan disabled:opacity-40"
               onClick={() => setZoomIdx(i => Math.min(ZOOM_SIZES.length - 1, i + 1))}
               aria-label="Zoom in table"
               disabled={zoomIdx === ZOOM_SIZES.length - 1}
             >+</button>
-            <button
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-card text-[10px] font-bold text-text-secondary
-                         flex items-center justify-center hover:text-cyan transition-colors"
-              onClick={() => setZoomIdx(DEFAULT_ZOOM)}
-              aria-label="Reset table zoom"
-            >⊙</button>
           </div>
         </div>
       </div>
@@ -202,30 +192,26 @@ export default function BalanceTable({ records, isLoading = false }) {
 
       {/* Pagination */}
       {records.length > pageSize && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <span className="text-xs text-text-secondary font-mono">
-            Page {safePage} of {totalPages}
-            {' · '}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--hairline)] pt-3">
+          <span className="font-mono text-[11px] text-text-secondary">
+            Page {safePage}/{totalPages}{' · '}
             Rows {((safePage - 1) * pageSize + 1).toLocaleString('en')}–{Math.min(safePage * pageSize, sorted.length).toLocaleString('en')}
           </span>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setPage(1)}
               disabled={safePage === 1}
-              className="px-2 py-1 rounded bg-card text-xs text-text-secondary
-                         hover:text-cyan disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="btn-ghost disabled:opacity-30"
               aria-label="First page"
             >«</button>
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}
               disabled={safePage === 1}
-              className="px-2 py-1 rounded bg-card text-xs text-text-secondary
-                         hover:text-cyan disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="btn-ghost disabled:opacity-30"
               aria-label="Previous page"
             >
               <ChevronLeft size={12} />
             </button>
-            {/* Page number pills */}
             {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
               let p
               if (totalPages <= 5) {
@@ -241,10 +227,11 @@ export default function BalanceTable({ records, isLoading = false }) {
                 <button
                   key={p}
                   onClick={() => setPage(p)}
-                  className={`w-7 h-7 rounded text-xs font-mono transition-colors
-                    ${p === safePage
-                      ? 'bg-primary text-white'
-                      : 'bg-card text-text-secondary hover:text-cyan'}`}
+                  className={`h-7 w-7 rounded-sm font-mono text-xs transition-colors ${
+                    p === safePage
+                      ? 'bg-primary text-on-primary'
+                      : 'border border-[var(--hairline)] bg-card text-text-secondary hover:text-cyan'
+                  }`}
                   aria-label={`Page ${p}`}
                   aria-current={p === safePage ? 'page' : undefined}
                 >
@@ -255,8 +242,7 @@ export default function BalanceTable({ records, isLoading = false }) {
             <button
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               disabled={safePage === totalPages}
-              className="px-2 py-1 rounded bg-card text-xs text-text-secondary
-                         hover:text-cyan disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="btn-ghost disabled:opacity-30"
               aria-label="Next page"
             >
               <ChevronRight size={12} />
@@ -264,8 +250,7 @@ export default function BalanceTable({ records, isLoading = false }) {
             <button
               onClick={() => setPage(totalPages)}
               disabled={safePage === totalPages}
-              className="px-2 py-1 rounded bg-card text-xs text-text-secondary
-                         hover:text-cyan disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="btn-ghost disabled:opacity-30"
               aria-label="Last page"
             >»</button>
           </div>

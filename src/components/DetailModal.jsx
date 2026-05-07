@@ -31,7 +31,7 @@ export default function DetailModal({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden p-2 sm:items-center sm:p-6" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden sm:items-center sm:p-6" role="dialog" aria-modal="true">
       <button
         type="button"
         className="absolute inset-0 bg-ink/85 backdrop-blur-sm"
@@ -40,22 +40,22 @@ export default function DetailModal({
       />
 
       <div
-        className={`relative z-10 flex max-h-[calc(100dvh-1rem)] w-full min-w-0 flex-col overflow-hidden rounded-[1.15rem] bg-card shadow-[0_32px_80px_rgba(0,0,0,0.45)] sm:max-h-[calc(100dvh-3rem)] sm:rounded-[1.75rem] ${widthClass}`}
-        style={{ border: '1px solid rgba(70,71,82,0.16)' }}
+        className={`relative z-10 flex max-h-[100dvh] w-full min-w-0 flex-col overflow-hidden rounded-sm bg-card shadow-[0_32px_80px_rgba(0,0,0,0.45)] sm:max-h-[calc(100dvh-3rem)] ${widthClass}`}
+        style={{ border: '1px solid var(--hairline)' }}
       >
-        <div className="flex min-w-0 flex-col gap-3 border-b border-white/8 bg-[#05070f] px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6">
+        <div className="sticky top-0 z-10 flex min-w-0 items-start gap-3 border-b border-[var(--hairline)] bg-[var(--surface)] px-3 py-3 sm:px-6 sm:py-4">
           <div className="min-w-0 flex-1">
             {eyebrow ? <p className="section-label">{eyebrow}</p> : null}
-            <h2 className={`${eyebrow ? 'mt-2' : ''} break-words font-headline text-xl font-bold text-text sm:text-2xl`}>{title}</h2>
-            {subtitle ? <p className="mt-2 break-words text-sm text-text-secondary">{subtitle}</p> : null}
+            <h2 className={`${eyebrow ? 'mt-1.5' : ''} break-words font-headline text-base font-bold text-text sm:text-2xl`}>{title}</h2>
+            {subtitle ? <p className="mt-1 break-words text-xs leading-snug text-text-secondary sm:mt-2 sm:text-sm">{subtitle}</p> : null}
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:justify-start">
+          <div className="flex shrink-0 items-center gap-1">
             {actions}
             <button
               type="button"
               onClick={onClose}
-              className="btn-icon bg-card"
+              className="btn-icon"
               aria-label="Close detail view"
             >
               <X size={16} />

@@ -26,6 +26,7 @@ import BalanceExportPanel from './BalanceExportPanel.jsx'
 import BalanceImportPanel from './BalanceImportPanel.jsx'
 import PhaseProgressCards from './PhaseProgressCards.jsx'
 import TerminalLog        from './TerminalLog.jsx'
+import ToolInfoSection    from './ToolInfoSection.jsx'
 
 // ── Address prefix map ───────────────────────────────────────────────────────
 const ADDR_PREFIX_MAP = {
@@ -251,7 +252,7 @@ function estimateRangeCalls({ rangeMode, startBlock, endBlock, startEraNum, endE
   return { estCalls: null, estTimeLabel: null }
 }
 
-export default function BalanceExplorer() {
+export default function BalanceExplorer({ onScanStateChange }) {
   const [tab, setTab] = useState('query')
   const [showImportResults, setShowImportResults] = useState(false)
 
@@ -373,6 +374,14 @@ export default function BalanceExplorer() {
 
   const isLoading  = status === STATUS.CONNECTING || status === STATUS.QUERYING
   const hasResults = records.length > 0
+  useEffect(() => {
+    onScanStateChange?.(isLoading)
+  }, [isLoading, onScanStateChange])
+
+  useEffect(() => () => {
+    onScanStateChange?.(false)
+  }, [onScanStateChange])
+
   const phases = progress?.phases ?? []
   const activePhase = phases.find(p => p.status === 'in_progress') ?? phases.find(p => p.status === 'pending') ?? phases[phases.length - 1]
   const activePhasePct = activePhase && activePhase.total > 0
@@ -400,14 +409,14 @@ export default function BalanceExplorer() {
   const displaySummary = phases.length > 0 ? progressSummary : null
   const displayMeta    = phases.length > 0 ? progressMeta    : null
   const liveChainSnapshot = (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div className="metric-card metric-card-left-cyan">
+    <div className="grid grid-cols-2 gap-2 sm:gap-3">
+      <div className="metric-card metric-card-left-cyan py-2.5">
         <p className="metric-label">Live Era</p>
-        <p className="metric-value text-cyan">{chainInfo.loading ? '…' : (chainInfo.era != null ? chainInfo.era.toLocaleString() : '—')}</p>
+        <p className="mt-1 truncate font-mono text-base font-semibold leading-tight text-cyan sm:text-lg" style={{ fontVariantNumeric: 'tabular-nums' }}>{chainInfo.loading ? '…' : (chainInfo.era != null ? chainInfo.era.toLocaleString() : '—')}</p>
       </div>
-      <div className="metric-card metric-card-left-primary">
+      <div className="metric-card metric-card-left-primary py-2.5">
         <p className="metric-label">Live Block</p>
-        <p className="metric-value text-text">{chainInfo.loading ? '…' : (chainInfo.block != null ? chainInfo.block.toLocaleString() : '—')}</p>
+        <p className="mt-1 truncate font-mono text-base font-semibold leading-tight text-text sm:text-lg" style={{ fontVariantNumeric: 'tabular-nums' }}>{chainInfo.loading ? '…' : (chainInfo.block != null ? chainInfo.block.toLocaleString() : '—')}</p>
       </div>
     </div>
   )
@@ -597,74 +606,51 @@ export default function BalanceExplorer() {
     <div className="space-y-4 sm:space-y-5">
 
       <section className="page-hero">
-        <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1.12fr)_minmax(280px,0.88fr)] lg:items-start">
-          <div className="space-y-5">
-            <div className="hero-kicker">
-              <span className="hero-dot" />
-              Historical Balance Viewer
-            </div>
-            <div className="space-y-4">
-              <h1 className="hero-title text-balance">Balance archive with deeper state context.</h1>
-              <p className="hero-copy">
-                Query archive-node snapshots across blocks, eras, or dates, then review the records through charts, sortable tables, imports, and then export it.
-              </p>
-            </div>
+        <div className="relative z-10 flex flex-col gap-3">
+          <div className="hero-kicker self-start">
+            <span className="hero-dot" />
+            Historical Balance Viewer
           </div>
-
-          <div className="flex flex-col gap-3">
-            {TABS.map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => { setTab(key); if (key === 'query') setShowImportResults(false) }}
-                className={`flex items-center gap-3.5 rounded-[1.15rem] border px-4 py-3.5 text-left transition-all ${
-                  tab === key
-                    ? 'border-primary/30 bg-primary/10 shadow-primary-glow'
-                    : 'border-white/8 bg-card hover:border-cyan/20 hover:bg-surface-bright'
-                }`}
-              >
-                <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl ${
-                  tab === key ? 'bg-primary text-on-primary' : 'bg-surface text-text-secondary'
-                }`}>
-                  <Icon size={16} />
-                </div>
-                <span className={`font-headline text-base font-bold ${tab === key ? 'text-text' : 'text-text-secondary'}`}>{label}</span>
-              </button>
-            ))}
-          </div>
+          <h1 className="hero-title">Balance archive</h1>
+          <p className="hero-copy">
+            Query archive-node snapshots across blocks, eras, or dates. Chart, sort, import, export.
+          </p>
         </div>
       </section>
 
+      <div className="flex w-full gap-1 rounded-sm border border-[var(--hairline)] bg-card p-1 overflow-x-auto">
+        {TABS.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => { setTab(key); if (key === 'query') setShowImportResults(false) }}
+            className={`flex flex-1 min-w-[6rem] items-center justify-center gap-1.5 rounded-sm px-2 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors sm:gap-2 sm:px-3 sm:text-[13px] ${
+              tab === key
+                ? 'bg-primary/15 text-primary-glow'
+                : 'text-text-secondary hover:bg-surface-high hover:text-text'
+            }`}
+            style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace', ...(tab === key ? { boxShadow: 'inset 0 0 0 1px rgba(124, 58, 237, 0.35)' } : {}) }}
+          >
+            <Icon size={13} />
+            <span className="truncate">{label}</span>
+          </button>
+        ))}
+      </div>
+
       {/* ── Query pane — 3 separate cards ── */}
       {tab === 'query' && (
-        <div>
+        <div className="space-y-3 sm:space-y-4">
+          <ToolInfoSection tone="warning">
+            <p>Archive RPC queries take longer over wide ranges. Narrowing the window or increasing the step reduces query time and sample count.</p>
+          </ToolInfoSection>
           <div className="grid gap-4 xl:grid-cols-3 xl:items-stretch">
-              <div className="rounded-[1.35rem] bg-surface shadow-ambient p-4 sm:p-5">
-                <div>
-                    <h3 className="font-headline text-2xl font-bold text-text">Scan Configuration</h3>
-                  </div>
+              <div className="data-panel">
+                <h3 className="font-headline text-lg font-bold text-text sm:text-xl">Scan Configuration</h3>
 
-                  <div className="mt-4 rounded-[1.25rem] border border-cyan/10 bg-card/75 p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-2xl bg-cyan/10 text-cyan">
-                        <Info size={16} />
-                      </div>
-                      <div className="space-y-2">
-                        <p className="section-label text-cyan">Query Notes</p>
-                        <p className="text-sm leading-6 text-text-secondary">
-                          Archive RPC queries take longer over wide ranges. Narrowing the window or increasing the step reduces query time and sample count.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 grid gap-3">
-                    <div className="rounded-[1.25rem] bg-card px-4 py-4">
-                      <p className="text-sm font-semibold text-text">Archive Network</p>
-                      <p className="mt-2 text-sm leading-6 text-text-secondary">
-                        Select one of the bundled archive endpoints for the network you want to inspect.
-                      </p>
-                      <div className="relative mt-4">
+                  <div className="mt-4 grid gap-3">
+                    <div className="rounded-sm border border-[var(--hairline)] bg-card px-3 py-3 sm:px-4 sm:py-4">
+                      <p className="text-sm font-semibold text-text">Select network</p>
+                      <div className="relative mt-3">
                         <select
                           id="bal-rpc-net"
                           value={networkKey}
@@ -682,16 +668,13 @@ export default function BalanceExplorer() {
                         <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-text-secondary" />
                       </div>
                       <p className="section-label mt-4">Endpoint</p>
-                      <p className="mt-2 break-all rounded-xl bg-card px-3 py-3 font-mono text-sm text-text-secondary" title={activeNetwork.endpoint}>
+                      <p className="mt-2 break-all rounded-sm bg-card px-3 py-3 font-mono text-sm text-text-secondary" title={activeNetwork.endpoint}>
                         {activeNetwork.endpoint}
                       </p>
                     </div>
 
-                    <div className="rounded-[1.25rem] bg-card px-4 py-4">
+                    <div className="rounded-sm border border-[var(--hairline)] bg-card px-3 py-3 sm:px-4 sm:py-4">
                       <p className="text-sm font-semibold text-text">Wallet Address</p>
-                      <p className="mt-2 text-sm leading-6 text-text-secondary">
-                        Enter the SS58 address you want to inspect.
-                      </p>
                       <input
                         id="bal-addr"
                         type="text"
@@ -702,7 +685,7 @@ export default function BalanceExplorer() {
                         value={address}
                         onChange={e => setAddress(e.target.value)}
                         disabled={isLoading}
-                        className={`mt-4 ${inputField} ${addressNote?.type === 'error' ? 'border-danger/50 focus:border-danger/70' : ''}`}
+                        className={`mt-3 ${inputField} ${addressNote?.type === 'error' ? 'border-danger/50 focus:border-danger/70' : ''}`}
                       />
                       {addressNote?.type === 'error' && (
                         <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-danger">
@@ -717,16 +700,13 @@ export default function BalanceExplorer() {
                 </div>
 
               {/* Col 2: Query Range + Live chain + Range Parameters + action */}
-              <div className="rounded-[1.35rem] bg-surface shadow-ambient p-4 sm:p-5 space-y-4">
+              <div className="data-panel space-y-4">
               {liveChainSnapshot}
 
               {/* ── Query Range selector (Relaychain / Canary Relaychain) ── */}
               {isDateRangeSupported && (
-                <div className="rounded-[1.25rem] bg-card px-4 py-4">
+                <div className="rounded-sm border border-[var(--hairline)] bg-card px-3 py-3 sm:px-4 sm:py-4">
                   <p className="text-sm font-semibold text-text">Query Range</p>
-                  <p className="mt-2 text-sm leading-6 text-text-secondary">
-                    Choose whether the history window should be resolved from blocks, eras, or dates.
-                  </p>
                   <div className="range-mode-grid mt-3">
                     {rangeModeOptions.map(option => {
                       const isActive = rangeMode === option.key
@@ -1016,7 +996,7 @@ export default function BalanceExplorer() {
               {status === STATUS.ERROR && errorMsg && (
                 <div
                   role="alert"
-                  className="flex gap-3 px-4 py-3 rounded-xl bg-danger/10 animate-fade-in"
+                  className="flex gap-3 px-4 py-3 rounded-sm bg-danger/10 animate-fade-in"
                 >
                   <AlertTriangle size={16} className="text-danger flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-danger leading-relaxed">{errorMsg}</p>
@@ -1105,7 +1085,7 @@ export default function BalanceExplorer() {
 
       {/* ── Import pane ── */}
       {tab === 'import' && (
-        <div className="overflow-hidden rounded-[1.75rem] bg-surface shadow-ambient">
+        <div className="overflow-hidden rounded-sm border border-[var(--hairline)] bg-surface">
           <div role="tabpanel" className="p-4 sm:p-6">
               {!showImportResults ? (
                 <div className="space-y-3">
@@ -1157,7 +1137,7 @@ export default function BalanceExplorer() {
         <section ref={resultsRef} className="space-y-4">
           {/* Records summary bar */}
           {hasResults && (
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-[1.5rem] bg-surface px-5 py-4 shadow-ambient">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 data-panel">
               {[
                 { label: 'Wallet',         value: queriedAddress ? queriedAddress : '—' },
                 { label: 'Records',        value: records.length.toLocaleString('en') },
@@ -1190,17 +1170,17 @@ export default function BalanceExplorer() {
               ? Number((totalLocked * 10000n) / totalBalance) / 100
               : 0
             return (
-              <div className="rounded-[1.5rem] bg-surface px-5 py-4 shadow-ambient border border-white/5">
+              <div className="data-panel border border-white/5">
                 <div className="mb-3 flex items-center gap-2">
                   <Sparkles size={14} className="text-primary" />
                   <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-text-secondary">Smart Insights</span>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl bg-card px-4 py-3 border-l-[3px] border-l-cyan" style={{ border: '1px solid rgba(70,71,82,0.08)', borderLeft: '3px solid var(--cyan)' }}>
+                  <div className="rounded-sm bg-card px-4 py-3 border-l-[3px] border-l-cyan" style={{ border: '1px solid rgba(70,71,82,0.08)', borderLeft: '3px solid var(--cyan)' }}>
                     <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-secondary">Max Free Balance</p>
                     <p className="mt-2 font-headline text-lg font-bold text-cyan">{fmtENJ(maxFree)}</p>
                   </div>
-                  <div className="rounded-xl bg-card px-4 py-3" style={{ border: '1px solid rgba(70,71,82,0.08)', borderLeft: '3px solid var(--primary)' }}>
+                  <div className="rounded-sm bg-card px-4 py-3" style={{ border: '1px solid rgba(70,71,82,0.08)', borderLeft: '3px solid var(--primary)' }}>
                     <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-secondary">Balance Utilization</p>
                     <div className="mt-2 flex items-end gap-2">
                       <p className="font-headline text-lg font-bold text-primary">{utilizationPct.toFixed(1)}%</p>

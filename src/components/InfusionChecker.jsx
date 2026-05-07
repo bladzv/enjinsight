@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Database, ExternalLink, ImageIcon, Loader2, RefreshCw, Search, Wallet } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Database, ExternalLink, ImageIcon, Loader2, RefreshCw, Search, Square, Wallet } from 'lucide-react'
 import DetailModal from './DetailModal.jsx'
 import PhaseProgressCards from './PhaseProgressCards.jsx'
 import TerminalLog from './TerminalLog.jsx'
+import ToolInfoSection from './ToolInfoSection.jsx'
 
 const CONTRACT_ADDRESS = '0xfaafdc07907ff5120a76b34b731b278c38d6043c'
 const ETHERSCAN_NFT_HOLDINGS_URL = import.meta.env.DEV
@@ -185,9 +186,19 @@ function compareBulkRows(a, b, key) {
   )
 }
 
-async function callRpc([name, url], data) {
+function isAbortError(error) {
+  return error?.name === 'AbortError'
+}
+
+function createUserAbortError() {
+  return new DOMException('Scan canceled by user.', 'AbortError')
+}
+
+async function callRpc([name, url], data, signal) {
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), 12000)
+  const onAbort = () => controller.abort()
+  signal?.addEventListener('abort', onAbort, { once: true })
 
   try {
     const response = await fetch(url, {
@@ -208,22 +219,25 @@ async function callRpc([name, url], data) {
 
     return { name: response.headers.get('x-rpc-provider') || name, result: body.result }
   } finally {
+    signal?.removeEventListener('abort', onAbort)
     window.clearTimeout(timeout)
   }
 }
 
-async function readInfusion(tokenId, onEndpoint) {
+async function readInfusion(tokenId, onEndpoint, signal) {
   const data = buildTypeDataCall(tokenId)
   const errors = []
 
   for (const endpoint of RPC_ENDPOINTS) {
+    if (signal?.aborted) throw createUserAbortError()
     onEndpoint?.({ phase: 'start', label: endpoint[0] })
 
     try {
-      const response = await callRpc(endpoint, data)
+      const response = await callRpc(endpoint, data, signal)
       onEndpoint?.({ phase: 'success', label: response.name })
       return parseUint256Words(response.result)[3]
     } catch (error) {
+      if (isAbortError(error)) throw error
       errors.push(`${endpoint[0]}: ${error.message}`)
       onEndpoint?.({ phase: 'error', label: endpoint[0], error: error.message })
     }
@@ -232,12 +246,12 @@ async function readInfusion(tokenId, onEndpoint) {
   throw new Error(`All RPC endpoints failed. ${errors.join(' | ')}`)
 }
 
-async function fetchWalletTokens(address, onStatus) {
+async function fetchWalletTokens(address, onStatus, signal) {
   onStatus('Fetching wallet ERC-1155 transfer history.')
   const url = new URL(ETHERSCAN_NFT_HOLDINGS_URL, window.location.origin)
   url.searchParams.set('address', address)
 
-  const response = await fetch(url)
+  const response = await fetch(url, { signal })
   const body = await response.json().catch(() => ({}))
 
   if (!response.ok) throw new Error(body.error || `Etherscan returned HTTP ${response.status}.`)
@@ -267,19 +281,19 @@ function mergeTokenMetadata(base, detail) {
   }
 }
 
-async function fetchTokenDetails(owner, tokenId) {
+async function fetchTokenDetails(owner, tokenId, signal) {
   const url = new URL(ENJ_TOKEN_DETAILS_URL, window.location.origin)
   url.searchParams.set('owner', owner)
   url.searchParams.set('tokenId', tokenId)
 
-  const response = await fetch(url)
+  const response = await fetch(url, { signal })
   const body = await response.json().catch(() => ({}))
 
   if (!response.ok) throw new Error(body.error || `Token details returned HTTP ${response.status}.`)
   return body
 }
 
-export default function InfusionChecker() {
+export default function InfusionChecker({ onScanStateChange }) {
   const [mode, setMode] = useState('single')
   const [tokenId, setTokenId] = useState('')
   const [walletAddress, setWalletAddress] = useState('')
@@ -300,6 +314,7 @@ export default function InfusionChecker() {
   const [bulkFailureMessage, setBulkFailureMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [logs, setLogs] = useState([])
+  const scanAbortRef = useRef(null)
   const singleResultRef = useRef(null)
   const bulkResultRef = useRef(null)
   const previousLoadingRef = useRef(false)
@@ -386,6 +401,14 @@ export default function InfusionChecker() {
   const hasRetryingRows = retryingTokenIds.size > 0
 
   useEffect(() => {
+    onScanStateChange?.(isLoading)
+  }, [isLoading, onScanStateChange])
+
+  useEffect(() => () => {
+    onScanStateChange?.(false)
+  }, [onScanStateChange])
+
+  useEffect(() => {
     const wasLoading = previousLoadingRef.current
     previousLoadingRef.current = isLoading
 
@@ -403,6 +426,27 @@ export default function InfusionChecker() {
 
   function appendRow(row) {
     setRows(current => [...current, row])
+  }
+
+  function createScanController() {
+    scanAbortRef.current?.abort()
+    const controller = new AbortController()
+    scanAbortRef.current = controller
+    return controller
+  }
+
+  function clearScanController(controller) {
+    if (scanAbortRef.current === controller) {
+      scanAbortRef.current = null
+    }
+  }
+
+  function handleStopScan() {
+    if (!isLoading) return
+    scanAbortRef.current?.abort()
+    if (mode === 'wallet') setBulkStatus('Scan canceled by user.')
+    setRawValue('Scan canceled by user.')
+    log('warn', 'Scan canceled by user.')
   }
 
   function handleBulkSort(key) {
@@ -441,6 +485,7 @@ export default function InfusionChecker() {
 
   async function handleSingleCheck(event) {
     event.preventDefault()
+    const controller = createScanController()
 
     try {
       const parsedTokenId = validateTokenId(normalizeTokenId(tokenId))
@@ -454,21 +499,28 @@ export default function InfusionChecker() {
         if (event.phase === 'start') log('info', `Querying ${event.label}`)
         if (event.phase === 'success') log('ok', `RPC response from ${event.label}`)
         if (event.phase === 'error') log('warn', `${event.label}: ${event.error}`)
-      })
+      }, controller.signal)
 
       setAmount(formatEnj(raw))
       setRawValue(`Raw fourth value: ${raw.toString()}`)
       log('ok', `Infusion: ${formatEnj(raw)} (raw=${raw.toString()})`)
     } catch (error) {
+      if (isAbortError(error)) {
+        setAmount('-')
+        setRawValue('Scan canceled by user.')
+        log('warn', 'Single check canceled by user.')
+        return
+      }
       setAmount('-')
       setRawValue(error.message)
       log('err', `Single check failed: ${error.message}`)
     } finally {
+      clearScanController(controller)
       setIsLoading(false)
     }
   }
 
-  async function readBulkInfusions(tokens) {
+  async function readBulkInfusions(tokens, signal) {
     let cursor = 0
     let completed = 0
     let failed = 0
@@ -476,6 +528,7 @@ export default function InfusionChecker() {
 
     const worker = async () => {
       while (cursor < tokens.length) {
+        if (signal?.aborted) throw createUserAbortError()
         const index = cursor
         cursor += 1
         const token = tokens[index]
@@ -487,8 +540,8 @@ export default function InfusionChecker() {
               if (event.phase === 'start') log('info', `Token ${formatTokenId(token.tokenId)}: querying ${event.label}`)
               if (event.phase === 'success') log('ok', `Token ${formatTokenId(token.tokenId)}: RPC response from ${event.label}`)
               if (event.phase === 'error') log('warn', `Token ${formatTokenId(token.tokenId)}: ${event.label}: ${event.error}`)
-            }),
-            fetchTokenDetails(token.metadata.owner, token.tokenId)
+            }, signal),
+            fetchTokenDetails(token.metadata.owner, token.tokenId, signal)
               .then(details => ({ details }))
               .catch(error => ({ detailsError: error.message })),
           ])
@@ -510,6 +563,7 @@ export default function InfusionChecker() {
             log('warn', `Token ${formatTokenId(token.tokenId)}: metadata unavailable — ${detailResult.detailsError}`)
           }
         } catch (error) {
+          if (isAbortError(error)) throw error
           failed += 1
           appendRow({
             tokenId: token.tokenId,
@@ -638,6 +692,7 @@ export default function InfusionChecker() {
 
   async function handleBulkCheck(event) {
     event.preventDefault()
+    const controller = createScanController()
 
     try {
       const address = validateAddress(normalizeAddress(walletAddress))
@@ -659,7 +714,7 @@ export default function InfusionChecker() {
       const tokens = await fetchWalletTokens(address, status => {
         setBulkStatus(status)
         log('info', status)
-      })
+      }, controller.signal)
 
       if (!tokens.length) {
         setRawValue('No matching token IDs found.')
@@ -672,7 +727,7 @@ export default function InfusionChecker() {
       setRawValue(`Found ${tokens.length} token IDs. Reading infusion values.`)
       log('ok', `Found ${tokens.length} token IDs. Reading infusion values (concurrency=${BULK_RPC_CONCURRENCY}).`)
 
-      const { total, failed } = await readBulkInfusions(tokens)
+      const { total, failed } = await readBulkInfusions(tokens, controller.signal)
 
       setAmount(formatEnj(total))
       setRawValue(`Total raw infusion: ${total.toString()}`)
@@ -693,6 +748,13 @@ export default function InfusionChecker() {
         : `Done — total ${formatEnj(total)} across ${tokens.length} tokens (${failed} failed).`
       log(failed === 0 ? 'done' : 'warn', doneMsg)
     } catch (error) {
+      if (isAbortError(error)) {
+        setAmount('-')
+        setRawValue('Scan canceled by user.')
+        setBulkStatus('Scan canceled by user.')
+        log('warn', 'Bulk check canceled by user.')
+        return
+      }
       setAmount('-')
       setRawValue(error.message)
       setBulkTotal('-')
@@ -702,60 +764,52 @@ export default function InfusionChecker() {
       setBulkFailureMessage('Bulk scan failed. See terminal log for details.')
       log('err', `Bulk check failed: ${error.message}`)
     } finally {
+      clearScanController(controller)
       setIsLoading(false)
     }
   }
 
+  useEffect(() => {
+    return () => {
+      scanAbortRef.current?.abort()
+      scanAbortRef.current = null
+    }
+  }, [])
+
   return (
-    <div className="space-y-5 overflow-x-hidden">
+    <div className="space-y-4 overflow-x-hidden sm:space-y-5">
       <section className="page-hero">
-        <div className="relative z-10">
-          <div className="space-y-4">
-            <div className="hero-kicker">
-              <span className="hero-dot" />
-              Ethereum Mainnet
-            </div>
-            <div className="max-w-3xl space-y-3">
-              <h1 className="hero-title text-balance">ERC-20 ENJ infusion lookup.</h1>
-              <p className="hero-copy">
-                Check an ERC-1155 token ID or total the infused ERC-20 ENJ held by a wallet.
-              </p>
-            </div>
+        <div className="relative z-10 flex flex-col gap-2">
+          <div className="hero-kicker self-start">
+            <span className="hero-dot" />
+            Ethereum Mainnet
           </div>
+          <h1 className="hero-title">ERC-20 ENJ infusion lookup</h1>
+          <p className="hero-copy">
+            Check an ERC-1155 token ID or total the infused ERC-20 ENJ held by a wallet.
+          </p>
         </div>
       </section>
 
-      <section className="data-panel">
-        <div className="space-y-5">
+      <ToolInfoSection tone="warning">
+        <p>ERC-20 ENJ is different from native ENJ on the Enjin Blockchain.</p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3">
           <div>
-            <h2 className="section-title">Ethereum ERC-1155 assets</h2>
-            <p className="section-subtitle mt-2">
-              ERC-20 ENJ is different from native ENJ on the Enjin Blockchain.
-            </p>
+            <p className="metric-label">Contract</p>
+            <p className="mt-1 break-all font-mono text-[11px] leading-snug text-text">{CONTRACT_ADDRESS}</p>
           </div>
-
-          <div className="grid gap-3 text-sm md:grid-cols-3">
-            <div className="rounded-[1rem] bg-card/80 px-4 py-3 ring-1 ring-white/8">
-              <p className="metric-label">Contract</p>
-              <p className="mt-2 break-all font-mono text-xs leading-5 text-text">{CONTRACT_ADDRESS}</p>
-            </div>
-            <div className="rounded-[1rem] bg-card/80 px-4 py-3 ring-1 ring-white/8">
-              <p className="metric-label">RPC</p>
-              <p className="mt-2 text-sm font-semibold text-text">Alchemy/Etherscan</p>
-            </div>
-            <div className="rounded-[1rem] bg-card/80 px-4 py-3 ring-1 ring-white/8">
-              <p className="metric-label">Scope</p>
-              <p className="mt-2 text-sm font-semibold text-text">ERC-1155 assets, Ethereum Mainnet, ERC-20 ENJ infusion</p>
-            </div>
-            <div className="rounded-[1rem] bg-cyan/5 px-4 py-3 ring-1 ring-cyan/15 md:col-span-3">
-              <p className="metric-label text-cyan">Wallet Scan Note</p>
-              <p className="mt-2 text-sm leading-6 text-text-secondary">
-                Wallet token lists can be incomplete. If a token is missing, use Token ID scan with its Etherscan NFT URL or paste the token ID found after: <code className="block break-all rounded-md bg-term/80 px-1.5 py-0.5 font-mono text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>
-              </p>
-            </div>
+          <div>
+            <p className="metric-label">RPC</p>
+            <p className="mt-1 font-semibold text-text">Alchemy/Etherscan</p>
+          </div>
+          <div>
+            <p className="metric-label">Scope</p>
+            <p className="mt-1 font-semibold text-text">ERC-1155, Ethereum Mainnet</p>
           </div>
         </div>
-      </section>
+        <p className="mt-3"><span className="font-semibold text-text">Wallet scan.</span> Wallet token lists can be incomplete. If a token is missing, use Token ID scan with its Etherscan NFT URL or paste the token ID found after:</p>
+        <code className="mt-1 block break-all rounded-sm border border-[var(--hairline)] bg-term/80 px-2 py-1 font-mono text-[11px] text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>
+      </ToolInfoSection>
 
       <section className="grid gap-4 xl:grid-cols-3 xl:items-stretch">
         <div className="space-y-4 xl:col-span-2">
@@ -764,7 +818,7 @@ export default function InfusionChecker() {
               <div>
                 <h2 className="section-title">Scan</h2>
               </div>
-              <div className="inline-grid grid-cols-2 rounded-full bg-card p-1" role="tablist" aria-label="Infusion check mode">
+              <div className="inline-grid grid-cols-2 rounded-sm border border-[var(--hairline)] bg-card p-0.5" role="tablist" aria-label="Infusion check mode">
                 <button
                   type="button"
                   role="tab"
@@ -791,46 +845,48 @@ export default function InfusionChecker() {
             </div>
 
             {mode === 'single' ? (
-              <form className="space-y-3" onSubmit={handleSingleCheck}>
-                <label className="input-label" htmlFor="infusion-token-id">Token ID</label>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <input
-                    id="infusion-token-id"
-                    className="input-field min-w-0 flex-1 font-mono"
-                    value={tokenId}
-                    onChange={event => setTokenId(event.target.value)}
-                    inputMode="text"
-                    autoComplete="off"
-                    spellCheck="false"
-                    placeholder="Enter token ID or Etherscan NFT URL"
-                    required
-                  />
-                  <button type="submit" className="btn-primary whitespace-nowrap" disabled={isLoading}>
-                    {isLoading ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} />}
-                    Check
-                  </button>
-                </div>
+              <form className="flex flex-col gap-3 sm:flex-row" onSubmit={handleSingleCheck}>
+                <input
+                  id="infusion-token-id"
+                  className="input-field min-w-0 flex-1 font-mono"
+                  value={tokenId}
+                  onChange={event => setTokenId(event.target.value)}
+                  inputMode="text"
+                  autoComplete="off"
+                  spellCheck="false"
+                  placeholder="Enter token ID or Etherscan NFT URL"
+                  required
+                />
+                <button
+                  type={isLoading ? 'button' : 'submit'}
+                  onClick={isLoading ? handleStopScan : undefined}
+                  className={`${isLoading ? 'btn-stop' : 'btn-primary'} whitespace-nowrap`}
+                >
+                  {isLoading ? <Square size={14} /> : <Search size={16} />}
+                  {isLoading ? 'Stop' : 'Check'}
+                </button>
               </form>
             ) : (
-              <form className="space-y-3" onSubmit={handleBulkCheck}>
-                <label className="input-label" htmlFor="infusion-wallet-address">Ethereum wallet address</label>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <input
-                    id="infusion-wallet-address"
-                    className="input-field min-w-0 flex-1 font-mono"
-                    value={walletAddress}
-                    onChange={event => setWalletAddress(event.target.value)}
-                    inputMode="text"
-                    autoComplete="off"
-                    spellCheck="false"
-                    placeholder="Enter 0x Ethereum wallet address"
-                    required
-                  />
-                  <button type="submit" className="btn-primary whitespace-nowrap" disabled={isLoading}>
-                    {isLoading ? <Loader2 className="animate-spin" size={16} /> : <Wallet size={16} />}
-                    Bulk Check
-                  </button>
-                </div>
+              <form className="flex flex-col gap-3 sm:flex-row" onSubmit={handleBulkCheck}>
+                <input
+                  id="infusion-wallet-address"
+                  className="input-field min-w-0 flex-1 font-mono"
+                  value={walletAddress}
+                  onChange={event => setWalletAddress(event.target.value)}
+                  inputMode="text"
+                  autoComplete="off"
+                  spellCheck="false"
+                  placeholder="Enter Ethereum wallet address"
+                  required
+                />
+                <button
+                  type={isLoading ? 'button' : 'submit'}
+                  onClick={isLoading ? handleStopScan : undefined}
+                  className={`${isLoading ? 'btn-stop' : 'btn-primary'} whitespace-nowrap`}
+                >
+                  {isLoading ? <Square size={14} /> : <Wallet size={16} />}
+                  {isLoading ? 'Stop' : 'Bulk Check'}
+                </button>
               </form>
             )}
           </div>
@@ -917,7 +973,7 @@ export default function InfusionChecker() {
         </div>
 
         {bulkFailureMessage && (
-          <div className="flex flex-col gap-3 rounded-[1rem] border border-warning/20 bg-warning/5 px-4 py-3 text-sm font-semibold leading-6 text-warning sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-sm border border-warning/20 bg-warning/5 px-4 py-3 text-sm font-semibold leading-6 text-warning sm:flex-row sm:items-center sm:justify-between">
             <span>{bulkFailureMessage}</span>
             {failedBulkRows.length > 0 && (
               <button
@@ -1029,7 +1085,7 @@ export default function InfusionChecker() {
           </table>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.15rem] bg-card px-4 py-3 text-xs text-text-secondary">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm bg-card px-4 py-3 text-xs text-text-secondary">
           <span>
             {filteredSortedRows.length.toLocaleString('en')} of {rows.length.toLocaleString('en')} token{rows.length !== 1 ? 's' : ''} shown
           </span>
@@ -1120,21 +1176,21 @@ function TokenDetailsModal({ row, onClose }) {
       {!row ? null : (
         <div className="space-y-5">
           {row.metadataError && (
-            <div className="rounded-[1rem] border border-warning/20 bg-warning/5 px-4 py-3 text-sm leading-6 text-warning">
+            <div className="rounded-sm border border-warning/20 bg-warning/5 px-4 py-3 text-sm leading-6 text-warning">
               Extended token-page metadata is unavailable. Basic details are shown from the wallet holdings response.
             </div>
           )}
 
           <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-            <div className="rounded-[1.15rem] bg-card p-3 ring-1 ring-white/8">
+            <div className="rounded-sm bg-card p-3 border border-[var(--hairline)]">
               {metadata?.previewImage ? (
                 <img
                   src={metadata.previewImage}
                   alt={metadata.name ? `${metadata.name} preview` : 'Token preview'}
-                  className="aspect-square w-full rounded-xl object-cover"
+                  className="aspect-square w-full rounded-sm object-cover"
                 />
               ) : (
-                <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-surface text-text-secondary">
+                <div className="flex aspect-square w-full items-center justify-center rounded-sm bg-surface text-text-secondary">
                   <ImageIcon size={28} />
                 </div>
               )}
@@ -1155,7 +1211,7 @@ function TokenDetailsModal({ row, onClose }) {
             {metadata?.properties?.length ? (
               <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {metadata.properties.map((property, index) => (
-                  <div key={`${property.trait}-${index}`} className="rounded-[1rem] bg-surface px-4 py-3 ring-1 ring-white/8">
+                  <div key={`${property.trait}-${index}`} className="rounded-sm bg-surface px-4 py-3 border border-[var(--hairline)]">
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan">{property.trait || 'Property'}</p>
                     <p className="mt-2 break-words text-sm font-semibold text-text">{property.value || '-'}</p>
                     {property.rarity && <p className="mt-2 text-xs text-text-secondary">{property.rarity}</p>}
@@ -1183,7 +1239,7 @@ function TokenDetailsModal({ row, onClose }) {
 
 function DetailField({ label, value }) {
   return (
-    <div className="rounded-[1rem] bg-card px-4 py-3 ring-1 ring-white/8">
+    <div className="rounded-sm bg-card px-4 py-3 border border-[var(--hairline)]">
       <p className="metric-label">{label}</p>
       <p className="mt-2 break-words font-mono text-xs leading-5 text-text">{value || '-'}</p>
     </div>
