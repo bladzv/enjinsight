@@ -32,11 +32,11 @@ const SINGLE_PROGRESS_PHASES = [
   { key: 'decode', label: 'Decode Infusion', total: 1, completed: 0, status: 'pending' },
 ]
 const BULK_PROGRESS_PHASES = [
-  { key: 'wallet', label: 'Fetch Wallet Tokens', total: 1, completed: 0, status: 'pending' },
-  { key: 'metadata', label: 'Fetch Token Metadata', total: 1, completed: 0, status: 'pending' },
-  { key: 'infusions', label: 'Read Infusions', total: 1, completed: 0, status: 'pending' },
-  { key: 'review', label: 'Review Results', total: 1, completed: 0, status: 'pending' },
-  { key: 'retries', label: 'Retry Failed Reads', total: 0, completed: 0, status: 'pending' },
+  { key: 'wallet', label: 'Step 0: Fetch Wallet Tokens', total: 1, completed: 0, status: 'pending' },
+  { key: 'infusions', label: 'Step 1: Read Infusion', total: 1, completed: 0, status: 'pending' },
+  { key: 'metadata', label: 'Step 2: Fetch Token Metadata', total: 1, completed: 0, status: 'pending' },
+  { key: 'review', label: 'Step 3: Review', total: 1, completed: 0, status: 'pending' },
+  { key: 'retries', label: 'Auto Retry Failed Reads', total: 0, completed: 0, status: 'pending' },
 ]
 
 const RPC_ENDPOINTS = [
@@ -320,6 +320,7 @@ export default function InfusionChecker({ onScanStateChange }) {
   const [isLoading, setIsLoading] = useState(false)
   const [logs, setLogs] = useState([])
   const scanAbortRef = useRef(null)
+  const rowsRef = useRef([])
   const singleResultRef = useRef(null)
   const bulkResultRef = useRef(null)
   const previousLoadingRef = useRef(false)
@@ -374,9 +375,15 @@ export default function InfusionChecker({ onScanStateChange }) {
         ? 'in_progress'
         : 'pending'
 
+    const infusionStatus = finished
+      ? 'completed'
+      : checked > 0 || isLoading
+        ? 'in_progress'
+        : 'pending'
+
     const metadataStatus = metadataDone >= metadataTotal && metadataProgress.total > 0
       ? 'completed'
-      : metadataDone > 0 || (isLoading && bulkExpectedTotal > 0)
+      : metadataDone > 0
         ? 'in_progress'
         : 'pending'
 
@@ -392,15 +399,15 @@ export default function InfusionChecker({ onScanStateChange }) {
       { ...BULK_PROGRESS_PHASES[0], completed: bulkExpectedTotal > 0 ? 1 : 0, status: walletStatus },
       {
         ...BULK_PROGRESS_PHASES[1],
-        total: metadataTotal,
-        completed: metadataDone,
-        status: metadataStatus,
+        total,
+        completed: Math.min(checked, total),
+        status: infusionStatus,
       },
       {
         ...BULK_PROGRESS_PHASES[2],
-        total,
-        completed: Math.min(checked, total),
-        status: finished ? 'completed' : checked > 0 || isLoading ? 'in_progress' : 'pending',
+        total: metadataTotal,
+        completed: metadataDone,
+        status: metadataStatus,
       },
       { ...BULK_PROGRESS_PHASES[3], completed: reviewDone ? 1 : 0, status: reviewDone ? 'completed' : 'pending' },
       {
@@ -425,9 +432,7 @@ export default function InfusionChecker({ onScanStateChange }) {
     singleStarted,
   ])
   const progressTitle = 'Scan Progress'
-  const progressSummary = mode === 'wallet' && bulkStarted && bulkExpectedTotal > 0
-    ? `${rows.length} / ${bulkExpectedTotal} infusion reads, ${Math.min(metadataProgress.completed, metadataProgress.total || bulkExpectedTotal)} / ${Math.max(metadataProgress.total || bulkExpectedTotal, 1)} metadata lookups.`
-    : null
+  const progressSummary = null
   const filteredSortedRows = useMemo(() => {
     const query = bulkSearch.trim().toLowerCase()
     const filteredRows = query
@@ -452,6 +457,10 @@ export default function InfusionChecker({ onScanStateChange }) {
   }, [bulkPageSize, filteredSortedRows, safeBulkPage])
   const failedBulkRows = useMemo(() => rows.filter(row => row.error), [rows])
   const hasRetryingRows = retryingTokenIds.size > 0
+
+  useEffect(() => {
+    rowsRef.current = rows
+  }, [rows])
 
   useEffect(() => {
     onScanStateChange?.(isLoading)
@@ -578,6 +587,7 @@ export default function InfusionChecker({ onScanStateChange }) {
     let completed = 0
     let failed = 0
     let total = 0n
+    const failedTokenIds = []
 
     const worker = async () => {
       while (cursor < tokens.length) {
@@ -588,25 +598,11 @@ export default function InfusionChecker({ onScanStateChange }) {
 
         try {
           const parsedTokenId = validateTokenId(token.tokenId)
-          const detailPromise = fetchTokenDetails(token.metadata.owner, token.tokenId, signal)
-            .then(details => ({ details }))
-            .catch(error => ({ detailsError: error.message }))
-            .finally(() => {
-              setMetadataProgress(current => ({
-                ...current,
-                completed: Math.min(current.total || tokens.length, current.completed + 1),
-              }))
-            })
-
-          const [raw, detailResult] = await Promise.all([
-            readInfusion(parsedTokenId, event => {
-              if (event.phase === 'start') log('info', `Token ${formatTokenId(token.tokenId)}: querying ${event.label}`)
-              if (event.phase === 'success') log('ok', `Token ${formatTokenId(token.tokenId)}: RPC response from ${event.label}`)
-              if (event.phase === 'error') log('warn', `Token ${formatTokenId(token.tokenId)}: ${event.label}: ${event.error}`)
-            }, signal),
-            detailPromise,
-          ])
-          const metadata = mergeTokenMetadata(token.metadata, detailResult.details)
+          const raw = await readInfusion(parsedTokenId, event => {
+            if (event.phase === 'start') log('info', `Token ${formatTokenId(token.tokenId)}: querying ${event.label}`)
+            if (event.phase === 'success') log('ok', `Token ${formatTokenId(token.tokenId)}: RPC response from ${event.label}`)
+            if (event.phase === 'error') log('warn', `Token ${formatTokenId(token.tokenId)}: ${event.label}: ${event.error}`)
+          }, signal)
 
           total += raw
           appendRow({
@@ -614,18 +610,16 @@ export default function InfusionChecker({ onScanStateChange }) {
             amount: formatEnj(raw),
             raw: raw.toString(),
             error: false,
-            metadata,
-            metadataError: detailResult.detailsError || metadata.metadataError || null,
+            metadata: token.metadata,
+            metadataError: null,
           })
           setBulkTotal(formatEnj(total))
           setRawValue(`Total raw infusion: ${total.toString()}`)
           log('info', `Token ${formatTokenId(token.tokenId)}: ${formatEnj(raw)}`)
-          if (detailResult.detailsError) {
-            log('warn', `Token ${formatTokenId(token.tokenId)}: metadata unavailable — ${detailResult.detailsError}`)
-          }
         } catch (error) {
           if (isAbortError(error)) throw error
           failed += 1
+          failedTokenIds.push(token.tokenId)
           appendRow({
             tokenId: token.tokenId,
             amount: 'Failed',
@@ -647,7 +641,47 @@ export default function InfusionChecker({ onScanStateChange }) {
       Array.from({ length: Math.min(BULK_RPC_CONCURRENCY, tokens.length) }, worker),
     )
 
-    return { total, failed }
+    return { total, failed, failedTokenIds }
+  }
+
+  async function fetchBulkMetadata(tokens, signal) {
+    let cursor = 0
+
+    const worker = async () => {
+      while (cursor < tokens.length) {
+        if (signal?.aborted) throw createUserAbortError()
+        const index = cursor
+        cursor += 1
+        const token = tokens[index]
+
+        try {
+          const details = await fetchTokenDetails(token.metadata.owner, token.tokenId, signal)
+          setRows(current => current.map(row => row.tokenId === token.tokenId
+            ? {
+              ...row,
+              metadata: mergeTokenMetadata(row.metadata || token.metadata || {}, details),
+              metadataError: details.metadataError || null,
+            }
+            : row))
+          log('ok', `Token ${formatTokenId(token.tokenId)}: metadata fetched`)
+        } catch (error) {
+          if (isAbortError(error)) throw error
+          setRows(current => current.map(row => row.tokenId === token.tokenId
+            ? { ...row, metadataError: error.message }
+            : row))
+          log('warn', `Token ${formatTokenId(token.tokenId)}: metadata unavailable — ${error.message}`)
+        } finally {
+          setMetadataProgress(current => ({
+            ...current,
+            completed: Math.min(current.total || tokens.length, current.completed + 1),
+          }))
+        }
+      }
+    }
+
+    await Promise.all(
+      Array.from({ length: Math.min(BULK_RPC_CONCURRENCY, tokens.length) }, worker),
+    )
   }
 
   async function retryBulkRow(row) {
@@ -712,10 +746,14 @@ export default function InfusionChecker({ onScanStateChange }) {
     }
   }
 
-  async function retryAllFailedBulkRows() {
+  async function retryAllFailedBulkRows(tokenIds = null) {
     if (isRetryingAllFailed) return
 
-    const failedRows = rows.filter(row => row.error && !retryingTokenIds.has(row.tokenId))
+    const retrySet = tokenIds ? new Set(tokenIds) : null
+    const failedRows = rowsRef.current.filter(row => {
+      if (!row.error || retryingTokenIds.has(row.tokenId)) return false
+      return retrySet ? retrySet.has(row.tokenId) : true
+    })
     if (!failedRows.length) return
 
     setIsRetryingAllFailed(true)
@@ -757,6 +795,7 @@ export default function InfusionChecker({ onScanStateChange }) {
         return current
       })
       log(failed === 0 ? 'ok' : 'warn', `Retry all finished: ${succeeded} succeeded, ${failed} failed.`)
+      return { succeeded, failed }
     } finally {
       setRetryProgress(current => ({ ...current, active: false }))
       setIsRetryingAllFailed(false)
@@ -786,6 +825,10 @@ export default function InfusionChecker({ onScanStateChange }) {
       log('info', `Bulk check: wallet=${address}`)
       log('info', `Filtered contract: ${CONTRACT_ADDRESS}`)
 
+      const openSeaQuery = new URL(ETHERSCAN_NFT_HOLDINGS_URL, window.location.origin)
+      openSeaQuery.searchParams.set('address', address)
+      log('info', `OpenSea query: ${openSeaQuery.pathname}?${openSeaQuery.searchParams.toString()}`)
+
       const tokens = await fetchWalletTokens(address, status => {
         setBulkStatus(status)
         log('info', status)
@@ -803,15 +846,27 @@ export default function InfusionChecker({ onScanStateChange }) {
       setRawValue(`Found ${tokens.length} token IDs. Reading infusion values.`)
       log('ok', `Found ${tokens.length} token IDs. Reading infusion values (concurrency=${BULK_RPC_CONCURRENCY}).`)
 
-      const { total, failed } = await readBulkInfusions(tokens, controller.signal)
+      const { total, failed, failedTokenIds } = await readBulkInfusions(tokens, controller.signal)
 
       setAmount(formatEnj(total))
       setRawValue(`Total raw infusion: ${total.toString()}`)
+      setBulkStatus(`Read infusion values for ${tokens.length} token IDs. Fetching token metadata.`)
+      log('info', `Read infusion values for ${tokens.length} token IDs. Fetching token metadata.`)
+
+      await fetchBulkMetadata(tokens, controller.signal)
+
       setBulkStatus(
         failed === 0
           ? `Finished ${tokens.length} token IDs.`
           : `Finished ${tokens.length} token IDs with ${failed} failed reads.`,
       )
+
+      if (failed > 0) {
+        setBulkStatus(`Retrying ${failed} failed token read${failed === 1 ? '' : 's'} automatically.`)
+        log('warn', `Retrying ${failed} failed token read${failed === 1 ? '' : 's'} automatically.`)
+        await retryAllFailedBulkRows(failedTokenIds)
+      }
+
       if (failed > 0) {
         setBulkFailureMessage(
           failed === tokens.length
@@ -992,7 +1047,7 @@ export default function InfusionChecker({ onScanStateChange }) {
         <PhaseProgressCards
           className="h-full"
           ariaLabel="Infusion scan progress"
-          indexLabel="Step"
+          indexLabel="Phase"
           title={progressTitle}
           summary={progressSummary}
           phases={progressPhases}
@@ -1008,6 +1063,12 @@ export default function InfusionChecker({ onScanStateChange }) {
           </div>
           <div className="flex flex-col items-start gap-3 sm:items-end">
             <p className="max-w-xl text-sm leading-6 text-text-secondary">{bulkStatus}</p>
+            {(hasRetryingRows || isRetryingAllFailed || retryProgress.active) && (
+              <div className="inline-flex items-center gap-2 rounded-sm border border-warning/25 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning animate-pulse">
+                <Loader2 className="animate-spin" size={14} />
+                Retrying in progress
+              </div>
+            )}
           </div>
         </div>
 

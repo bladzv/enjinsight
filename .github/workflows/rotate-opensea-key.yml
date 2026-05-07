@@ -19,20 +19,8 @@ jobs:
           RESPONSE="$(curl -sS -X POST https://api.opensea.io/api/v2/auth/keys)"
           echo "$RESPONSE" > opensea_response.json
 
-          API_KEY="$(python - <<'PY'
-import json
-with open('opensea_response.json', 'r', encoding='utf-8') as f:
-    data = json.load(f)
-print(data.get('api_key', ''))
-PY
-)"
-          EXPIRES_AT="$(python - <<'PY'
-import json
-with open('opensea_response.json', 'r', encoding='utf-8') as f:
-    data = json.load(f)
-print(data.get('expires_at', ''))
-PY
-)"
+          API_KEY="$(python -c "import json; print(json.load(open('opensea_response.json', 'r', encoding='utf-8')).get('api_key', ''))")"
+          EXPIRES_AT="$(python -c "import json; print(json.load(open('opensea_response.json', 'r', encoding='utf-8')).get('expires_at', ''))")"
 
           if [ -z "$API_KEY" ] || [ -z "$EXPIRES_AT" ]; then
             echo "OpenSea key creation failed: $(cat opensea_response.json)"
@@ -59,27 +47,7 @@ PY
             -H "Authorization: Bearer ${VERCEL_TOKEN}" \
             "${BASE_URL}/v9/projects/${VERCEL_PROJECT_ID}/env${TEAM_QUERY}")"
 
-          python - <<'PY'
-import json, os, subprocess
-key_name = os.environ['KEY_NAME']
-envs = json.loads(os.environ['ENVS_JSON']).get('envs', [])
-project_id = os.environ['VERCEL_PROJECT_ID']
-token = os.environ['VERCEL_TOKEN']
-team = os.environ.get('VERCEL_TEAM_ID', '')
-base = 'https://api.vercel.com'
-q = f'?teamId={team}' if team else ''
-for env in envs:
-    if env.get('key') != key_name:
-        continue
-    env_id = env.get('id')
-    if not env_id:
-        continue
-    subprocess.run([
-        'curl','-sS','-X','DELETE',
-        '-H', f'Authorization: Bearer {token}',
-        f'{base}/v9/projects/{project_id}/env/{env_id}{q}'
-    ], check=True)
-PY
+            ENVS_JSON="$ENVS_JSON" python -c "import json, os, subprocess; key_name = os.environ['KEY_NAME']; envs = json.loads(os.environ['ENVS_JSON']).get('envs', []); project_id = os.environ['VERCEL_PROJECT_ID']; token = os.environ['VERCEL_TOKEN']; team = os.environ.get('VERCEL_TEAM_ID', ''); base = 'https://api.vercel.com'; q = f'?teamId={team}' if team else ''; [subprocess.run(['curl','-sS','-X','DELETE','-H', f'Authorization: Bearer {token}', f'{base}/v9/projects/{project_id}/env/{env.get("id")}{q}'], check=True) for env in envs if env.get('key') == key_name and env.get('id')]"
 
           curl -sS -X POST \
             -H "Authorization: Bearer ${VERCEL_TOKEN}" \
@@ -104,27 +72,7 @@ PY
             -H "Authorization: Bearer ${VERCEL_TOKEN}" \
             "${BASE_URL}/v9/projects/${VERCEL_PROJECT_ID}/env${TEAM_QUERY}")"
 
-          python - <<'PY'
-import json, os, subprocess
-key_name = os.environ['KEY_NAME']
-envs = json.loads(os.environ['ENVS_JSON']).get('envs', [])
-project_id = os.environ['VERCEL_PROJECT_ID']
-token = os.environ['VERCEL_TOKEN']
-team = os.environ.get('VERCEL_TEAM_ID', '')
-base = 'https://api.vercel.com'
-q = f'?teamId={team}' if team else ''
-for env in envs:
-    if env.get('key') != key_name:
-        continue
-    env_id = env.get('id')
-    if not env_id:
-        continue
-    subprocess.run([
-        'curl','-sS','-X','DELETE',
-        '-H', f'Authorization: Bearer {token}',
-        f'{base}/v9/projects/{project_id}/env/{env_id}{q}'
-    ], check=True)
-PY
+            ENVS_JSON="$ENVS_JSON" python -c "import json, os, subprocess; key_name = os.environ['KEY_NAME']; envs = json.loads(os.environ['ENVS_JSON']).get('envs', []); project_id = os.environ['VERCEL_PROJECT_ID']; token = os.environ['VERCEL_TOKEN']; team = os.environ.get('VERCEL_TEAM_ID', ''); base = 'https://api.vercel.com'; q = f'?teamId={team}' if team else ''; [subprocess.run(['curl','-sS','-X','DELETE','-H', f'Authorization: Bearer {token}', f'{base}/v9/projects/{project_id}/env/{env.get("id")}{q}'], check=True) for env in envs if env.get('key') == key_name and env.get('id')]"
 
           curl -sS -X POST \
             -H "Authorization: Bearer ${VERCEL_TOKEN}" \
