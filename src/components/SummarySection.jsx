@@ -42,14 +42,14 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
   }
 
   return (
-    <section aria-labelledby="summary-heading" className="space-y-5 animate-fade-in">
+    <section aria-labelledby="summary-heading" className="space-y-3 animate-fade-in sm:space-y-4">
       <div>
         <p className="section-label">Summary</p>
-        <h2 id="summary-heading" className="section-title mt-2">Validator Overview</h2>
+        <h2 id="summary-heading" className="mt-1 font-headline text-lg font-bold text-text sm:text-xl">Validator Overview</h2>
       </div>
 
       {/* ── Overview stat chips (bento grid) ────────────────────────── */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         <StatChip
           value={validators.length}
           label="Total Scanned"
@@ -81,7 +81,7 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
                 tabIndex={0}
                 onClick={() => openValidator(v)}
                 onKeyDown={event => handleOpenKey(event, v)}
-                className="flex cursor-pointer gap-3 px-4 py-3 rounded-xl bg-danger/10 animate-fade-in transition-colors hover:bg-danger/15 focus:outline-none focus:ring-2 focus:ring-danger/40"
+                className="flex cursor-pointer gap-3 px-4 py-3 rounded-sm bg-danger/10 animate-fade-in transition-colors hover:bg-danger/15 focus:outline-none focus:ring-2 focus:ring-danger/40"
                 aria-label={`Open details for validator ${v.display || truncateAddress(v.address)}`}
               >
                 <AlertTriangle size={16} className="text-danger flex-shrink-0 mt-0.5" />
@@ -113,15 +113,15 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
 
       {/* ── Reward gap table ──────────────────────────────────────── */}
       {withGaps.length > 0 ? (
-        <div className="overflow-hidden rounded-[1.35rem] bg-surface shadow-ambient">
-          <div className="flex items-center gap-2 bg-card px-4 py-3 sm:px-5">
+        <div className="overflow-hidden rounded-sm border border-[var(--hairline)] bg-surface">
+          <div className="flex items-center gap-2 border-b border-[var(--hairline)] bg-card px-3 py-2.5 sm:px-4">
             <XCircle size={14} className="text-warning" />
-            <h3 className="text-sm font-semibold font-headline text-text">Validators with Missing Rewards</h3>
-            <span className="ml-auto px-2 py-0.5 rounded text-[10px] font-bold bg-warning/15 text-warning">
+            <h3 className="font-headline text-sm font-bold text-text">Validators with Missing Rewards</h3>
+            <span className="ml-auto rounded-sm bg-warning/15 px-1.5 py-0.5 text-[10px] font-bold text-warning">
               {withGaps.length}
             </span>
           </div>
-          <div className="sm:hidden px-3 py-3 space-y-2">
+          <div className="space-y-1.5 px-2 py-2 sm:hidden">
             {gapPageItems.map(v => {
               const sev      = getSeverity(v.missedEras.length)
               const missed   = v.missedEras.length
@@ -133,7 +133,7 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
                   tabIndex={0}
                   onClick={() => openValidator(v)}
                   onKeyDown={event => handleOpenKey(event, v)}
-                  className="cursor-pointer rounded-lg bg-card p-3 transition-colors hover:bg-surface-high focus:outline-none focus:ring-2 focus:ring-cyan/35"
+                  className="cursor-pointer rounded-sm border border-[var(--hairline)] bg-card p-2.5 transition-colors hover:bg-surface-high focus:outline-none focus:ring-1 focus:ring-primary"
                   aria-label={`Open details for validator ${v.display || truncateAddress(v.address)}`}
                 >
                   <div className="flex items-center gap-2">
@@ -229,13 +229,13 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
 
           {/* Gap table pagination */}
           {gapPages > 1 && (
-            <div className="flex items-center justify-between bg-card px-4 py-2.5 text-xs text-text-secondary">
+            <div className="flex items-center justify-between border-t border-[var(--hairline)] bg-card px-3 py-2 text-xs text-text-secondary sm:px-4">
               <div className="flex items-center gap-2">
                 <span>{withGaps.length} validators</span>
                 <select
                   value={gapPageSize}
                   onChange={e => { setGapPageSize(Number(e.target.value)); setGapPage(0) }}
-                  className="bg-surface-bright rounded px-1.5 py-0.5 text-xs text-text cursor-pointer"
+                  className="select-compact"
                   aria-label="Rows per page"
                 >
                   {[5, 10, 20].map(s => (
@@ -262,7 +262,7 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
           )}
         </div>
       ) : (
-        <div className="flex items-center gap-3 rounded-[1.5rem] bg-surface px-5 py-5 shadow-ambient">
+        <div className="data-panel flex items-center gap-3" style={{ boxShadow: 'inset 2px 0 0 var(--success)' }}>
           <CheckCircle2 size={18} className="text-success flex-shrink-0" />
           <p className="text-sm text-text">
             All validators received rewards for every era in the last <span className="font-semibold">{eraCount}</span> eras.
@@ -280,70 +280,53 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
 
       {/* ── Clean validators (collapsed) ─────────────────────────── */}
       {clean.length > 0 && (
-        <div className="overflow-hidden rounded-[1.35rem] bg-surface shadow-ambient ring-1 ring-success/10">
+        <div className="overflow-hidden rounded-sm border border-[var(--hairline)] bg-surface" style={{ boxShadow: 'inset 2px 0 0 var(--success)' }}>
           <button
             onClick={() => setShowClean(s => !s)}
-            className="w-full px-4 py-4 text-left transition-colors hover:bg-card/50 sm:px-5"
+            className="flex w-full items-start gap-3 px-3 py-3 text-left transition-colors hover:bg-card sm:px-4 sm:py-4"
             aria-expanded={showClean}
           >
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-success/10 text-success">
-                  <CheckCircle2 size={20} />
-                </div>
-                <div className="space-y-2">
-                  <p className="section-label text-success">Validator Review</p>
-                  <div>
-                    <h3 className="font-headline text-xl font-bold text-text sm:text-[1.6rem]">Perfect Record</h3>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
-                      Validators in this group received rewards in every era across the current scan window.
-                    </p>
-                  </div>
-                </div>
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-sm bg-success/10 text-success">
+              <CheckCircle2 size={16} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="section-label text-success">Validator Review</p>
+              <h3 className="mt-1 font-headline text-base font-bold text-text sm:text-lg">Perfect Record</h3>
+              <p className="mt-1 text-xs leading-snug text-text-secondary sm:text-sm">
+                Received rewards in every era across the current scan window.
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="mini-chip">{eraCount} era window</span>
+                <span className="mini-chip text-success">{clean.length} clean</span>
               </div>
-
-              <span className="ml-auto self-start text-muted lg:self-center">
-                {showClean ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-              </span>
             </div>
-
-            <div className="mt-5 flex flex-wrap items-center gap-2">
-              <span className="mini-chip">Window: {eraCount} eras</span>
-              {cleanPreview.map(v => (
-                <span key={v.address} className="mini-chip">
-                  <CheckCircle2 size={11} className="text-success" />
-                  {v.display || truncateAddress(v.address)}
-                </span>
-              ))}
-              {clean.length > cleanPreview.length && (
-                <span className="mini-chip">+{clean.length - cleanPreview.length} more</span>
-              )}
-            </div>
+            <span className="text-muted" aria-hidden="true">
+              {showClean ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </span>
           </button>
           {showClean && (
-            <div className="grid grid-cols-1 gap-3 px-4 py-4 animate-fade-in sm:grid-cols-2 2xl:grid-cols-4 sm:px-5">
+            <div className="grid grid-cols-1 gap-2 border-t border-[var(--hairline)] px-3 py-3 animate-fade-in sm:grid-cols-2 sm:gap-3 sm:px-4 2xl:grid-cols-4">
               {clean.map(v => (
-                <div key={v.address} className="rounded-[1.15rem] bg-card px-4 py-4 transition-colors hover:bg-surface-high">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-success/10 text-success">
-                      <CheckCircle2 size={16} />
+                <div key={v.address} className="rounded-sm border border-[var(--hairline)] bg-card px-3 py-2.5 transition-colors hover:bg-surface-high">
+                  <div className="flex items-start gap-2.5">
+                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-sm bg-success/10 text-success">
+                      <CheckCircle2 size={14} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="break-words font-medium text-text">{v.display || truncateAddress(v.address)}</p>
-                      <p className="mt-1 break-all font-mono text-[11px] text-muted">{truncateAddress(v.address)}</p>
+                      <p className="break-words text-sm font-semibold text-text">{v.display || truncateAddress(v.address)}</p>
+                      <p className="mt-0.5 break-all font-mono text-[10px] text-muted">{truncateAddress(v.address)}</p>
                     </div>
+                    <a
+                      href={validatorExplorerUrl(v.address)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-icon"
+                      aria-label="Open on Subscan"
+                      onClick={event => event.stopPropagation()}
+                    >
+                      <ExternalLink size={12} />
+                    </a>
                   </div>
-
-                  <a
-                    href={validatorExplorerUrl(v.address)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-text-secondary transition-colors hover:text-cyan"
-                    aria-label="Open on Subscan"
-                  >
-                    Subscan
-                    <ExternalLink size={12} />
-                  </a>
                 </div>
               ))}
             </div>
@@ -367,7 +350,7 @@ function StatChip({ value, label, colour }) {
   return (
     <div className="metric-card">
       <span className="metric-label">{label}</span>
-      <div className={`metric-value text-3xl ${colour}`}>{value}</div>
+      <div className={`metric-value ${colour}`}>{value}</div>
     </div>
   )
 }

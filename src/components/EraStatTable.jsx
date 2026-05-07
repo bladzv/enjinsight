@@ -9,7 +9,6 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
 
   const missedSet = new Set(missedEras ?? [])
 
-  // Build the merged display list: received eras + gap rows, sorted descending
   const eraMap = new Map(eraStat.map(e => [e.era, e]))
   const allEras = latestEra
     ? Array.from({ length: eraCount }, (_, i) => latestEra - i)
@@ -26,7 +25,6 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
 
   return (
     <div>
-      {/* pagination controls */}
       <div className="data-toolbar">
         <div className="flex items-center gap-1">
           <span>Per page:</span>
@@ -60,49 +58,71 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
           </div>
         )}
       </div>
-      <div className="data-table-wrap">
-      <table className="data-table min-w-[520px]">
-        <thead>
-          <tr className="data-table-head">
-            <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-16">Era</th>
-            <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Start Block</th>
-            <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">End Block</th>
-            <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Reward Point</th>
-            <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Blocks Produced</th>
-          </tr>
-        </thead>
-        <tbody>
-          {pageItems.map(({ era, data, missed }) =>
-            missed ? (
-              // Gap row
-              <tr key={`miss-${era}`} className="data-table-row-danger">
-                <td className="px-3 py-2.5 font-mono text-danger font-semibold">{era}</td>
-                <td className="px-3 py-2.5 text-right text-danger" colSpan={4}>
-                  <span className="hidden md:inline">— No era stat recorded —</span>
-                  <span className="inline md:hidden">No data</span>
-                </td>
-              </tr>
-            ) : (
-              // Normal row
-              <tr key={`era-${era}`} className="data-table-row">
-                <td className="px-3 py-2.5 font-mono text-text-secondary">{era}</td>
-                <td className="px-3 py-2.5 font-mono text-text-secondary text-right">
-                  {data?.startBlock?.toLocaleString() ?? '—'}
-                </td>
-                <td className="px-3 py-2.5 font-mono text-text-secondary text-right">
-                  {data?.endBlock?.toLocaleString() ?? '—'}
-                </td>
-                <td className="px-3 py-2.5 font-mono text-text-secondary text-right">
-                  {data?.rewardPoint?.toLocaleString() ?? '—'}
-                </td>
-                <td className="px-3 py-2.5 font-mono text-text-secondary text-right">
-                  {data?.blocksProduced ?? 0}
-                </td>
-              </tr>
-            )
-          )}
-        </tbody>
-      </table>
+
+      {/* Mobile: stacked cards */}
+      <div className="space-y-1.5 sm:hidden">
+        {pageItems.map(({ era, data, missed }) => missed ? (
+          <div key={`miss-${era}`} className="rounded-sm border border-danger/30 bg-danger/10 px-3 py-2">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-sm font-bold text-danger">Era {era}</span>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-danger">No data</span>
+            </div>
+          </div>
+        ) : (
+          <div key={`era-${era}`} className="rounded-sm border border-[var(--hairline)] bg-card px-3 py-2">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-sm font-bold text-text">Era {era}</span>
+              <span className="font-mono text-[11px] text-text-secondary">RP {data?.rewardPoint?.toLocaleString() ?? '—'}</span>
+            </div>
+            <div className="mt-1 grid grid-cols-2 gap-2 text-[11px] text-text-secondary">
+              <span>Blocks: <span className="font-mono text-text">{data?.startBlock?.toLocaleString() ?? '—'}–{data?.endBlock?.toLocaleString() ?? '—'}</span></span>
+              <span>Produced: <span className="font-mono text-text">{data?.blocksProduced ?? 0}</span></span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden sm:block data-table-wrap">
+        <table className="data-table min-w-[520px]">
+          <thead>
+            <tr className="data-table-head">
+              <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-16">Era</th>
+              <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Start Block</th>
+              <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">End Block</th>
+              <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Reward Point</th>
+              <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Blocks Produced</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageItems.map(({ era, data, missed }) =>
+              missed ? (
+                <tr key={`miss-${era}`} className="data-table-row-danger">
+                  <td className="px-3 py-2.5 font-mono text-danger font-semibold">{era}</td>
+                  <td className="px-3 py-2.5 text-right text-danger" colSpan={4}>
+                    <span>— No era stat recorded —</span>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={`era-${era}`} className="data-table-row">
+                  <td className="px-3 py-2.5 font-mono text-text-secondary">{era}</td>
+                  <td className="px-3 py-2.5 font-mono text-text-secondary text-right">
+                    {data?.startBlock?.toLocaleString() ?? '—'}
+                  </td>
+                  <td className="px-3 py-2.5 font-mono text-text-secondary text-right">
+                    {data?.endBlock?.toLocaleString() ?? '—'}
+                  </td>
+                  <td className="px-3 py-2.5 font-mono text-text-secondary text-right">
+                    {data?.rewardPoint?.toLocaleString() ?? '—'}
+                  </td>
+                  <td className="px-3 py-2.5 font-mono text-text-secondary text-right">
+                    {data?.blocksProduced ?? 0}
+                  </td>
+                </tr>
+              )
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   )

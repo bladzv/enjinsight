@@ -37,26 +37,26 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
           </button>
         </div>
       )}
-      <div className="sm:hidden space-y-2">
+      <div className="space-y-1.5 sm:hidden">
         {pageItems.map((n, i) => (
-          <article key={`m-${n.address || i}`} className="rounded-xl bg-card p-3">
+          <article key={`m-${n.address || i}`} className="rounded-sm border border-[var(--hairline)] bg-card p-2.5">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted">#{page * pageSize + i + 1}</span>
-              <span className="font-mono text-text-secondary text-xs break-all">{truncateAddress(n.address)}</span>
+              <span className="font-mono text-[10px] text-muted">#{page * pageSize + i + 1}</span>
+              <span className="break-all font-mono text-[11px] text-text-secondary">{truncateAddress(n.address)}</span>
               <button
                 onClick={() => copyAddr(n.address)}
-                className="btn-icon"
+                className="btn-icon ml-auto h-7 w-7"
                 aria-label={`Copy address ${n.address}`}
               >
                 {copied === n.address
-                  ? <CheckCircle2 size={13} className="text-success" />
-                  : <Copy size={13} />
+                  ? <CheckCircle2 size={12} className="text-success" />
+                  : <Copy size={12} />
                 }
               </button>
             </div>
-            <div className="mt-2 text-xs text-text-secondary">
-              <p>Display: <span className="text-text-secondary">{n.display || '—'}</span></p>
-              <p>Bonded: <span className="font-mono text-text">{formatENJ(n.bonded, 2)}</span></p>
+            <div className="mt-1 flex items-center justify-between text-[11px] text-text-secondary">
+              <span className="truncate">{n.display || <span className="text-muted">—</span>}</span>
+              <span className="font-mono text-text">{formatENJ(n.bonded, 2)}</span>
             </div>
           </article>
         ))}

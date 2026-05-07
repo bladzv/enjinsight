@@ -88,7 +88,52 @@ export default function PoolRewardTable({
         )}
       </div>
 
-      <div className="data-table-wrap">
+      {/* Mobile cards */}
+      <div className="space-y-1.5 sm:hidden">
+        {pageItems.map(({ era, rewardTotal, missed }) => {
+          const bd = hasBreakdown ? eraValidatorBreakdown.get(era) : null
+          const isExpanded = expandedEra === era
+          const activeUnrewarded = bd?.unrewarded?.filter(v => v.isActive) ?? []
+          const noRewardCount = activeUnrewarded.length
+          const rewardedCount = bd?.rewarded?.length ?? 0
+          return (
+            <div
+              key={`m-${era}`}
+              className={`rounded-sm border ${missed ? 'border-danger/30 bg-danger/10' : 'border-[var(--hairline)] bg-card'} px-3 py-2`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className={`font-mono text-sm font-bold ${missed ? 'text-danger' : 'text-text'}`}>Era {era}</span>
+                {missed
+                  ? <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-danger"><XCircle size={11} />No Reward</span>
+                  : <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-success"><CheckCircle2 size={11} />Rewarded</span>
+                }
+              </div>
+              <div className="mt-1 flex items-center justify-between text-[11px] text-text-secondary">
+                <span>{missed ? '—' : <span className="font-mono text-text">{rewardTotal && rewardTotal > 0n ? formatENJ(rewardTotal, 4) : '—'}</span>} ENJ</span>
+                {hasBreakdown && (
+                  <span className="flex items-center gap-2">
+                    <span><span className="font-mono text-success">{rewardedCount}</span>/<span className={`font-mono ${noRewardCount > 0 ? (missed ? 'text-danger' : 'text-warning') : 'text-muted'}`}>{noRewardCount}</span></span>
+                    <button
+                      onClick={() => toggleEra(era)}
+                      className="btn-icon h-7 w-7"
+                      aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                    >
+                      {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                    </button>
+                  </span>
+                )}
+              </div>
+              {isExpanded && bd && (
+                <div className="mt-2 border-t border-[var(--hairline)] pt-2">
+                  <BreakdownContent era={era} bd={bd} />
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="hidden sm:block data-table-wrap">
         <table className="data-table min-w-[400px]">
           <thead>
             <tr className="data-table-head">
@@ -245,12 +290,20 @@ function MissedRow({ era, bd, hasBreakdown, isExpanded, onToggle }) {
 
 /** Inline detail rows showing rewarded / unrewarded / inactive validators for an era. */
 function BreakdownDetail({ era, bd, colSpan }) {
+  return (
+    <tr className="bg-card">
+      <td colSpan={colSpan} className="px-4 py-3">
+        <BreakdownContent era={era} bd={bd} />
+      </td>
+    </tr>
+  )
+}
+
+function BreakdownContent({ era, bd }) {
   const activeUnrewarded  = bd.unrewarded.filter(v => v.isActive)
   const inactiveUnrewarded = bd.unrewarded.filter(v => !v.isActive)
 
   return (
-    <tr className="bg-card">
-      <td colSpan={colSpan} className="px-4 py-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
           {/* Rewarded validators */}
           {bd.rewarded.length > 0 && (
@@ -344,7 +397,5 @@ function BreakdownDetail({ era, bd, colSpan }) {
             </div>
           )}
         </div>
-      </td>
-    </tr>
   )
 }

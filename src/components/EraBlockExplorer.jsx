@@ -26,15 +26,11 @@ function HeartbeatLine({ strokeColor, pulseKey, compact = false }) {
   )
 }
 
-function EraEKG({ strokeColor, pulseKey }) {
-  return <HeartbeatLine strokeColor={strokeColor} pulseKey={pulseKey} />
-}
-
 const ERA_LEN = 14400
 const STATUS_CONFIG = {
   [ERA_STATUS.IDLE]: { dot: 'bg-muted', label: 'Idle' },
-  [ERA_STATUS.CONNECTING]: { dot: 'bg-warning animate-pulse', label: 'Connecting to live node…' },
-  [ERA_STATUS.DISCOVERING]: { dot: 'bg-cyan animate-pulse', label: 'Syncing from archive node…' },
+  [ERA_STATUS.CONNECTING]: { dot: 'bg-warning animate-pulse', label: 'Connecting…' },
+  [ERA_STATUS.DISCOVERING]: { dot: 'bg-cyan animate-pulse', label: 'Syncing…' },
   [ERA_STATUS.LIVE]: { dot: 'bg-success', label: 'Live' },
   [ERA_STATUS.DISCONNECTED]: { dot: 'bg-danger', label: 'Disconnected — reconnecting…' },
 }
@@ -93,8 +89,8 @@ function StatCard({ label, value, accent = false, sub = null, loading = false })
     <div className="metric-card text-left">
       <p className="metric-label">{label}</p>
       {loading
-        ? <div className="skeleton h-9 w-20" aria-hidden="true" />
-        : <p className={`metric-value break-all text-3xl ${accent ? 'text-cyan' : 'text-text'}`}>{value}</p>
+        ? <div className="skeleton mt-2 h-7 w-20" aria-hidden="true" />
+        : <p className={`metric-value break-all ${accent ? 'text-cyan' : 'text-text'}`}>{value}</p>
       }
       {sub ? <p className="mt-2 whitespace-normal break-all font-mono text-[10px] leading-tight text-muted" title={sub}>{sub}</p> : null}
     </div>
@@ -158,270 +154,246 @@ export default function EraBlockExplorer() {
   }, [eraInput, eraInputErr, lookupEra])
 
   return (
-    <main className="relative z-10 mx-auto max-w-[92rem] space-y-6 px-4 py-6 pb-32 sm:px-6 sm:py-8">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.52fr)_minmax(260px,0.48fr)] xl:items-start">
-        <div className="space-y-6">
-          <section className="page-hero">
-            <div className="relative z-10 space-y-8">
-              <div className="grid gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)] lg:items-start">
-                <div className="space-y-5">
-                  <div className="hero-kicker">
-                    <span className={`h-2 w-2 rounded-full ${statusCfg.dot}`} />
-                    <span>{statusCfg.label}</span>
-                  </div>
-                  <div className="space-y-4">
-                    <h1 className="hero-title text-balance">Relaychain State</h1>
-                    <p className="hero-copy">
-                      Live relaychain heartbeat, current era telemetry, and archival lookup for any completed era from the same explorer surface.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_320px]">
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  <StatCard label="Active Era" value={fmt(era)} accent loading={era == null} />
-                  <StatCard label="Session" value={fmt(session)} loading={session == null} />
-                  <StatCard label="Current Block" value={fmt(block)} accent loading={block == null} />
-                  <StatCard label="Era Starts" value={eraStartLabel} loading={eraStart == null} />
-                  <StatCard label="Era Ends" value={eraEndLabel} loading={eraEnd == null} />
-                  <StatCard label="Blocks Left" value={fmt(remaining)} loading={remaining == null} />
-                </div>
-
-                <div className="flex flex-col gap-4">
-                  <div className="rounded-[1.25rem] bg-card/90 p-4 shadow-ambient" style={{ minHeight: '130px' }}>
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="metric-label">System Heartbeat</p>
-                        <p className="mt-2 text-sm text-text-secondary">Block activity monitor</p>
-                      </div>
-                      <span className="mini-chip">Relaychain</span>
-                    </div>
-                    <div className="h-16">
-                      <EraEKG pulseKey={pulseKey} strokeColor={strokeColor} />
-                    </div>
-                  </div>
-
-                  <div
-                    className="rounded-[1.25rem] border-l-[3px] border-l-primary bg-card/90 p-5 shadow-ambient"
-                    style={{
-                      borderTop: '1px solid rgba(70,71,82,0.08)',
-                      borderRight: '1px solid rgba(70,71,82,0.08)',
-                      borderBottom: '1px solid rgba(70,71,82,0.08)',
-                    }}
-                  >
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="metric-label">Era Progress</p>
-                        <p className="mt-2 text-sm text-text-secondary">Completion within the active era window</p>
-                      </div>
-                      <span className="font-mono text-2xl font-bold text-primary">{pct}%</span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-surface">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-primary-dim via-primary to-cyan transition-[width] duration-700"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <div className="overflow-hidden rounded-[1.5rem] border border-border/40 bg-term">
-            <button
-              type="button"
-              onClick={() => setShowDebug(value => !value)}
-              className="flex w-full items-center gap-2 bg-surface-high px-4 py-3 text-left transition-colors hover:bg-surface-highest"
-              aria-expanded={showDebug}
-              aria-label={showDebug ? 'Collapse debug panel' : 'Expand debug panel'}
-            >
-              <span className="text-[10px] font-bold uppercase tracking-widest text-text-secondary">Debug</span>
-              <span className="flex-1" />
-              {showDebug ? <ChevronUp size={13} className="text-muted" /> : <ChevronDown size={13} className="text-muted" />}
-            </button>
-            {showDebug ? (
-              <div className="grid grid-cols-1 gap-x-8 gap-y-1 bg-term px-4 py-3 font-mono text-xs animate-slide-down sm:grid-cols-2">
-                {[
-                  ['WS state', debug.wsState],
-                  ['Staking pallet', debug.stakingPallet],
-                  ['Session pallet', debug.sessionPallet],
-                  ['Block hex', debug.blockHex],
-                  ['Block dec', debug.blockDec],
-                  ['Era hex', debug.eraHex],
-                  ['Era raw', debug.eraRaw],
-                  ['Session hex', debug.sessHex],
-                  ['Session raw', debug.sessRaw],
-                  ['Last error', debug.lastError],
-                ].map(([key, value]) => (
-                  <div key={key} className="flex flex-col gap-0.5 py-0.5 sm:flex-row sm:justify-between sm:gap-2">
-                    <span className="text-muted">{key}</span>
-                    <span className="whitespace-normal break-all text-left text-text sm:max-w-[60%] sm:text-right">{value}</span>
-                  </div>
-                ))}
-                <div className="col-span-2 mt-1">
-                  <p className="mb-0.5 text-muted">Era key</p>
-                  <p className="break-all leading-relaxed text-text">{debug.eraKey}</p>
-                </div>
-              </div>
-            ) : null}
+    <main className="relative z-10 mx-auto w-full max-w-[100rem] space-y-4 px-3 py-4 pb-32 sm:space-y-5 sm:px-6 sm:py-6">
+      {/* Hero */}
+      <section className="page-hero">
+        <div className="relative z-10 flex flex-col gap-3 sm:gap-4">
+          <div className="hero-kicker self-start">
+            <span className={`h-1.5 w-1.5 rounded-full ${statusCfg.dot}`} />
+            <span>{statusCfg.label}</span>
           </div>
-        </div>
-
-        <div className="data-panel space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-2">
-              <h2 className="font-headline text-2xl font-bold text-text">Past Era Lookup</h2>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+            <div className="space-y-1.5">
+              <h1 className="hero-title">Relaychain State</h1>
+              <p className="hero-copy">Live era telemetry plus archival lookup for any past era.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mini-chip">
+                <span className="hero-dot" /> Relaychain
+              </span>
               {csvCount > 0 ? (
-                <div className="inline-flex items-center gap-2 rounded-full border border-success/20 bg-success/10 px-3 py-1">
-                  <span className="h-1.5 w-1.5 rounded-full bg-success" style={{ boxShadow: '0 0 6px rgba(142,255,113,0.7)' }} />
-                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-success">{csvCount} Eras Cached</span>
-                </div>
+                <span className="mini-chip text-success">
+                  {csvCount} eras cached
+                </span>
               ) : (
-                <div className="inline-flex items-center gap-2 rounded-full border border-border/40 bg-card px-3 py-1">
-                  <span className="skeleton h-1.5 w-1.5 rounded-full" aria-hidden="true" />
-                  <span className="skeleton h-3 w-24 rounded-full" aria-hidden="true" />
-                </div>
+                <span className="mini-chip">
+                  <span className="skeleton inline-block h-2 w-12" aria-hidden="true" />
+                </span>
               )}
             </div>
+          </div>
+        </div>
+      </section>
 
-            <div
-              className="inline-flex items-center rounded-full border border-white/10 bg-card p-1"
-              role="group"
-              aria-label="Timezone selector"
-            >
-              <button
-                type="button"
-                onClick={() => setLocalTime(false)}
-                className={`inline-flex min-h-[1.9rem] items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors ${
-                  !localTime
-                    ? 'bg-primary/20 text-primary'
-                    : 'text-text-secondary hover:text-text'
-                }`}
-                aria-pressed={!localTime}
-              >
-                <Clock size={11} />
-                UTC
-              </button>
-              <button
-                type="button"
-                onClick={() => setLocalTime(true)}
-                className={`inline-flex min-h-[1.9rem] items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors ${
-                  localTime
-                    ? 'bg-cyan/20 text-cyan'
-                    : 'text-text-secondary hover:text-text'
-                }`}
-                aria-pressed={localTime}
-              >
-                <Globe size={11} />
-                Local
-              </button>
+      {/* Live telemetry grid */}
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        {/* Stat tiles */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+          <StatCard label="Active Era" value={fmt(era)} accent loading={era == null} />
+          <StatCard label="Session" value={fmt(session)} loading={session == null} />
+          <StatCard label="Current Block" value={fmt(block)} accent loading={block == null} />
+          <StatCard label="Era Starts" value={eraStartLabel} loading={eraStart == null} />
+          <StatCard label="Era Ends" value={eraEndLabel} loading={eraEnd == null} />
+          <StatCard label="Blocks Left" value={fmt(remaining)} loading={remaining == null} />
+        </div>
+
+        {/* Side: heartbeat + era progress */}
+        <div className="flex flex-col gap-3">
+          <div className="data-panel">
+            <div className="flex items-center justify-between gap-2">
+              <p className="metric-label">System Heartbeat</p>
+              <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-muted">Block activity</span>
+            </div>
+            <div className="mt-3 h-14">
+              <HeartbeatLine pulseKey={pulseKey} strokeColor={strokeColor} />
             </div>
           </div>
 
-          <form onSubmit={onLookup} className="space-y-2">
-            <div className="flex gap-2">
-              <input
-                type="number"
-                min="0"
-                step="1"
-                value={eraInput}
-                onChange={event => { setEraInput(event.target.value); resetLookup() }}
-                placeholder="Era number"
-                className={`w-40 input-field font-mono ${eraInputErr ? 'ring-1 ring-danger' : ''}`}
-                aria-label="Era number to look up"
-              />
-              <button
-                type="submit"
-                className="btn-primary gap-1.5 px-5 py-3 text-sm"
-                disabled={lookupLoading || !eraInput || !!eraInputErr}
-                aria-label="Look up era"
-              >
-                {lookupLoading ? <span className="animate-pulse">Searching…</span> : <><Search size={14} />Look Up</>}
-              </button>
+          <div className="data-panel" style={{ boxShadow: 'inset 2px 0 0 var(--primary)' }}>
+            <div className="flex items-center justify-between gap-2">
+              <p className="metric-label">Era Progress</p>
+              <span className="font-mono text-xl font-bold text-primary">{pct}%</span>
             </div>
-            {eraInputErr ? (
-              <p className="flex items-center gap-1 text-xs text-danger">
-                <AlertTriangle size={11} className="flex-shrink-0" />
-                {eraInputErr}
-              </p>
-            ) : null}
-          </form>
+            <div className="mt-3 h-1.5 overflow-hidden bg-surface-high">
+              <div
+                className="h-full bg-gradient-to-r from-primary-dim via-primary to-cyan transition-[width] duration-700"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
 
-          {lookupError ? (
-            <p className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">
-              {lookupError}
+      {/* Era lookup */}
+      <section className="data-panel">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--hairline)] pb-3">
+          <div>
+            <p className="section-label">Tool</p>
+            <h2 className="font-headline text-lg font-bold text-text sm:text-xl">Past Era Lookup</h2>
+          </div>
+          <div
+            className="inline-flex items-center rounded-sm border border-[var(--hairline)] bg-card p-0.5"
+            role="group"
+            aria-label="Timezone selector"
+          >
+            <button
+              type="button"
+              onClick={() => setLocalTime(false)}
+              className={`inline-flex items-center gap-1 rounded-sm px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors ${
+                !localTime ? 'bg-primary/15 text-primary-glow' : 'text-text-secondary hover:text-text'
+              }`}
+              aria-pressed={!localTime}
+            >
+              <Clock size={11} /> UTC
+            </button>
+            <button
+              type="button"
+              onClick={() => setLocalTime(true)}
+              className={`inline-flex items-center gap-1 rounded-sm px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors ${
+                localTime ? 'bg-cyan/20 text-cyan' : 'text-text-secondary hover:text-text'
+              }`}
+              aria-pressed={localTime}
+            >
+              <Globe size={11} /> Local
+            </button>
+          </div>
+        </div>
+
+        <form onSubmit={onLookup} className="mt-4 space-y-2">
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={eraInput}
+              onChange={event => { setEraInput(event.target.value); resetLookup() }}
+              placeholder="Era number"
+              className={`w-32 input-field font-mono sm:w-40 ${eraInputErr ? 'ring-1 ring-danger' : ''}`}
+              aria-label="Era number to look up"
+            />
+            <button
+              type="submit"
+              className="btn-primary gap-1.5"
+              disabled={lookupLoading || !eraInput || !!eraInputErr}
+              aria-label="Look up era"
+            >
+              {lookupLoading ? <span className="animate-pulse">Searching…</span> : <><Search size={14} />Look Up</>}
+            </button>
+          </div>
+          {eraInputErr ? (
+            <p className="flex items-center gap-1 text-xs text-danger">
+              <AlertTriangle size={11} className="flex-shrink-0" />
+              {eraInputErr}
             </p>
           ) : null}
+        </form>
 
-          {lookup ? (
-            <div className="grid animate-fade-in grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <div className="metric-card text-center">
-                <p className="metric-label">Start Block</p>
-                <p className="mt-3 text-base font-mono text-text">{lookup.startBlock.toLocaleString()}</p>
-              </div>
-              <div className="metric-card text-center">
-                <p className="metric-label">End Block</p>
-                <p className="mt-3 text-base font-mono text-text">{lookup.endBlock.toLocaleString()}</p>
-              </div>
+        {lookupError ? (
+          <p className="mt-3 rounded-sm border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+            {lookupError}
+          </p>
+        ) : null}
 
-              {lookup.startDateUtc ? (() => {
-                const raw = lookup.startDateUtc
-                const display = localTime ? (fmtDateLocal(raw) ?? raw) : (fmtDateUtc(raw) ?? raw)
-                return (
-                  <div className="metric-card">
-                    <div className="mb-1 flex items-center gap-1.5">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Start</p>
-                      <span className="text-[9px] uppercase text-muted">({localTime ? 'Local' : 'UTC'})</span>
-                    </div>
-                    <p className="text-xs leading-snug text-text font-mono">{display}</p>
-                  </div>
-                )
-              })() : null}
-
-              {lookup.endDateUtc ? (() => {
-                const raw = lookup.endDateUtc
-                const display = localTime ? (fmtDateLocal(raw) ?? raw) : (fmtDateUtc(raw) ?? raw)
-                return (
-                  <div className="metric-card">
-                    <div className="mb-1 flex items-center gap-1.5">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted">End</p>
-                      <span className="text-[9px] uppercase text-muted">({localTime ? 'Local' : 'UTC'})</span>
-                    </div>
-                    <p className="text-xs leading-snug text-text font-mono">{display}</p>
-                  </div>
-                )
-              })() : null}
-
-              {lookup.startBlockHash ? (
-                <div className="metric-card">
-                  <div className="mb-1 flex items-center gap-2">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Start Block Hash</p>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(lookup.startBlockHash)
-                          setHashCopied(true)
-                          setTimeout(() => setHashCopied(false), 2000)
-                        } catch {
-                          // Clipboard access denied.
-                        }
-                      }}
-                      className="btn-icon"
-                      aria-label="Copy start block hash"
-                    >
-                      {hashCopied ? <CheckCircle2 size={12} className="text-success" /> : <Copy size={12} />}
-                    </button>
-                  </div>
-                  <p className="break-all font-mono text-xs text-text">{lookup.startBlockHash}</p>
-                </div>
-              ) : null}
+        {lookup ? (
+          <div className="mt-4 grid animate-fade-in grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="metric-card">
+              <p className="metric-label">Start Block</p>
+              <p className="metric-value text-base">{lookup.startBlock.toLocaleString()}</p>
             </div>
-          ) : null}
-        </div>
-      </div>
+            <div className="metric-card">
+              <p className="metric-label">End Block</p>
+              <p className="metric-value text-base">{lookup.endBlock.toLocaleString()}</p>
+            </div>
+
+            {lookup.startDateUtc ? (() => {
+              const raw = lookup.startDateUtc
+              const display = localTime ? (fmtDateLocal(raw) ?? raw) : (fmtDateUtc(raw) ?? raw)
+              return (
+                <div className="metric-card col-span-2 sm:col-span-1">
+                  <p className="metric-label">Start ({localTime ? 'Local' : 'UTC'})</p>
+                  <p className="mt-1.5 text-xs leading-snug text-text font-mono break-all">{display}</p>
+                </div>
+              )
+            })() : null}
+
+            {lookup.endDateUtc ? (() => {
+              const raw = lookup.endDateUtc
+              const display = localTime ? (fmtDateLocal(raw) ?? raw) : (fmtDateUtc(raw) ?? raw)
+              return (
+                <div className="metric-card col-span-2 sm:col-span-1">
+                  <p className="metric-label">End ({localTime ? 'Local' : 'UTC'})</p>
+                  <p className="mt-1.5 text-xs leading-snug text-text font-mono break-all">{display}</p>
+                </div>
+              )
+            })() : null}
+
+            {lookup.startBlockHash ? (
+              <div className="metric-card col-span-2 sm:col-span-2 lg:col-span-4">
+                <div className="flex items-center gap-2">
+                  <p className="metric-label">Start Block Hash</p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(lookup.startBlockHash)
+                        setHashCopied(true)
+                        setTimeout(() => setHashCopied(false), 2000)
+                      } catch {
+                        // Clipboard access denied.
+                      }
+                    }}
+                    className="btn-icon"
+                    aria-label="Copy start block hash"
+                  >
+                    {hashCopied ? <CheckCircle2 size={12} className="text-success" /> : <Copy size={12} />}
+                  </button>
+                </div>
+                <p className="mt-1.5 break-all font-mono text-xs text-text">{lookup.startBlockHash}</p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+
+      {/* Debug */}
+      <section className="overflow-hidden rounded-sm border border-[var(--hairline)] bg-term">
+        <button
+          type="button"
+          onClick={() => setShowDebug(value => !value)}
+          className="flex w-full items-center gap-2 bg-surface-high px-4 py-2.5 text-left transition-colors hover:bg-surface-highest"
+          aria-expanded={showDebug}
+          aria-label={showDebug ? 'Collapse debug panel' : 'Expand debug panel'}
+        >
+          <span className="section-label">Debug</span>
+          <span className="flex-1" />
+          {showDebug ? <ChevronUp size={13} className="text-muted" /> : <ChevronDown size={13} className="text-muted" />}
+        </button>
+        {showDebug ? (
+          <div className="grid grid-cols-1 gap-x-8 gap-y-1 bg-term px-4 py-3 font-mono text-xs animate-slide-down sm:grid-cols-2">
+            {[
+              ['WS state', debug.wsState],
+              ['Staking pallet', debug.stakingPallet],
+              ['Session pallet', debug.sessionPallet],
+              ['Block hex', debug.blockHex],
+              ['Block dec', debug.blockDec],
+              ['Era hex', debug.eraHex],
+              ['Era raw', debug.eraRaw],
+              ['Session hex', debug.sessHex],
+              ['Session raw', debug.sessRaw],
+              ['Last error', debug.lastError],
+            ].map(([key, value]) => (
+              <div key={key} className="flex flex-col gap-0.5 py-0.5 sm:flex-row sm:justify-between sm:gap-2">
+                <span className="text-muted">{key}</span>
+                <span className="whitespace-normal break-all text-left text-text sm:max-w-[60%] sm:text-right">{value}</span>
+              </div>
+            ))}
+            <div className="col-span-2 mt-1">
+              <p className="mb-0.5 text-muted">Era key</p>
+              <p className="break-all leading-relaxed text-text">{debug.eraKey}</p>
+            </div>
+          </div>
+        ) : null}
+      </section>
 
       <TerminalLog logs={logs} sticky />
     </main>

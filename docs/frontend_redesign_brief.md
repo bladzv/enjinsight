@@ -551,7 +551,7 @@ Read ERC-20 ENJ infusion values for Ethereum ERC-1155 token IDs from contract `0
 1. **Hero** + four info cards: contract address (with copy + Etherscan link), RPC endpoint, scope ("Mainnet ENJ"), wallet-scan-incomplete note.
 2. **Scan card** with a pill-tab toggle in its header: **Token ID** | **Wallet**.
 3. **Single mode form**: one text input "Enter token ID or Etherscan NFT URL" + **Check** primary submit.
-4. **Wallet mode form**: one text input "Enter 0x Ethereum wallet address" (validated as `0x` + 40 hex chars) + **Bulk Check** primary submit.
+4. **Wallet mode form**: one text input "Enter Ethereum wallet address" (validated as `0x` + 40 hex chars) + **Bulk Check** primary submit.
 5. **Infusion value panel** (single mode): label + formatted ENJ value + raw hex value + "Database" data-source pill.
 6. **Phase Progress** card on the right (3 phases for either mode).
 7. **Wallet results section** (after a bulk scan starts):

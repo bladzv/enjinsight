@@ -87,12 +87,12 @@ export default function LandingPage({ onNavigate }) {
               <button
                 type="button"
                 onClick={() => onNavigate(tool.key)}
-                className="group grid w-full grid-cols-[auto_1fr_auto] items-start gap-4 rounded-[1rem] border border-white/[0.06] bg-surface px-4 py-5 text-left transition-colors hover:bg-white/[0.02] sm:gap-6 sm:px-5"
+                className="group grid w-full grid-cols-[auto_1fr_auto] items-start gap-4 rounded-sm border border-white/[0.06] bg-surface px-4 py-5 text-left transition-colors hover:bg-white/[0.02] sm:gap-6 sm:px-5"
                 aria-label={`Open ${tool.title}`}
               >
                 {/* code + icon */}
                 <div className="flex shrink-0 items-center gap-3 pt-1">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-[0.85rem] border border-white/[0.06] bg-card text-text-secondary transition-colors group-hover:border-primary/40 group-hover:text-primary">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-sm border border-white/[0.06] bg-card text-text-secondary transition-colors group-hover:border-primary/40 group-hover:text-primary">
                     <tool.icon size={16} strokeWidth={2} />
                   </span>
                 </div>
@@ -131,7 +131,7 @@ export default function LandingPage({ onNavigate }) {
           { label: 'Public data', body: 'Powered entirely by public Substrate / Subscan / Etherscan endpoints.' },
           { label: 'Verify',      body: 'Treat every output as a research aid — reconcile against your own records.' },
         ].map(item => (
-          <article key={item.label} className="flex items-start gap-3 rounded-[1rem] border border-white/[0.06] bg-card p-4">
+          <article key={item.label} className="flex items-start gap-3 rounded-sm border border-white/[0.06] bg-card p-4">
             <div className="min-w-0 space-y-1">
               <p className="font-mono text-[10.5px] uppercase tracking-[0.2em] text-text">{item.label}</p>
               <p className="text-[13px] leading-5 text-text-secondary">{item.body}</p>

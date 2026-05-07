@@ -137,30 +137,31 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
   }
 
   return (
-    <div className={bare ? '' : 'animate-fade-in rounded-[1.5rem] bg-surface p-5 shadow-ambient'}>
+    <div className={bare ? '' : 'animate-fade-in data-panel'}>
       {!bare && (
-        <div className="mb-4">
+        <div className="mb-3">
           <p className="section-label">Import</p>
-          <h3 className="mt-2 font-headline text-2xl font-bold text-text">Load exported balance data</h3>
+          <h3 className="mt-1 font-headline text-base font-bold text-text sm:text-lg">Load exported balance data</h3>
         </div>
       )}
 
       {/* ── File identification card ──────────────────────────────────────── */}
       {fileStatus && (
-        <div className={`mb-3 flex items-start gap-2.5 p-3 rounded-lg border text-[11px] leading-snug
-          ${fileStatus.rejected
-            ? 'bg-danger/8 border-danger/25'
-            : 'bg-success/8 border-success/25'}`}
-        >
+        <div className={`mb-3 flex items-start gap-2 rounded-sm border px-3 py-2 text-[11px] leading-snug ${
+          fileStatus.rejected
+            ? 'border-danger/30 bg-danger/10'
+            : 'border-success/30 bg-success/10'
+        }`}>
           {fileStatus.rejected
-            ? <XCircle size={14} className="text-danger flex-shrink-0 mt-0.5" />
-            : <CheckCircle size={14} className="text-success flex-shrink-0 mt-0.5" />}
-          <div className="min-w-0 space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
+            ? <XCircle size={13} className="text-danger flex-shrink-0 mt-0.5" />
+            : <CheckCircle size={13} className="text-success flex-shrink-0 mt-0.5" />}
+          <div className="min-w-0 space-y-0.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <span className="max-w-full break-all font-mono text-text/80">{fileStatus.name}</span>
               {fileStatus.ext && (
-                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest flex-shrink-0
-                  ${fileStatus.rejected ? 'bg-danger/15 text-danger' : 'bg-success/15 text-success'}`}>
+                <span className={`rounded-sm px-1 py-0.5 text-[9px] font-bold uppercase tracking-widest flex-shrink-0 ${
+                  fileStatus.rejected ? 'bg-danger/15 text-danger' : 'bg-success/15 text-success'
+                }`}>
                   .{fileStatus.ext}
                 </span>
               )}
@@ -175,8 +176,11 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
 
       {/* ── Post-parse alert (e.g. decryption errors) ─────────────────────── */}
       {alert && (
-        <div role="alert" className={`mb-4 px-4 py-2.5 rounded-lg text-sm font-medium
-          ${alert.type === 'ok' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+        <div role="alert" className={`mb-3 rounded-sm border px-3 py-2 text-xs font-medium ${
+          alert.type === 'ok'
+            ? 'border-success/30 bg-success/10 text-success'
+            : 'border-danger/30 bg-danger/10 text-danger'
+        }`}>
           {alert.text}
         </div>
       )}
@@ -186,11 +190,11 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
         role="button"
         tabIndex={0}
         aria-label="Drop a file or click to browse"
-        className={`rounded-[1.5rem] p-12 text-center cursor-pointer transition-all
-                    ${isDragOver
-                      ? 'bg-cyan/10 shadow-cyan-glow'
-                      : 'bg-card hover:bg-surface-high'}`}
-        style={{ border: '1px dashed rgba(70, 71, 82, 0.18)' }}
+        className={`cursor-pointer rounded-sm border border-dashed p-6 text-center transition-colors sm:p-10 ${
+          isDragOver
+            ? 'border-cyan bg-cyan/10'
+            : 'border-[var(--hairline)] bg-card hover:bg-surface-high'
+        }`}
         onClick={() => fileInputRef.current?.click()}
         onKeyDown={e => e.key === 'Enter' && fileInputRef.current?.click()}
         onDragOver={onDragOver}
@@ -199,15 +203,15 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
       >
         {isPending ? (
           <div className="flex flex-col items-center gap-2">
-            <span className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <span className="h-7 w-7 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
             <p className="text-sm text-text-secondary">Reading file…</p>
           </div>
         ) : (
           <>
-            <FolderOpen size={36} className="mx-auto mb-3 text-text-secondary" />
-            <p className="font-semibold text-text mb-1">Drop file here or click to browse</p>
-            <p className="text-sm text-text-secondary">
-              Supports JSON, CSV, XML exports from this app (max {MAX_IMPORT_MB} MB)
+            <FolderOpen size={28} className="mx-auto mb-2 text-text-secondary" />
+            <p className="text-sm font-semibold text-text">Drop file here or click to browse</p>
+            <p className="mt-1 text-xs text-text-secondary">
+              JSON, CSV, XML — max {MAX_IMPORT_MB} MB
             </p>
           </>
         )}
@@ -224,7 +228,7 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
       {/* ── Decrypt block ──────────────────────────────────────────────────── */}
       {encPending && (
         <div className="mt-4">
-          <div className="mb-3 flex gap-2 rounded-[1rem] bg-cyan/10 px-4 py-3 text-sm text-cyan">
+          <div className="mb-3 flex gap-2 rounded-sm border border-cyan/30 bg-cyan/10 px-3 py-2 text-xs text-cyan">
             🔒 This file is AES-256-GCM encrypted. Enter the password to decrypt.
           </div>
           <div className="flex gap-3 items-end">
