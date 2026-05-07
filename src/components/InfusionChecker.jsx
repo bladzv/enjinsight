@@ -366,7 +366,7 @@ export default function InfusionChecker({ onScanStateChange }) {
     const total = Math.max(1, bulkExpectedTotal)
     const metadataTotal = Math.max(1, metadataProgress.total || bulkExpectedTotal || 1)
     const metadataDone = Math.min(metadataProgress.completed, metadataTotal)
-    const finished = bulkExpectedTotal > 0 && checked >= bulkExpectedTotal && !isLoading
+    const finished = bulkExpectedTotal > 0 && checked >= bulkExpectedTotal
     const reviewDone = !isLoading && (rows.length > 0 || bulkExpectedTotal === 0)
 
     const walletStatus = bulkExpectedTotal > 0
@@ -410,12 +410,12 @@ export default function InfusionChecker({ onScanStateChange }) {
         status: metadataStatus,
       },
       { ...BULK_PROGRESS_PHASES[3], completed: reviewDone ? 1 : 0, status: reviewDone ? 'completed' : 'pending' },
-      {
+      ...(retryTotal > 0 ? [{
         ...BULK_PROGRESS_PHASES[4],
         total: retryTotal,
         completed: retryDone,
         status: retryStatus,
-      },
+      }] : []),
     ]
   }, [
     amount,
