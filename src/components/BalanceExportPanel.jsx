@@ -49,19 +49,20 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
   }
 
   return (
-    <div className="animate-fade-in rounded-[1.5rem] bg-surface p-5 shadow-ambient">
-      <div className="mb-4">
+    <div className="animate-fade-in data-panel">
+      <div className="mb-3">
         <p className="section-label">Export</p>
-        <h3 className="mt-2 font-headline text-2xl font-bold text-text">Save balance dataset</h3>
+        <h3 className="mt-1 font-headline text-base font-bold text-text sm:text-lg">Save balance dataset</h3>
       </div>
 
       {message && (
         <div
           role="alert"
-          className={`mb-4 px-4 py-2.5 rounded-lg text-sm font-medium
-            ${message.type === 'ok'
-              ? 'bg-success/10 text-success'
-              : 'bg-danger/10 text-danger'}`}
+          className={`mb-3 rounded-sm border px-3 py-2 text-xs font-medium ${
+            message.type === 'ok'
+              ? 'border-success/30 bg-success/10 text-success'
+              : 'border-danger/30 bg-danger/10 text-danger'
+          }`}
         >
           {message.text}
         </div>

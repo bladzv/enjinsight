@@ -64,46 +64,48 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
         )}
       </div>
 
-      <div className="sm:hidden space-y-2">
+      <div className="space-y-1.5 sm:hidden">
         {pageItems.map((v, i) => (
-          <article key={`m-${v.address || i}`} className="rounded-xl bg-card p-3">
+          <article key={`m-${v.address || i}`} className="rounded-sm border border-[var(--hairline)] bg-card p-2.5">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted">#{page * pageSize + i + 1}</span>
-              <span className="font-mono text-text-secondary text-xs break-all">{truncateAddress(v.address)}</span>
-              <button
-                onClick={() => copyAddr(v.address)}
-                className="btn-icon"
-                aria-label={`Copy validator address ${v.address}`}
-              >
-                {copied === v.address
-                  ? <CheckCircle2 size={13} className="text-success" />
-                  : <Copy size={13} />
-                }
-              </button>
-              <a
-                href={validatorExplorerUrl(v.address)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-icon text-dim hover:text-cyan"
-                aria-label={`Open ${v.display || 'validator'} on Subscan`}
-              >
-                <ExternalLink size={13} />
-              </a>
+              <span className="font-mono text-[10px] text-muted">#{page * pageSize + i + 1}</span>
+              <span className="break-all font-mono text-[11px] text-text-secondary">{truncateAddress(v.address)}</span>
+              <div className="ml-auto flex items-center gap-0.5">
+                <button
+                  onClick={() => copyAddr(v.address)}
+                  className="btn-icon h-7 w-7"
+                  aria-label={`Copy validator address ${v.address}`}
+                >
+                  {copied === v.address
+                    ? <CheckCircle2 size={12} className="text-success" />
+                    : <Copy size={12} />
+                  }
+                </button>
+                <a
+                  href={validatorExplorerUrl(v.address)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-icon h-7 w-7"
+                  aria-label={`Open ${v.display || 'validator'} on Subscan`}
+                >
+                  <ExternalLink size={12} />
+                </a>
+              </div>
             </div>
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <p className="text-xs text-text-secondary break-words">{v.display || '—'}</p>
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <p className="truncate text-[11px] text-text-secondary">{v.display || <span className="text-muted">—</span>}</p>
               {v.isActive
                 ? <span className="badge-active"><Shield size={10} />Active</span>
                 : <span className="badge-waiting"><Clock size={10} />Inactive</span>
               }
             </div>
-            <p className="mt-2 text-xs text-text-secondary">
-              Bonded: <span className="font-mono text-text">{formatENJ(v.bonded, 2)}</span>
+            <p className="mt-1 text-[11px] text-text-secondary">
+              Bonded <span className="font-mono text-text">{formatENJ(v.bonded, 2)}</span>
             </p>
             {(v.fetchStatus === 'failed' || v.fetchStatus === 'error') && onRetry && (
               <button
                 onClick={() => onRetry(v.address)}
-                className="btn-secondary mt-2 px-3 py-1.5 text-xs"
+                className="btn-secondary mt-2 px-2 py-1 text-[11px]"
                 aria-label={`Retry fetch for ${v.address}`}
               >
                 Retry

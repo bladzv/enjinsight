@@ -84,18 +84,9 @@ export default function AppHeader({ status, view, onNavigate, onAbout, theme = '
 
       {/* ── Mobile top header (only below lg) ───────────────────────── */}
       <header
-        className="lg:hidden sticky top-0 z-40 flex items-center justify-between px-4 py-2.5 backdrop-blur-xl"
+        className="lg:hidden sticky top-0 z-40 flex items-center gap-0 px-4 py-2.5 backdrop-blur-xl"
         style={{ borderBottom: '1px solid var(--hairline)', background: 'color-mix(in srgb, var(--surface) 88%, transparent)' }}
       >
-        <button
-          type="button"
-          onClick={() => handleNav('home')}
-          className="flex items-center"
-          aria-label="Go to home"
-        >
-          <BrandMark loading={isLoading} />
-        </button>
-
         <button
           type="button"
           onClick={() => setMobileOpen(true)}
@@ -104,6 +95,15 @@ export default function AppHeader({ status, view, onNavigate, onAbout, theme = '
           aria-expanded={mobileOpen}
         >
           <Menu size={18} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleNav('home')}
+          className="flex items-center"
+          aria-label="Go to home"
+        >
+          <BrandMark loading={isLoading} />
         </button>
       </header>
 
@@ -290,9 +290,9 @@ const ICON_LOGO_URL = '/android-chrome-192x192.png'
 
 function BrandMark({ loading }) {
   return (
-    <div className="relative flex items-center gap-2.5">
-      <div className="relative flex h-8 w-8 items-center justify-center rounded-sm bg-card ring-1 ring-white/[0.08]">
-        <img src={ICON_LOGO_URL} alt="" aria-hidden="true" className="h-5 w-5" />
+    <div className="relative flex items-center gap-0.5">
+      <div className="relative">
+        <img src={ICON_LOGO_URL} alt="" aria-hidden="true" className="h-6 w-6" />
         {loading && (
           <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-primary shadow-primary-glow animate-pulse" />
         )}

@@ -21,6 +21,7 @@ import { useRewardHistory, RH_STATUS } from '../hooks/useRewardHistory.js'
 import { fetchLiveChainInfo } from '../utils/chainInfo.js'
 import PhaseProgressCards from './PhaseProgressCards.jsx'
 import TerminalLog from './TerminalLog.jsx'
+import ToolInfoSection from './ToolInfoSection.jsx'
 import { PLANCK_PER_ENJ } from '../constants.js'
 import { aesEncrypt, aesDecrypt, downloadFile, safeFilename } from '../utils/balanceExport.js'
 import { MAX_IMPORT_MB } from '../constants.js'
@@ -381,14 +382,14 @@ function RewardChart({ data }) {
   const uniqueEras = [...new Set(data.map(r => r.era))]
   if (!data.length || uniqueEras.length < 2) return null
   return (
-    <div className="rounded-[1.5rem] bg-surface p-5 shadow-ambient">
+    <div className="data-panel">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
           <h3 className="font-headline text-xl font-bold text-text">Reward Growth</h3>
           <p className="mt-1 text-xs text-text-secondary">Cumulative ENJ rewards per pool over selected eras</p>
         </div>
       </div>
-      <div className="rounded-[1.25rem] bg-card/80 p-3" style={{ height: '320px' }}>
+      <div className="rounded-sm border border-[var(--hairline)] bg-card p-3" style={{ height: '320px' }}>
         <canvas ref={canvasRef} />
       </div>
     </div>
@@ -479,13 +480,13 @@ function PoolBondedPieChart({ data }) {
 
   if (!data.length) return null
   return (
-    <div className="flex flex-col rounded-[1.5rem] bg-surface p-5 shadow-ambient">
+    <div className="flex flex-col data-panel">
       <div className="mb-3">
         <p className="section-label">Allocation</p>
         <h3 className="mt-2 font-headline text-2xl font-bold text-text">My Bonded ENJ by Pool</h3>
         <p className="mt-2 text-xs text-text-secondary">(wallet share, latest era per pool)</p>
       </div>
-      <div className="rounded-[1.25rem] bg-card/80 p-3" style={{ height: '240px' }}>
+      <div className="rounded-sm border border-[var(--hairline)] bg-card p-3" style={{ height: '240px' }}>
         <canvas ref={canvasRef} />
       </div>
     </div>
@@ -525,13 +526,13 @@ function PoolRewardPieChart({ data }) {
 
   if (!data.length) return null
   return (
-    <div className="flex flex-col rounded-[1.5rem] bg-surface p-5 shadow-ambient">
+    <div className="flex flex-col data-panel">
       <div className="mb-3">
         <p className="section-label">Distribution</p>
         <h3 className="mt-2 font-headline text-2xl font-bold text-text">Reward ENJ by Pool</h3>
         <p className="mt-2 text-xs text-text-secondary">(aggregated across filtered eras)</p>
       </div>
-      <div className="rounded-[1.25rem] bg-card/80 p-3" style={{ height: '240px' }}>
+      <div className="rounded-sm border border-[var(--hairline)] bg-card p-3" style={{ height: '240px' }}>
         <canvas ref={canvasRef} />
       </div>
     </div>
@@ -590,7 +591,7 @@ function PoolMultiSelect({ pools, value, onChange }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 max-h-64 min-w-[220px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-[1rem] bg-card py-1 shadow-xl shadow-black/40 sm:left-0 sm:right-auto">
+        <div className="absolute right-0 top-full z-50 mt-1 max-h-64 min-w-[220px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-sm bg-card py-1 shadow-xl shadow-black/40 sm:left-0 sm:right-auto">
           {/* Select All / Clear */}
           <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-bright rounded-t-lg">
             <button
@@ -709,7 +710,7 @@ function RewardTableV2({ results, onFilter }) {
   const pageSlice  = filtered.slice((safePage - 1) * pageSize, safePage * pageSize)
 
   return (
-    <div className="rounded-[1.5rem] bg-surface p-5 shadow-ambient">
+    <div className="data-panel">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h3 className="font-headline text-2xl font-bold text-text">Ledger Data</h3>
@@ -748,7 +749,7 @@ function RewardTableV2({ results, onFilter }) {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-[1.25rem] bg-card/70 p-1">
+      <div className="overflow-x-auto rounded-sm bg-card/70 p-1">
         <table className="border-collapse text-xs font-mono w-full min-w-max">
           <thead className="sticky top-0 z-10">
             <tr>
@@ -858,7 +859,7 @@ function RewardSummary({ results }) {
   ]
 
   return (
-    <div className="rounded-[1.5rem] bg-surface p-5 shadow-ambient">
+    <div className="data-panel">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h3 className="font-headline text-2xl font-bold text-text">Reward Overview</h3>
@@ -919,7 +920,7 @@ function RewardExportPanel({ results, address }) {
   }
 
   return (
-    <div className="rounded-[1.5rem] bg-surface p-5 shadow-ambient">
+    <div className="data-panel">
       <div className="mb-4">
         <p className="section-label">Export</p>
         <h3 className="mt-2 font-headline text-2xl font-bold text-text">Save reward dataset</h3>
@@ -1113,7 +1114,7 @@ function RewardImportPanel({ onImport }) {
 
       {/* ── Drop zone ───────────────────────────────────────────────────── */}
       <div role="button" tabIndex={0} aria-label="Drop file or click to browse"
-        className={`rounded-[1.5rem] p-10 text-center cursor-pointer transition-all
+        className={`rounded-sm p-10 text-center cursor-pointer transition-all
           ${isDragOver?'bg-cyan/10 shadow-cyan-glow':'bg-card hover:bg-surface-high'}`}
         style={{ border: '1px dashed rgba(70, 71, 82, 0.18)' }}
         onClick={() => fileInputRef.current?.click()}
@@ -1139,7 +1140,7 @@ function RewardImportPanel({ onImport }) {
       {/* ── Decrypt block ───────────────────────────────────────────────── */}
       {encPending && (
         <div className="space-y-3">
-          <div className="flex gap-2 rounded-[1rem] border border-cyan/30 bg-cyan/10 px-4 py-3 text-sm text-cyan">
+          <div className="flex gap-2 rounded-sm border border-cyan/30 bg-cyan/10 px-4 py-3 text-sm text-cyan">
             🔒 Encrypted file detected. Enter password to decrypt.
           </div>
           <div className="flex gap-3 items-end">
@@ -1161,7 +1162,7 @@ function RewardImportPanel({ onImport }) {
 }
 
 // ── Main component ──────────────────────────────────────────────────────────
-export default function RewardHistoryViewer() {
+export default function RewardHistoryViewer({ onScanStateChange }) {
   const { status, results, logs, progress, csvCount, errorMsg, run, stop, reset, log } = useRewardHistory()
 
   const [tab,       setTab]      = useState('compute')  // 'compute' | 'import'
@@ -1251,6 +1252,14 @@ export default function RewardHistoryViewer() {
   const isStopped = status === RH_STATUS.STOPPED
   const isError   = status === RH_STATUS.ERROR
 
+  useEffect(() => {
+    onScanStateChange?.(isLoading)
+  }, [isLoading, onScanStateChange])
+
+  useEffect(() => () => {
+    onScanStateChange?.(false)
+  }, [onScanStateChange])
+
   // Active results: computed or imported
   const activeResults = importedResults ?? results
 
@@ -1292,14 +1301,14 @@ export default function RewardHistoryViewer() {
   const displayMeta     = phases.length > 0 ? progressMeta    : null
   const rangeModeLabel = rangeMode === 'era' ? 'Era Range' : 'Date Range'
   const liveChainSnapshot = (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div className="metric-card metric-card-left-cyan">
+    <div className="grid grid-cols-2 gap-2 sm:gap-3">
+      <div className="metric-card metric-card-left-cyan py-2.5">
         <p className="metric-label">Live Era</p>
-        <p className="metric-value text-cyan">{chainInfo.loading ? '…' : (chainInfo.era != null ? chainInfo.era.toLocaleString() : '—')}</p>
+        <p className="mt-1 truncate font-mono text-base font-semibold leading-tight text-cyan sm:text-lg" style={{ fontVariantNumeric: 'tabular-nums' }}>{chainInfo.loading ? '…' : (chainInfo.era != null ? chainInfo.era.toLocaleString() : '—')}</p>
       </div>
-      <div className="metric-card metric-card-left-primary">
+      <div className="metric-card metric-card-left-primary py-2.5">
         <p className="metric-label">Live Block</p>
-        <p className="metric-value text-text">{chainInfo.loading ? '…' : (chainInfo.block != null ? chainInfo.block.toLocaleString() : '—')}</p>
+        <p className="mt-1 truncate font-mono text-base font-semibold leading-tight text-text sm:text-lg" style={{ fontVariantNumeric: 'tabular-nums' }}>{chainInfo.loading ? '…' : (chainInfo.block != null ? chainInfo.block.toLocaleString() : '—')}</p>
       </div>
     </div>
   )
@@ -1354,84 +1363,54 @@ export default function RewardHistoryViewer() {
     <div className={`space-y-4 transition-[padding] duration-200 ${logExpanded ? 'pb-[380px]' : 'pb-16'}`}>
 
       <section className="page-hero">
-        <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1.12fr)_minmax(280px,0.88fr)] lg:items-start">
-          <div className="space-y-5">
-            <div className="hero-kicker">
-              <span className="hero-dot" />
-              Reward History Viewer
-            </div>
-            <div className="space-y-4">
-              <h1 className="hero-title text-balance">Pool reward history with export-ready structure.</h1>
-              <p className="hero-copy">
-                Compute per-era reward attribution for nomination pools, filter and visualize the result set, and keep import or export workflows intact for downstream analysis.
-              </p>
-            </div>
+        <div className="relative z-10 flex flex-col gap-2">
+          <div className="hero-kicker self-start">
+            <span className="hero-dot" />
+            Reward History Viewer
           </div>
-
-          <div className="flex flex-col gap-3">
-            {[
-              { key: 'compute', label: 'Compute Rewards', icon: Server },
-              { key: 'import',  label: 'Import Data',     icon: Upload },
-            ].map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setTab(key)}
-                className={`flex items-center gap-3.5 rounded-[1.15rem] border px-4 py-3.5 text-left transition-all ${
-                  tab === key
-                    ? 'border-primary/30 bg-primary/10 shadow-primary-glow'
-                    : 'border-white/8 bg-card hover:border-cyan/20 hover:bg-surface-bright'
-                }`}
-              >
-                <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl ${
-                  tab === key ? 'bg-primary text-on-primary' : 'bg-surface text-text-secondary'
-                }`}>
-                  <Icon size={16} />
-                </div>
-                <span className={`font-headline text-base font-bold ${tab === key ? 'text-text' : 'text-text-secondary'}`}>{label}</span>
-              </button>
-            ))}
-          </div>
+          <h1 className="hero-title">Pool reward history</h1>
+          <p className="hero-copy">
+            Compute per-era reward attribution for nomination pools, filter and visualize the result, and keep import/export intact.
+          </p>
         </div>
       </section>
 
+      <div className="flex w-full gap-1 rounded-sm border border-[var(--hairline)] bg-card p-1">
+        {[
+          { key: 'compute', label: 'Compute Rewards', icon: Server },
+          { key: 'import',  label: 'Import Data',     icon: Upload },
+        ].map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTab(key)}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-sm px-2 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors sm:gap-2 sm:px-3 sm:text-[13px] ${
+              tab === key
+                ? 'bg-primary/15 text-primary-glow'
+                : 'text-text-secondary hover:bg-surface-high hover:text-text'
+            }`}
+            style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace', ...(tab === key ? { boxShadow: 'inset 0 0 0 1px rgba(124, 58, 237, 0.35)' } : {}) }}
+          >
+            <Icon size={13} />
+            <span className="truncate">{label}</span>
+          </button>
+        ))}
+      </div>
+
       {/* ── Compute pane — 3 separate cards ── */}
       {tab === 'compute' && (
-        <div>
-          {/* Important Notes — full-width above the 3-column grid */}
-          <div className="mb-4 rounded-[1.25rem] bg-card/75 p-4 shadow-inset-soft">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-warning/10 text-warning">
-                <AlertCircle size={16} />
-              </div>
-              <div className="flex-1 space-y-2">
-                <p className="section-label text-warning">Important Notes</p>
-                <h3 className="font-headline text-2xl font-bold text-text">Reward history is an estimate</h3>
-                <p className="section-subtitle">
-                  Archive snapshots reconstruct pool-level rewards and member share over time, so the output is best used for investigation and planning.
-                </p>
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  <div className="rounded-[1.25rem] bg-surface/60 px-4 py-4">
-                    <p className="text-sm font-semibold text-text">Pool-level payouts</p>
-                    <p className="mt-2 text-sm leading-6 text-text-secondary">
-                      The pool gets daily rewards, not the user, so these values are estimations rather than wallet-level settlement records.
-                    </p>
-                  </div>
-                  <div className="rounded-[1.25rem] bg-surface/60 px-4 py-4">
-                    <p className="text-sm font-semibold text-text">Tax note</p>
-                    <p className="mt-2 text-sm leading-6 text-text-secondary">
-                      Tax treatment depends on your jurisdiction and activity history. Use this tool as a research aid, not tax advice.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="space-y-3 sm:space-y-4">
+          <ToolInfoSection tone="warning">
+            <p className="font-semibold text-text">Reward history is an estimate</p>
+            <p className="mt-1">Archive snapshots reconstruct pool-level rewards and member share over time, so the output is best used for investigation and planning.</p>
+            <p className="mt-2"><span className="font-semibold text-text">Pool-level payouts.</span> The pool gets daily rewards, not the user, so these values are estimations rather than wallet-level settlement records.</p>
+            <p className="mt-2"><span className="font-semibold text-text">Tax note.</span> Tax treatment depends on your jurisdiction and activity history. Use this tool as a research aid, not tax advice.</p>
+          </ToolInfoSection>
 
           <div className="grid gap-4 xl:grid-cols-3 xl:items-start">
           {/* Col 1: RPC Config */}
-          <div className="rounded-[1.35rem] bg-surface shadow-ambient p-4 sm:p-5">
-            <div className="rounded-[1.25rem] bg-card/75 p-4 shadow-inset-soft">
+          <div className="data-panel">
+            <div className="rounded-sm border border-[var(--hairline)] bg-card p-3 sm:p-4 shadow-inset-soft">
               <div>
                 <div>
                   <h3 className="mt-2 font-headline text-2xl font-bold text-text">RPC Configuration</h3>
@@ -1439,15 +1418,12 @@ export default function RewardHistoryViewer() {
               </div>
 
             {/* Address */}
-          <div className="mt-4 rounded-[1.25rem] bg-surface/60 px-4 py-4">
+          <div className="mt-4 rounded-sm border border-[var(--hairline)] bg-card px-4 py-4">
               <p className="text-sm font-semibold text-text">Relaychain Wallet Address</p>
-              <p className="mt-2 text-sm leading-6 text-text-secondary">
-                Enter the relaychain account you want to analyze.
-              </p>
               <input type="text" value={address}
                 onChange={e => setAddress(e.target.value)}
                 placeholder="en…" disabled={isLoading}
-                className={`mt-4 w-full input-field font-mono ${addrErr ? 'ring-1 ring-danger/60' : ''}`}
+                className={`mt-3 w-full input-field font-mono ${addrErr ? 'ring-1 ring-danger/60' : ''}`}
                 maxLength={60} />
               {addrErr && (
                 <p className="mt-2 flex items-center gap-1.5 text-xs leading-5 text-danger">
@@ -1457,7 +1433,7 @@ export default function RewardHistoryViewer() {
             </div>
 
             {/* Pool scope toggle */}
-          <div className="mt-4 rounded-[1.25rem] bg-surface/60 px-4 py-4 space-y-2">
+          <div className="mt-4 rounded-sm border border-[var(--hairline)] bg-card px-4 py-4 space-y-2">
               <div className="flex items-center gap-2.5">
                 <button
                   type="button"
@@ -1483,22 +1459,15 @@ export default function RewardHistoryViewer() {
             </div>  {/* close Col 1 */}
 
           {/* Col 2: Query Mode + Range Params + action */}
-            <div className="rounded-[1.35rem] bg-surface shadow-ambient p-4 sm:p-5 space-y-4">
+            <div className="data-panel space-y-4">
 
             {/* Live chain snapshot */}
             {liveChainSnapshot}
 
             {/* Range mode toggle */}
-            <div className="rounded-[1.25rem] bg-card px-4 py-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="max-w-xl">
-                  <p className="text-sm font-semibold text-text">Query Mode</p>
-                  <p className="mt-2 text-sm leading-6 text-text-secondary">
-                    Use era numbers when you know the ledger window, or switch to date mode for a faster time-based estimate.
-                  </p>
-                </div>
-              </div>
-              <div className="range-mode-grid mt-4">
+            <div className="rounded-sm bg-card px-4 py-4">
+              <p className="text-sm font-semibold text-text">Query Mode</p>
+              <div className="range-mode-grid mt-3">
                 {REWARD_RANGE_MODE_OPTIONS.map(option => {
                   const isActive = rangeMode === option.key
                   return (
@@ -1652,7 +1621,7 @@ export default function RewardHistoryViewer() {
 
       {/* ── Import pane ── */}
       {tab === 'import' && (
-        <div className="overflow-hidden rounded-[1.75rem] bg-surface shadow-ambient">
+        <div className="overflow-hidden rounded-sm border border-[var(--hairline)] bg-surface">
           <div role="tabpanel" className="p-4 sm:p-5 space-y-3">
             <div>
               <p className="section-label">Import</p>
@@ -1672,21 +1641,21 @@ export default function RewardHistoryViewer() {
 
       {/* ── Error ── */}
       {isError && errorMsg && (
-        <div className="rounded-[1.5rem] bg-danger/5 p-4 border border-danger/30">
+        <div className="rounded-sm bg-danger/5 p-4 border border-danger/30">
           <p className="text-sm text-danger">{errorMsg}</p>
         </div>
       )}
 
       {/* ── Stopped ── */}
       {isStopped && !activeResults.length && (
-        <div className="rounded-[1.5rem] bg-warning/5 p-4 border border-warning/30">
+        <div className="rounded-sm bg-warning/5 p-4 border border-warning/30">
           <p className="text-sm text-warning">Computation stopped before results were available.</p>
         </div>
       )}
 
       {/* ── Empty result ── */}
       {isDone && !activeResults.length && (
-        <div className="rounded-[1.5rem] bg-surface p-6 text-center shadow-ambient">
+        <div className="data-panel text-center">
           <p className="text-sm text-text-secondary">No rewards found for the given address and era range.</p>
           <p className="text-xs text-muted mt-2">
             If you have exited your pool(s), enable "Include past pool interactions"
@@ -1700,7 +1669,7 @@ export default function RewardHistoryViewer() {
         <section ref={resultsRef} className="space-y-4">
           {/* Address summary bar */}
           {(() => { const dispAddr = importedResults ? importedAddress : address; return dispAddr ? (
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-[1.5rem] bg-surface px-5 py-4 shadow-ambient">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 data-panel">
               <div className="flex flex-col gap-0.5">
                 <span className="text-[11px] font-bold tracking-widest uppercase text-text-secondary">Wallet</span>
                 <span className="text-sm font-bold text-text font-mono" title={dispAddr}>{dispAddr}</span>
