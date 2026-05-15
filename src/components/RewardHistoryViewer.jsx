@@ -1404,59 +1404,56 @@ export default function RewardHistoryViewer({ onScanStateChange }) {
             <p className="font-semibold text-text">Reward history is an estimate</p>
             <p className="mt-1">Archive snapshots reconstruct pool-level rewards and member share over time, so the output is best used for investigation and planning.</p>
             <p className="mt-2"><span className="font-semibold text-text">Pool-level payouts.</span> The pool gets daily rewards, not the user, so these values are estimations rather than wallet-level settlement records.</p>
+            <p className="mt-2"><span className="font-semibold text-text">Enjin Wallet may show different values.</span> The wallet derives reward figures from its own data pipeline and may reflect claimable balances or rounding differently from the era-by-era archive reconstruction used here.</p>
             <p className="mt-2"><span className="font-semibold text-text">Tax note.</span> Tax treatment depends on your jurisdiction and activity history. Use this tool as a research aid, not tax advice.</p>
           </ToolInfoSection>
 
           <div className="grid gap-4 xl:grid-cols-3 xl:items-start">
           {/* Col 1: RPC Config */}
           <div className="data-panel">
-            <div className="rounded-sm border border-[var(--hairline)] bg-card p-3 sm:p-4 shadow-inset-soft">
-              <div>
-                <div>
-                  <h3 className="mt-2 font-headline text-2xl font-bold text-text">RPC Configuration</h3>
+            <h3 className="font-headline text-lg font-bold text-text sm:text-xl">Scan Configuration</h3>
+            <div className="mt-4 grid gap-3">
+
+              {/* Address */}
+              <div className="rounded-sm border border-[var(--hairline)] bg-card px-3 py-3 sm:px-4 sm:py-4">
+                <p className="text-sm font-semibold text-text">Relaychain Wallet Address</p>
+                <input type="text" value={address}
+                  onChange={e => setAddress(e.target.value)}
+                  placeholder="en…" disabled={isLoading}
+                  className={`mt-3 w-full input-field font-mono ${addrErr ? 'ring-1 ring-danger/60' : ''}`}
+                  maxLength={60} />
+                {addrErr && (
+                  <p className="mt-2 flex items-center gap-1.5 text-xs leading-5 text-danger">
+                    <AlertTriangle size={12} className="flex-shrink-0" />{addrErr}
+                  </p>
+                )}
+              </div>
+
+              {/* Pool scope toggle */}
+              <div className="rounded-sm border border-[var(--hairline)] bg-card px-3 py-3 sm:px-4 sm:py-4 space-y-2">
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={includeHistory}
+                    disabled={isLoading}
+                    onClick={() => setIncludeHistory(v => !v)}
+                    className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200 focus-visible:outline-none
+                      focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50
+                      ${includeHistory ? 'bg-primary' : 'bg-surface-bright'}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200
+                      ${includeHistory ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                  <span className="text-sm font-semibold text-text">Include past pool interactions</span>
                 </div>
-              </div>
-
-            {/* Address */}
-          <div className="mt-4 rounded-sm border border-[var(--hairline)] bg-card px-4 py-4">
-              <p className="text-sm font-semibold text-text">Relaychain Wallet Address</p>
-              <input type="text" value={address}
-                onChange={e => setAddress(e.target.value)}
-                placeholder="en…" disabled={isLoading}
-                className={`mt-3 w-full input-field font-mono ${addrErr ? 'ring-1 ring-danger/60' : ''}`}
-                maxLength={60} />
-              {addrErr && (
-                <p className="mt-2 flex items-center gap-1.5 text-xs leading-5 text-danger">
-                  <AlertTriangle size={12} className="flex-shrink-0" />{addrErr}
+                <p className="text-sm leading-6 text-text-secondary">
+                  Also query historical pool bond, unbond, and withdraw activity through Subscan when you want to include previously exited pools.
                 </p>
-            )}
-            </div>
-
-            {/* Pool scope toggle */}
-          <div className="mt-4 rounded-sm border border-[var(--hairline)] bg-card px-4 py-4 space-y-2">
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={includeHistory}
-                  disabled={isLoading}
-                  onClick={() => setIncludeHistory(v => !v)}
-                  className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200 focus-visible:outline-none
-                    focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50
-                    ${includeHistory ? 'bg-primary' : 'bg-surface-bright'}`}
-                >
-                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200
-                    ${includeHistory ? 'translate-x-5' : 'translate-x-0'}`} />
-                </button>
-                <span className="text-sm font-semibold text-text">Include past pool interactions</span>
               </div>
-              <p className="text-sm leading-6 text-text-secondary">
-                Also query historical pool bond, unbond, and withdraw activity through Subscan when you want to include previously exited pools.
-              </p>
-            </div>
 
-            </div>  {/* close RPC card */}
-            </div>  {/* close Col 1 */}
+            </div>
+          </div> {/* close Col 1 */}
 
           {/* Col 2: Query Mode + Range Params + action */}
             <div className="data-panel space-y-4">

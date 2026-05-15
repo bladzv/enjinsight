@@ -3081,11 +3081,7 @@ def show_about() -> None:
   Subscan    {EXPLORER_BASE}
 
 [bold cyan]Disclaimer:[/bold cyan]
-  EnjinSight is unofficial third-party tooling and is not developed by or
-  affiliated with the Enjin development team.  The information shown here is
-  assembled from public chain data and should be treated as a research aid,
-  not a guarantee.  Verify important operational, accounting, or tax decisions
-  against your own records.
+  EnjinSight is a third-party, community-built tool. Information displayed is derived from publicly available on-chain data and is provided for research and reference purposes only. It does not constitute financial, accounting, tax, or legal advice, and should not be relied upon as a definitive or complete record. Always verify any information against your own primary records before making operational, accounting, tax, or other material decisions.
 
 [bold cyan]Security:[/bold cyan]
   - API key read from environment (never hard-coded)

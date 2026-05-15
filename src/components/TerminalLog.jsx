@@ -72,7 +72,7 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
           </div>
           <div className="flex min-w-0 items-center gap-2">
             <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-primary">
-              {sticky ? '$ logs' : 'session'}
+              {sticky ? 'logs' : 'session'}
             </span>
             <span className={`h-1 w-1 rounded-full ${logs.length ? 'bg-success animate-pulse' : 'bg-muted'}`} />
           </div>
