@@ -127,9 +127,9 @@ export default function LandingPage({ onNavigate }) {
       {/* ── Trust strip ──────────────────────────────────────────────── */}
       <section className="grid gap-3 sm:grid-cols-3" aria-label="Operating principles">
         {[
-          { label: 'Read-only',   body: 'Holds no keys, signs no transactions, runs no backend store.' },
-          { label: 'Public data', body: 'Powered entirely by public Substrate / Subscan / Etherscan endpoints.' },
-          { label: 'Verify',      body: 'Treat every output as a research aid — reconcile against your own records.' },
+          { label: 'Read-only',   body: 'No wallet, no signing, no transactions.' },
+          { label: 'Public data', body: 'From public RPC nodes, indexers, and era references.' },
+          { label: 'Verify',      body: 'Confirm outputs against your own records.' },
         ].map(item => (
           <article key={item.label} className="flex items-start gap-3 rounded-sm border border-white/[0.06] bg-card p-4">
             <div className="min-w-0 space-y-1">

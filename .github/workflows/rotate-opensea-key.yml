@@ -18,16 +18,16 @@ jobs:
         run: |
           set -euo pipefail
           RESPONSE="$(curl -sS -X POST https://api.opensea.io/api/v2/auth/keys)"
-          echo "$RESPONSE" > opensea_response.json
-
-          API_KEY="$(python -c "import json; print(json.load(open('opensea_response.json', 'r', encoding='utf-8')).get('api_key', ''))")"
-          EXPIRES_AT="$(python -c "import json; print(json.load(open('opensea_response.json', 'r', encoding='utf-8')).get('expires_at', ''))")"
+          API_KEY="$(printf '%s' "$RESPONSE" | jq -r '.api_key // empty')"
+          EXPIRES_AT="$(printf '%s' "$RESPONSE" | jq -r '.expires_at // empty')"
 
           if [ -z "$API_KEY" ] || [ -z "$EXPIRES_AT" ]; then
-            echo "OpenSea key creation failed: $(cat opensea_response.json)"
+            echo "OpenSea key creation failed (response withheld to avoid leaking partial secrets)."
             exit 1
           fi
 
+          echo "::add-mask::$API_KEY"
+          echo "::add-mask::$EXPIRES_AT"
           echo "api_key=$API_KEY" >> "$GITHUB_OUTPUT"
           echo "expires_at=$EXPIRES_AT" >> "$GITHUB_OUTPUT"
 
@@ -63,11 +63,13 @@ jobs:
             fi
           done
 
+          BODY=$(jq -nc --arg k "$KEY_NAME" --arg v "$NEW_VALUE" \
+            '{key:$k, value:$v, type:"encrypted", target:["production"]}')
           curl --fail-with-body -sS -X POST \
             -H "Authorization: Bearer ${VERCEL_TOKEN}" \
             -H "Content-Type: application/json" \
             "${BASE_URL}/v10/projects/${VERCEL_PROJECT_ID}/env${TEAM_QUERY}" \
-            --data "{\"key\":\"${KEY_NAME}\",\"value\":\"${NEW_VALUE}\",\"type\":\"encrypted\",\"target\":[\"production\"]}" >/dev/null
+            --data "$BODY" >/dev/null
 
       - name: Upsert OPENSEA_API_KEY_EXPIRES_AT in Vercel production env
         env:
@@ -101,11 +103,13 @@ jobs:
             fi
           done
 
+          BODY=$(jq -nc --arg k "$KEY_NAME" --arg v "$NEW_VALUE" \
+            '{key:$k, value:$v, type:"encrypted", target:["production"]}')
           curl --fail-with-body -sS -X POST \
             -H "Authorization: Bearer ${VERCEL_TOKEN}" \
             -H "Content-Type: application/json" \
             "${BASE_URL}/v10/projects/${VERCEL_PROJECT_ID}/env${TEAM_QUERY}" \
-            --data "{\"key\":\"${KEY_NAME}\",\"value\":\"${NEW_VALUE}\",\"type\":\"encrypted\",\"target\":[\"production\"]}" >/dev/null
+            --data "$BODY" >/dev/null
 
       - name: Summary
         run: |

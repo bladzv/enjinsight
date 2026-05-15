@@ -48,11 +48,12 @@ export default {
         mono:     ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', '"Liberation Mono"', '"Courier New"', 'monospace'],
       },
       animation: {
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'fade-in':    'fadeIn 0.25s ease-out',
-        'slide-down': 'slideDown 0.25s ease-out',
-        'blink':      'blink 1.2s step-end infinite',
-        'tick':       'tick 1.2s steps(2, end) infinite',
+        'pulse-slow':   'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'fade-in':      'fadeIn 0.25s ease-out',
+        'slide-down':   'slideDown 0.25s ease-out',
+        'blink':        'blink 1.2s step-end infinite',
+        'tick':         'tick 1.2s steps(2, end) infinite',
+        'scroll-nudge': 'scrollNudge 1.5s ease-in-out infinite',
       },
       keyframes: {
         fadeIn: {
@@ -70,6 +71,10 @@ export default {
         tick: {
           '0%, 49%':   { opacity: 1 },
           '50%, 100%': { opacity: 0.35 },
+        },
+        scrollNudge: {
+          '0%, 100%': { transform: 'translateY(0)',   opacity: '0.45' },
+          '55%':      { transform: 'translateY(5px)', opacity: '1'    },
         },
       },
       boxShadow: {
