@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { AlertTriangle, CheckCircle2, Database, Eye, X } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { AlertTriangle, CheckCircle2, ChevronDown, Database, Eye, X } from 'lucide-react'
 
 const STORAGE_KEY = 'enjinsight_disclaimer_v1'
 const BRAND_LOGO_URL = '/android-chrome-192x192.png'
@@ -15,9 +15,7 @@ export function DisclaimerContent({ compact = false } = {}) {
         <p className="font-headline text-base font-bold text-warning">Disclaimer</p>
       </div>
       <p className="mt-2.5 text-sm leading-6 text-text-secondary">
-        EnjinSight is unofficial third-party tooling and is not developed by or affiliated with the Enjin development team.
-        The information shown here is assembled from public chain data and should be treated as a research aid, not a guarantee.
-        Verify important operational, accounting, or tax decisions against your own records.
+        EnjinSight is a third-party, community-built tool. Information displayed is derived from publicly available on-chain data and is provided for research and reference purposes only. It does not constitute financial, accounting, tax, or legal advice, and should not be relied upon as a definitive or complete record. Always verify any information against your own primary records before making operational, accounting, tax, or other material decisions.
       </p>
     </div>
   )
@@ -47,6 +45,14 @@ export function useFirstVisitDisclaimer() {
 export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
   const isFirstVisit = mode === 'first-visit'
   const [seconds, setSeconds] = useState(5)
+  const scrollRef = useRef(null)
+  const [showNudge, setShowNudge] = useState(false)
+
+  const checkOverflow = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    setShowNudge(el.scrollTop + el.clientHeight < el.scrollHeight - 20)
+  }, [])
 
   useEffect(() => {
     const prevOverflow = document.body.style.overflow
@@ -56,12 +62,19 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
 
     document.body.style.overflow = 'hidden'
     window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('resize', checkOverflow)
 
     return () => {
       document.body.style.overflow = prevOverflow
       window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('resize', checkOverflow)
     }
-  }, [isFirstVisit, onClose])
+  }, [isFirstVisit, onClose, checkOverflow])
+
+  useEffect(() => {
+    const id = requestAnimationFrame(checkOverflow)
+    return () => cancelAnimationFrame(id)
+  }, [checkOverflow])
 
   useEffect(() => {
     if (!isFirstVisit || seconds <= 0) return
@@ -91,7 +104,7 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
           </button>
         )}
 
-        <div className="relative z-10 min-h-0 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-8">
+        <div ref={scrollRef} onScroll={checkOverflow} className="relative z-10 min-h-0 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-8">
           <div className="flex items-center gap-2.5 sm:gap-3">
             <img src={BRAND_LOGO_URL} alt="EnjinSight logo" className="h-8 w-8 rounded-sm sm:h-12 sm:w-12" />
             <img src={BRAND_NAME_URL} alt="EnjinSight" className="h-6 w-auto max-w-[9rem] sm:h-9 sm:max-w-[13rem]" />
@@ -116,6 +129,12 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
             )}
           </div>
         </div>
+
+        {showNudge && (
+          <div className="pointer-events-none absolute bottom-0 inset-x-0 z-20 flex flex-col items-center justify-end h-16 bg-gradient-to-t from-surface to-transparent pb-3">
+            <ChevronDown size={18} className="animate-scroll-nudge text-text-secondary/60" />
+          </div>
+        )}
       </div>
     </div>
   )
@@ -130,17 +149,17 @@ function FirstVisitContent() {
         <FirstVisitCard
           icon={Eye}
           title="Read-only"
-          text="No wallet connection, no signing, and no transaction flow."
+          text="No wallet, no signing, no transactions."
         />
         <FirstVisitCard
           icon={Database}
           title="Public data"
-          text="Values are assembled from public RPC nodes, indexers, and bundled era references."
+          text="From public RPC nodes, indexers, and era references."
         />
         <FirstVisitCard
           icon={CheckCircle2}
           title="Verify"
-          text="Use the output as a research aid and confirm important decisions independently."
+          text="Confirm outputs against your own records."
         />
       </div>
     </div>
