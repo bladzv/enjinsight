@@ -24,3 +24,5 @@ new_feature/.env
 # Python bytecode / caches
 __pycache__/
 *.py[cod]
+
+indexer/
