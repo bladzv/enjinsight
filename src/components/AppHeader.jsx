@@ -32,7 +32,7 @@ const BRAND_LOGO_URL = '/assets/brand/enjinsight_brand.png'
  * the existing import path stable, but the visual + structural role is now
  * a persistent left-rail with a slide-out drawer below the lg breakpoint.
  */
-export default function AppHeader({ status, view, onNavigate, onAbout, theme = 'dark', onToggleTheme, onThemeChange }) {
+export default function AppHeader({ status, view, onNavigate, onAbout, theme = 'dark', onToggleTheme, onThemeChange, simpleMode = false, onSimpleModeChange }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const isLoading = status === 'loading'
 
@@ -79,6 +79,8 @@ export default function AppHeader({ status, view, onNavigate, onAbout, theme = '
           theme={theme}
           onToggleTheme={onToggleTheme}
           onThemeChange={onThemeChange}
+          simpleMode={simpleMode}
+          onSimpleModeChange={onSimpleModeChange}
         />
       </aside>
 
@@ -145,6 +147,8 @@ export default function AppHeader({ status, view, onNavigate, onAbout, theme = '
                 theme={theme}
                 onToggleTheme={onToggleTheme}
                 onThemeChange={onThemeChange}
+                simpleMode={simpleMode}
+                onSimpleModeChange={onSimpleModeChange}
                 mobile
               />
             </div>
@@ -155,7 +159,7 @@ export default function AppHeader({ status, view, onNavigate, onAbout, theme = '
   )
 }
 
-function RailContent({ view, isLoading, tools, workspace, onNavigate, onAbout, theme, onToggleTheme, onThemeChange, mobile = false }) {
+function RailContent({ view, isLoading, tools, workspace, onNavigate, onAbout, theme, onToggleTheme, onThemeChange, simpleMode = false, onSimpleModeChange, mobile = false }) {
   function selectTheme(nextTheme) {
     if (typeof onThemeChange === 'function') {
       onThemeChange(nextTheme)
@@ -207,6 +211,30 @@ function RailContent({ view, isLoading, tools, workspace, onNavigate, onAbout, t
               aria-pressed={theme === 'light'}
             >
               Light
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-2 pb-3" aria-label="UI mode">
+        <div className="space-y-2 px-1">
+          <p className="rail-section-label px-2">Mode</p>
+          <div className="flex items-center rounded-sm border p-1" style={{ borderColor: 'var(--hairline)', background: 'var(--card)' }} role="group" aria-label="UI mode switch">
+            <button
+              type="button"
+              onClick={() => onSimpleModeChange?.(false)}
+              className={`inline-flex min-h-[2rem] flex-1 items-center justify-center rounded-sm px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${!simpleMode ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:text-text'}`}
+              aria-pressed={!simpleMode}
+            >
+              Advanced
+            </button>
+            <button
+              type="button"
+              onClick={() => onSimpleModeChange?.(true)}
+              className={`inline-flex min-h-[2rem] flex-1 items-center justify-center rounded-sm px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${simpleMode ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:text-text'}`}
+              aria-pressed={simpleMode}
+            >
+              Simple
             </button>
           </div>
         </div>

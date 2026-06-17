@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, Square } from 'lucide-react'
 import { DEFAULT_ERA_COUNT } from './constants.js'
 import { useValidatorChecker } from './hooks/useValidatorChecker.js'
 import { usePoolChecker }      from './hooks/usePoolChecker.js'
 import { resolveLatestEra }    from './utils/eraAnalysis.js'
 
 import AppHeader           from './components/AppHeader.jsx'
+import StepProgress        from './components/StepProgress.jsx'
 import DisclaimerModal, { useFirstVisitDisclaimer } from './components/DisclaimerModal.jsx'
 import LandingPage         from './components/LandingPage.jsx'
 import BalanceExplorer     from './components/BalanceExplorer.jsx'
@@ -37,6 +38,13 @@ const POOL_PREVIEW_PHASES = [
 ]
 const STAKING_RESULTS_PAGE_SIZE = 10
 
+const STAKING_SIMPLE_STEPS = [
+  { key: 'mode',    label: 'Mode'    },
+  { key: 'options', label: 'Options' },
+  { key: 'running', label: 'Running' },
+  { key: 'results', label: 'Results' },
+]
+
 export default function App() {
   // Persist active view in URL hash so page refresh stays on current tool
   const [view, setView] = useState(() => {
@@ -56,6 +64,11 @@ export default function App() {
     if (storedTheme === 'light' || storedTheme === 'dark') return storedTheme
     return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
   })
+  const [simpleMode, setSimpleMode] = useState(() => {
+    return window.localStorage.getItem('enjinsight-ui-mode') === 'simple'
+  })
+  const [stakingPage, setStakingPage] = useState(1)
+  const [stakingSimpleRunning, setStakingSimpleRunning] = useState(false)
   const [balanceScanActive, setBalanceScanActive] = useState(false)
   const [rewardScanActive, setRewardScanActive] = useState(false)
   const [infusionScanActive, setInfusionScanActive] = useState(false)
@@ -192,6 +205,7 @@ export default function App() {
 
   async function handleRun(eraCount) {
     setLastEraCount(eraCount)
+    setStakingSimpleRunning(true)
     if (isValidatorMode) {
       await vRunCheck(eraCount)
     } else {
@@ -202,6 +216,8 @@ export default function App() {
   function handleReset() {
     if (isValidatorMode) vReset()
     else pReset()
+    setStakingPage(1)
+    setStakingSimpleRunning(false)
   }
 
   function handleStop() {
@@ -255,6 +271,15 @@ export default function App() {
     setTheme(nextTheme)
   }
 
+  function handleSimpleModeChange(isSimple) {
+    setSimpleMode(isSimple)
+    window.localStorage.setItem('enjinsight-ui-mode', isSimple ? 'simple' : 'advanced')
+  }
+
+  const stakingSimpleStep = (status === 'loading' && stakingSimpleRunning) ? 3
+    : ((status === 'done' || status === 'error' || status === 'stopped') && stakingSimpleRunning) ? 4
+    : stakingPage
+
   useEffect(() => {
     if (safeValidatorPage !== validatorPage) setValidatorPage(safeValidatorPage)
   }, [safeValidatorPage, validatorPage])
@@ -291,6 +316,8 @@ export default function App() {
         theme={theme}
         onToggleTheme={handleToggleTheme}
         onThemeChange={handleThemeChange}
+        simpleMode={simpleMode}
+        onSimpleModeChange={handleSimpleModeChange}
       />
 
       <div className="relative flex min-w-0 flex-col">
@@ -301,21 +328,21 @@ export default function App() {
       {/* ── Balance Viewer ──────────────────────────────────────────── */}
       {view === 'balance' && (
         <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
-          <BalanceExplorer onScanStateChange={setBalanceScanActive} />
+          <BalanceExplorer onScanStateChange={setBalanceScanActive} simpleMode={simpleMode} />
         </main>
       )}
 
       {/* ── Reward History Viewer ─────────────────────────────────────────── */}
       {view === 'reward-history' && (
         <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
-          <RewardHistoryViewer onScanStateChange={setRewardScanActive} />
+          <RewardHistoryViewer onScanStateChange={setRewardScanActive} simpleMode={simpleMode} />
         </main>
       )}
 
       {/* ── ENJ Infusion Checker ─────────────────────────────────────────── */}
       {view === 'infusion' && (
         <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
-          <InfusionChecker onScanStateChange={setInfusionScanActive} />
+          <InfusionChecker onScanStateChange={setInfusionScanActive} simpleMode={simpleMode} />
         </main>
       )}
 
@@ -341,27 +368,88 @@ export default function App() {
           </div>
         </section>
 
-        {/* Mode selector tabs + scan controls */}
-        <div className="grid gap-3 xl:grid-cols-3 xl:items-stretch sm:gap-4">
-          <ModeSelector mode={mode} onModeChange={handleModeChange} disabled={isLoading} />
-          <ControlPanel
-            mode={mode}
-            status={status}
-            onRun={handleRun}
-            onStop={handleStop}
-            onReset={handleReset}
+        {/* Simple mode: step progress bar */}
+        {simpleMode && (
+          <StepProgress
+            steps={STAKING_SIMPLE_STEPS}
+            currentStep={stakingSimpleStep}
+            onReset={stakingSimpleStep > 1 ? handleReset : undefined}
           />
+        )}
 
-          <PhaseProgressCards
-            className="h-full"
-            ariaLabel="Scan progress"
-            indexLabel="Step"
-            title={displayProgressTitle}
-            summary={displayProgressSummary}
-            meta={displayProgressMeta}
-            phases={displayPhases}
-          />
-        </div>
+        {/* Controls: advanced always; simple page 1 (Mode) and page 2 (Options) */}
+        {!simpleMode && (
+          <div className="grid gap-3 sm:gap-4 xl:grid-cols-3 xl:items-stretch">
+            <ModeSelector mode={mode} onModeChange={handleModeChange} disabled={isLoading} />
+            <ControlPanel
+              mode={mode}
+              status={status}
+              onRun={handleRun}
+              onStop={handleStop}
+              onReset={handleReset}
+            />
+            <PhaseProgressCards
+              className="h-full"
+              ariaLabel="Scan progress"
+              indexLabel="Step"
+              title={displayProgressTitle}
+              summary={displayProgressSummary}
+              meta={displayProgressMeta}
+              phases={displayPhases}
+            />
+          </div>
+        )}
+
+        {/* Simple page 1: Mode selection */}
+        {/* Simple page 1: Mode — ModeSelector is already a data-panel, no wrapper needed */}
+        {simpleMode && stakingSimpleStep === 1 && (
+          <div className="mx-auto w-full max-w-lg space-y-4">
+            <ModeSelector mode={mode} onModeChange={handleModeChange} disabled={false} />
+            <div className="flex justify-end">
+              <button type="button" onClick={() => setStakingPage(2)} className="btn-primary flex items-center gap-2">
+                Next <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Simple page 2: Era count + Run */}
+        {simpleMode && stakingSimpleStep === 2 && (
+          <div className="mx-auto w-full max-w-[360px] space-y-3">
+            <ControlPanel
+              mode={mode}
+              status={status}
+              onRun={handleRun}
+              onStop={handleStop}
+              onReset={handleReset}
+              compact
+            />
+            <div className="flex justify-start">
+              <button type="button" onClick={() => setStakingPage(1)} className="btn-secondary flex items-center gap-2">
+                <span aria-hidden="true">←</span> Back
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Simple mode step 3: running screen */}
+        {simpleMode && stakingSimpleStep === 3 && (
+          <div className="mx-auto w-full max-w-md rounded-sm border border-white/[0.06] bg-surface px-6 py-14 text-center shadow-ambient">
+            <div className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+            <h2 className="mb-1 text-base font-semibold text-text">{activePhase?.label ?? 'Running scan…'}</h2>
+            {displayProgressMeta && (
+              <p className="mb-6 text-sm text-text-secondary">{displayProgressMeta}</p>
+            )}
+            <button onClick={handleStop} className="btn-stop mx-auto flex items-center gap-2">
+              <Square size={14} />
+              Stop
+            </button>
+          </div>
+        )}
+
+        {/* Results — hidden during simple step 3 (running) */}
+        {(!simpleMode || stakingSimpleStep !== 3) && (
+        <>
 
         {/* ── Validator mode content ──────────────────────────────── */}
         {isValidatorMode && validators.length > 0 && (
@@ -447,7 +535,7 @@ export default function App() {
         )}
 
         {/* ── Empty / error states ────────────────────────────────── */}
-        {status === 'idle' && activeRecords.length > 0 && (
+        {!simpleMode && status === 'idle' && activeRecords.length === 0 && (
           <div className="rounded-sm border border-white/[0.06] bg-surface px-6 py-12 text-center shadow-ambient sm:py-16">
             <div className="w-16 h-16 mx-auto mb-5 rounded-sm bg-card
                             flex items-center justify-center">
@@ -480,13 +568,16 @@ export default function App() {
             </button>
           </div>
         )}
+
+        </> /* /results fragment */
+        )}
       </main>
       )}
 
       </div>{/* /right column */}
 
-      {/* Sticky terminal log — always shown on staking view */}
-      {view === 'staking' && (
+      {/* Sticky terminal log — advanced mode only */}
+      {view === 'staking' && !simpleMode && (
         <TerminalLog logs={logs} sticky />
       )}
 

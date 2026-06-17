@@ -25,6 +25,7 @@ import BalanceTable       from './BalanceTable.jsx'
 import BalanceExportPanel from './BalanceExportPanel.jsx'
 import BalanceImportPanel from './BalanceImportPanel.jsx'
 import PhaseProgressCards from './PhaseProgressCards.jsx'
+import StepProgress       from './StepProgress.jsx'
 import TerminalLog        from './TerminalLog.jsx'
 import ToolInfoSection    from './ToolInfoSection.jsx'
 
@@ -252,7 +253,14 @@ function estimateRangeCalls({ rangeMode, startBlock, endBlock, startEraNum, endE
   return { estCalls: null, estTimeLabel: null }
 }
 
-export default function BalanceExplorer({ onScanStateChange }) {
+const BALANCE_SIMPLE_STEPS = [
+  { key: 'address',  label: 'Address'  },
+  { key: 'range',    label: 'Range'    },
+  { key: 'querying', label: 'Querying' },
+  { key: 'results',  label: 'Results'  },
+]
+
+export default function BalanceExplorer({ onScanStateChange, simpleMode = false }) {
   const [tab, setTab] = useState('query')
   const [showImportResults, setShowImportResults] = useState(false)
 
@@ -374,6 +382,12 @@ export default function BalanceExplorer({ onScanStateChange }) {
 
   const isLoading  = status === STATUS.CONNECTING || status === STATUS.QUERYING
   const hasResults = records.length > 0
+  const [balancePage, setBalancePage] = useState(1)
+  const [balanceSimpleRunning, setBalanceSimpleRunning] = useState(false)
+  const [simpleInfoOpen, setSimpleInfoOpen] = useState(false)
+  const balanceSimpleStep = (isLoading && balanceSimpleRunning) ? 3
+    : ((status === STATUS.DONE || status === STATUS.CANCELLED || status === STATUS.ERROR) && balanceSimpleRunning) ? 4
+    : balancePage
   useEffect(() => {
     onScanStateChange?.(isLoading)
   }, [isLoading, onScanStateChange])
@@ -422,6 +436,7 @@ export default function BalanceExplorer({ onScanStateChange }) {
   )
 
   async function handleFetch() {
+    setBalanceSimpleRunning(true)
     let effStart = startBlock
     let effEnd   = endBlock
     let effStep  = step
@@ -618,7 +633,20 @@ export default function BalanceExplorer({ onScanStateChange }) {
         </div>
       </section>
 
-      <div className="flex w-full gap-1 rounded-sm border border-[var(--hairline)] bg-card p-1 overflow-x-auto">
+      {simpleMode && (
+        <StepProgress
+          steps={BALANCE_SIMPLE_STEPS}
+          currentStep={balanceSimpleStep}
+          onReset={balanceSimpleStep > 1 ? () => { reset(); setQueriedAddress(''); setBalancePage(1); setBalanceSimpleRunning(false); setSimpleInfoOpen(false) } : undefined}
+          infoOpen={simpleInfoOpen}
+          onInfoOpenChange={setSimpleInfoOpen}
+          infoContent={
+            <p>Archive RPC queries take longer over wide ranges. Narrowing the window or increasing the step reduces query time and sample count.</p>
+          }
+        />
+      )}
+
+      {!simpleMode && <div className="flex w-full gap-1 rounded-sm border border-[var(--hairline)] bg-card p-1 overflow-x-auto">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -635,14 +663,206 @@ export default function BalanceExplorer({ onScanStateChange }) {
             <span className="truncate">{label}</span>
           </button>
         ))}
-      </div>
+      </div>}
 
-      {/* ── Query pane — 3 separate cards ── */}
-      {tab === 'query' && (
+      {/* ── Simple step 3: running screen ── */}
+      {simpleMode && balanceSimpleStep === 3 && !simpleInfoOpen && (
+        <div className="mx-auto w-full max-w-md rounded-sm border border-white/[0.06] bg-surface px-6 py-14 text-center shadow-ambient">
+          <div className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+          <h2 className="mb-1 text-base font-semibold text-text">{activePhase?.label ?? 'Querying archive…'}</h2>
+          {displayMeta && (
+            <p className="mb-6 text-sm text-text-secondary">{displayMeta}</p>
+          )}
+          <button onClick={cancel} className="btn-stop mx-auto flex items-center gap-2">
+            <Square size={14} />
+            Stop
+          </button>
+        </div>
+      )}
+
+      {/* ── Simple page 1: Address + Network ── */}
+      {simpleMode && balanceSimpleStep === 1 && !simpleInfoOpen && (
+        <div className="mx-auto w-full max-w-lg data-panel space-y-5">
+          <div>
+            <h2 className="section-title">Select network &amp; enter address</h2>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="bal-rpc-net-sm" className="input-label mb-2 block">Network</label>
+              <div className="relative">
+                <select
+                  id="bal-rpc-net-sm"
+                  value={networkKey}
+                  onChange={e => { setNetworkKey(e.target.value); clearResolvedRange() }}
+                  className="w-full select-field appearance-none pr-8"
+                >
+                  {PRESET_NETWORKS.map(n => <option key={n.key} value={n.key}>{n.label}</option>)}
+                </select>
+                <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-text-secondary" />
+              </div>
+              <p className="mt-2 break-all font-mono text-xs text-muted">{activeNetwork.endpoint}</p>
+            </div>
+            <div>
+              <label htmlFor="bal-addr-sm" className="input-label mb-2 block">Wallet Address</label>
+              <input
+                id="bal-addr-sm"
+                type="text"
+                maxLength={64}
+                autoComplete="off"
+                spellCheck="false"
+                placeholder={`${ADDR_PREFIX_MAP[activeNetwork.key]?.prefix ?? ''}…`}
+                value={address}
+                onChange={e => setAddress(e.target.value)}
+                className={`w-full ${inputField} ${addressNote?.type === 'error' ? 'border-danger/50 focus:border-danger/70' : ''}`}
+              />
+              {addressNote?.type === 'error' && (
+                <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-danger">
+                  <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" /><span>{addressNote.msg}</span>
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={() => { setSimpleInfoOpen(false); setBalancePage(2) }}
+              disabled={!address.trim() || addressNote?.type === 'error'}
+              className="btn-primary flex items-center gap-2 disabled:opacity-40"
+            >
+              Next <span aria-hidden="true">→</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Simple page 2: Range parameters ── */}
+      {simpleMode && balanceSimpleStep === 2 && !simpleInfoOpen && (
+        <div className="mx-auto w-full max-w-lg data-panel space-y-5">
+          <div>
+            <h2 className="section-title">Set the query window</h2>
+          </div>
+          {liveChainSnapshot}
+          {isDateRangeSupported && (
+            <div>
+              <p className="input-label mb-2">Query Mode</p>
+              <div className="range-mode-grid">
+                {rangeModeOptions.map(option => {
+                  const isActive = rangeMode === option.key
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => { if (option.key === 'block') setStep(''); else setStep('1'); setRangeMode(option.key); clearResolvedRange() }}
+                      className={`range-mode-option ${isActive ? 'range-mode-option-active' : 'range-mode-option-idle'}`}
+                    >
+                      <span className="range-mode-badge" aria-hidden="true">{option.badge}</span>
+                      <span className="min-w-0">
+                        <span className={`block text-sm font-semibold ${isActive ? 'text-text' : 'text-text-secondary'}`}>{option.title}</span>
+                        <span className={`mt-1 block text-xs leading-5 ${isActive ? 'text-text-secondary' : 'text-muted'}`}>{option.description}</span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+          {/* Range inputs */}
+          {rangeMode === 'era' && (
+            <div className="range-params-card space-y-3">
+              <h4 className="text-base font-semibold text-text">Range Parameters</h4>
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <label htmlFor="bal-start-era-sm" className="input-label w-40 flex-shrink-0">Start Era</label>
+                  <input id="bal-start-era-sm" type="number" placeholder="1000" min={1} max={chainInfo.era ?? undefined} step={1} value={startEraNum} onChange={e => { setStartEraNum(e.target.value); clearResolvedRange() }} className={inputField} />
+                </div>
+                <div className="flex items-center gap-3">
+                  <label htmlFor="bal-end-era-sm" className="input-label w-40 flex-shrink-0">End Era</label>
+                  <input id="bal-end-era-sm" type="number" placeholder="1010" min={1} max={chainInfo.era ?? undefined} step={1} value={endEraNum} onChange={e => { setEndEraNum(e.target.value); clearResolvedRange() }} className={inputField} />
+                </div>
+                <div className="flex items-center gap-3">
+                  <label htmlFor="bal-step-era-sm" className="input-label w-40 flex-shrink-0">{stepLabel}</label>
+                  <input id="bal-step-era-sm" type="number" min={1} max={999999} step={1} placeholder={stepPlaceholder} value={step} onChange={e => setStep(e.target.value)} className={inputField} />
+                </div>
+              </div>
+              {eraValidErr && <p className="flex items-center gap-1.5 text-[11px] font-mono text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{eraValidErr}</p>}
+              {eraLoadErr  && <p className="flex items-center gap-1.5 text-[11px] font-mono text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{eraLoadErr}</p>}
+            </div>
+          )}
+          {rangeMode === 'block' && (
+            <div className="range-params-card space-y-3">
+              <h4 className="text-base font-semibold text-text">Range Parameters</h4>
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <label htmlFor="bal-start-sm" className="input-label w-40 flex-shrink-0">Start Block</label>
+                  <input id="bal-start-sm" type="number" placeholder="14400" min={0} max={chainInfo.block ?? 999999999} step={1} value={startBlock} onChange={e => setStartBlock(e.target.value)} className={inputField} />
+                </div>
+                <div className="flex items-center gap-3">
+                  <label htmlFor="bal-end-sm" className="input-label w-40 flex-shrink-0">End Block</label>
+                  <input id="bal-end-sm" type="number" placeholder="28799" min={0} max={chainInfo.block ?? 999999999} step={1} value={endBlock} onChange={e => setEndBlock(e.target.value)} className={inputField} />
+                </div>
+                <div className="flex items-center gap-3">
+                  <label htmlFor="bal-step-sm" className="input-label w-40 flex-shrink-0">{stepLabel}</label>
+                  <input id="bal-step-sm" type="number" min={stepMin} max={999999} step={1} placeholder={stepPlaceholder} value={step} onChange={e => setStep(e.target.value)} className={inputField} />
+                </div>
+              </div>
+              {blockErr && <p className="flex items-center gap-1.5 text-[11px] font-mono text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{blockErr}</p>}
+            </div>
+          )}
+          {rangeMode === 'date' && (
+            <div className="range-params-card space-y-3">
+              <h4 className="text-base font-semibold text-text">Range Parameters</h4>
+              <div>
+                <span className="input-label">Quick Range</span>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {DATE_PRESETS.map(({ label, days }) => (
+                    <button key={label} type="button" onClick={() => applyDatePreset(days, label)} className={`range-preset-button ${activePreset === label ? 'range-preset-button-active' : 'range-preset-button-idle'}`}>{label} ago</button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <label htmlFor="bal-start-date-sm" className="input-label w-40 flex-shrink-0">Start Date</label>
+                  <input id="bal-start-date-sm" type="date" max={toDateInput(new Date())} value={startDate} onChange={e => { setStartDate(e.target.value); setActivePreset(null); clearResolvedRange() }} className={`flex-1 ${inputField} [color-scheme:dark]`} />
+                </div>
+                <div className="flex items-center gap-3">
+                  <label htmlFor="bal-end-date-sm" className="input-label w-40 flex-shrink-0">End Date</label>
+                  <input id="bal-end-date-sm" type="date" max={toDateInput(new Date())} value={endDate} onChange={e => { setEndDate(e.target.value); setActivePreset(null); clearResolvedRange() }} className={`flex-1 ${inputField} [color-scheme:dark]`} />
+                </div>
+                <div className="flex items-center gap-3">
+                  <label htmlFor="bal-step-date-sm" className="input-label w-40 flex-shrink-0">{stepLabel}</label>
+                  <input id="bal-step-date-sm" type="number" min={stepMin} max={999} step={1} placeholder={stepPlaceholder} value={step} onChange={e => setStep(e.target.value)} className={`flex-1 ${inputField}`} />
+                </div>
+              </div>
+              {dateValidErr && <p className="flex items-center gap-1.5 text-[11px] font-mono text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{dateValidErr}</p>}
+              {eraLoadErr   && <p className="flex items-center gap-1.5 text-[11px] font-mono text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{eraLoadErr}</p>}
+            </div>
+          )}
+          <div className="flex items-center justify-between pt-1">
+            <button type="button" onClick={() => { setSimpleInfoOpen(false); setBalancePage(1) }} className="btn-secondary flex items-center gap-2">
+              <span aria-hidden="true">←</span> Back
+            </button>
+            <button
+              onClick={handleFetch}
+              className="btn-primary flex items-center gap-2 disabled:opacity-40"
+              disabled={
+                (step === '' || step == null) ||
+                (rangeMode === 'block' ? (!startBlock || !endBlock || !!blockErr) :
+                 rangeMode === 'era'   ? (!startEraNum || !endEraNum || !!eraValidErr) :
+                                        (!startDate || !endDate || !!dateValidErr))
+              }
+            >
+              <Activity size={14} /> Fetch Balance
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Query pane — advanced only ── */}
+      {tab === 'query' && !simpleMode && (
         <div className="space-y-3 sm:space-y-4">
-          <ToolInfoSection tone="warning">
+          {!simpleMode && <ToolInfoSection tone="warning">
             <p>Archive RPC queries take longer over wide ranges. Narrowing the window or increasing the step reduces query time and sample count.</p>
-          </ToolInfoSection>
+          </ToolInfoSection>}
           <div className="grid gap-4 xl:grid-cols-3 xl:items-stretch">
               <div className="data-panel">
                 <h3 className="font-headline text-lg font-bold text-text sm:text-xl">Scan Configuration</h3>
@@ -1055,36 +1275,40 @@ export default function BalanceExplorer({ onScanStateChange }) {
 
               </div>
 
-              {/* Col 3: Scan Progress */}
-              <div className="hidden xl:flex xl:flex-col">
-                <PhaseProgressCards
-                  eyebrow=""
-                  indexLabel="Phase"
-                  title="Scan Progress"
-                  summary={displaySummary}
-                  meta={displayMeta}
-                  phases={displayPhases}
-                  ariaLabel="Balance query progress"
-                />
-              </div>
+              {/* Col 3: Scan Progress — advanced only */}
+              {!simpleMode && (
+                <div className="hidden xl:flex xl:flex-col">
+                  <PhaseProgressCards
+                    eyebrow=""
+                    indexLabel="Phase"
+                    title="Scan Progress"
+                    summary={displaySummary}
+                    meta={displayMeta}
+                    phases={displayPhases}
+                    ariaLabel="Balance query progress"
+                  />
+                </div>
+              )}
           </div>
 
-          <div className="xl:hidden mt-4">
-            <PhaseProgressCards
-              eyebrow=""
-              indexLabel="Phase"
-              title="Scan Progress"
-              summary={displaySummary}
-              meta={displayMeta}
-              phases={displayPhases}
-              ariaLabel="Balance query progress"
-            />
-          </div>
+          {!simpleMode && (
+            <div className="xl:hidden mt-4">
+              <PhaseProgressCards
+                eyebrow=""
+                indexLabel="Phase"
+                title="Scan Progress"
+                summary={displaySummary}
+                meta={displayMeta}
+                phases={displayPhases}
+                ariaLabel="Balance query progress"
+              />
+            </div>
+          )}
         </div>
       )}
 
-      {/* ── Import pane ── */}
-      {tab === 'import' && (
+      {/* ── Import pane — advanced only ── */}
+      {!simpleMode && tab === 'import' && (
         <div className="overflow-hidden rounded-sm border border-[var(--hairline)] bg-surface">
           <div role="tabpanel" className="p-4 sm:p-6">
               {!showImportResults ? (
@@ -1133,7 +1357,7 @@ export default function BalanceExplorer({ onScanStateChange }) {
       )}
 
       {/* ── Results (shown for any data source; also visible DURING query) ── */}
-      {(hasResults || isLoading) && (
+      {(hasResults || isLoading) && (!simpleMode || balanceSimpleStep !== 3) && (
         <section ref={resultsRef} className="space-y-4">
           {/* Records summary bar */}
           {hasResults && (
@@ -1203,16 +1427,18 @@ export default function BalanceExplorer({ onScanStateChange }) {
         </section>
       )}
 
-      {/* ── Sticky terminal log ── */}
-      <TerminalLog
-        sticky
-        logs={logs.map((l, i) => ({
-          id: i,
-          ts: l.ts,
-          level: l.level.toUpperCase(),
-          message: l.msg,
-        }))}
-      />
+      {/* ── Sticky terminal log — advanced only ── */}
+      {!simpleMode && (
+        <TerminalLog
+          sticky
+          logs={logs.map((l, i) => ({
+            id: i,
+            ts: l.ts,
+            level: l.level.toUpperCase(),
+            message: l.msg,
+          }))}
+        />
+      )}
     </div>
   )
 }
