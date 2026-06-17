@@ -20,6 +20,7 @@ import {
 import { useRewardHistory, RH_STATUS } from '../hooks/useRewardHistory.js'
 import { fetchLiveChainInfo } from '../utils/chainInfo.js'
 import PhaseProgressCards from './PhaseProgressCards.jsx'
+import StepProgress from './StepProgress.jsx'
 import TerminalLog from './TerminalLog.jsx'
 import ToolInfoSection from './ToolInfoSection.jsx'
 import { PLANCK_PER_ENJ } from '../constants.js'
@@ -1162,7 +1163,15 @@ function RewardImportPanel({ onImport }) {
 }
 
 // ── Main component ──────────────────────────────────────────────────────────
-export default function RewardHistoryViewer({ onScanStateChange }) {
+const RH_SIMPLE_STEPS = [
+  { key: 'address',  label: 'Address'  },
+  { key: 'mode',     label: 'Mode'     },
+  { key: 'range',    label: 'Range'    },
+  { key: 'running',  label: 'Running'  },
+  { key: 'results',  label: 'Results'  },
+]
+
+export default function RewardHistoryViewer({ onScanStateChange, simpleMode = false }) {
   const { status, results, logs, progress, csvCount, errorMsg, run, stop, reset, log } = useRewardHistory()
 
   const [tab,       setTab]      = useState('compute')  // 'compute' | 'import'
@@ -1247,10 +1256,17 @@ export default function RewardHistoryViewer({ onScanStateChange }) {
   })()
   const estimatedEraSpan = estimateRewardEraSpan(rangeMode, startEra, endEra, startDate, endDate)
 
+  const [rhPage, setRhPage] = useState(1)
+  const [rhSimpleRunning, setRhSimpleRunning] = useState(false)
+  const [simpleInfoOpen, setSimpleInfoOpen] = useState(false)
+
   const isLoading = status === RH_STATUS.LOADING
   const isDone    = status === RH_STATUS.DONE
   const isStopped = status === RH_STATUS.STOPPED
   const isError   = status === RH_STATUS.ERROR
+  const rhSimpleStep = (isLoading && rhSimpleRunning) ? 4
+    : ((isDone || isStopped || isError) && rhSimpleRunning) ? 5
+    : rhPage
 
   useEffect(() => {
     onScanStateChange?.(isLoading)
@@ -1321,6 +1337,7 @@ export default function RewardHistoryViewer({ onScanStateChange }) {
   // ── Handle run ──────────────────────────────────────────────────────────
   const handleRun = useCallback(async () => {
     setImportedResults(null)
+    setRhSimpleRunning(true)
     if (rangeMode === 'era') {
       run({ address: address.trim(), startEra: parseInt(startEra,10), endEra: parseInt(endEra,10), endpoint: ARCHIVE_WSS, includeHistory })
     } else {
@@ -1360,7 +1377,7 @@ export default function RewardHistoryViewer({ onScanStateChange }) {
   }, [status, activeResults.length])
 
   return (
-    <div className={`space-y-4 transition-[padding] duration-200 ${logExpanded ? 'pb-[380px]' : 'pb-16'}`}>
+    <div className={`space-y-4 transition-[padding] duration-200 ${!simpleMode && logExpanded ? 'pb-[380px]' : 'pb-16'}`}>
 
       <section className="page-hero">
         <div className="relative z-10 flex flex-col gap-2">
@@ -1375,7 +1392,41 @@ export default function RewardHistoryViewer({ onScanStateChange }) {
         </div>
       </section>
 
-      <div className="flex w-full gap-1 rounded-sm border border-[var(--hairline)] bg-card p-1">
+      {simpleMode && (
+        <StepProgress
+          steps={RH_SIMPLE_STEPS}
+          currentStep={rhSimpleStep}
+          onReset={rhSimpleStep > 1 ? () => { reset(); setImportedResults(null); setImportedAddress(''); setRhPage(1); setRhSimpleRunning(false); setSimpleInfoOpen(false) } : undefined}
+          infoOpen={simpleInfoOpen}
+          onInfoOpenChange={setSimpleInfoOpen}
+          infoContent={
+            <>
+              <p className="font-semibold text-text">Reward history is an estimate</p>
+              <p className="mt-1">Archive snapshots reconstruct pool-level rewards and member share over time, so the output is best used for investigation and planning.</p>
+              <p className="mt-2"><span className="font-semibold text-text">Pool-level payouts.</span> The pool gets daily rewards, not the user, so these values are estimations rather than wallet-level settlement records.</p>
+              <p className="mt-2"><span className="font-semibold text-text">Enjin Wallet may show different values.</span> The wallet derives reward figures from its own data pipeline and may reflect claimable balances or rounding differently from the era-by-era archive reconstruction used here.</p>
+              <p className="mt-2"><span className="font-semibold text-text">Tax note.</span> Tax treatment depends on your jurisdiction and activity history. Use this tool as a research aid, not tax advice.</p>
+            </>
+          }
+        />
+      )}
+
+      {/* ── Simple step 4: running screen ── */}
+      {simpleMode && rhSimpleStep === 4 && !simpleInfoOpen && (
+        <div className="mx-auto w-full max-w-md rounded-sm border border-white/[0.06] bg-surface px-6 py-14 text-center shadow-ambient">
+          <div className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+          <h2 className="mb-1 text-base font-semibold text-text">{activePhase?.label ?? 'Computing rewards…'}</h2>
+          {displayMeta && (
+            <p className="mb-6 text-sm text-text-secondary">{displayMeta}</p>
+          )}
+          <button onClick={stop} className="btn-stop mx-auto flex items-center gap-2">
+            <Square size={14} />
+            Stop
+          </button>
+        </div>
+      )}
+
+      {!simpleMode && <div className="flex w-full gap-1 rounded-sm border border-[var(--hairline)] bg-card p-1">
         {[
           { key: 'compute', label: 'Compute Rewards', icon: Server },
           { key: 'import',  label: 'Import Data',     icon: Upload },
@@ -1395,10 +1446,10 @@ export default function RewardHistoryViewer({ onScanStateChange }) {
             <span className="truncate">{label}</span>
           </button>
         ))}
-      </div>
+      </div>}
 
-      {/* ── Compute pane — 3 separate cards ── */}
-      {tab === 'compute' && (
+      {/* ── Compute pane (advanced only) ── */}
+      {tab === 'compute' && !simpleMode && (
         <div className="space-y-3 sm:space-y-4">
           <ToolInfoSection tone="warning">
             <p className="font-semibold text-text">Reward history is an estimate</p>
@@ -1616,8 +1667,197 @@ export default function RewardHistoryViewer({ onScanStateChange }) {
         </div>
       )}
 
+      {/* ── Simple page 1: Address ── */}
+      {simpleMode && rhSimpleStep === 1 && !simpleInfoOpen && (
+        <div className="mx-auto w-full max-w-lg data-panel space-y-5">
+          <div>
+            <h2 className="font-headline text-xl font-bold text-text">Enter your wallet address</h2>
+            <p className="mt-1 text-sm text-text-secondary">Your Enjin Relaychain address — starts with "en".</p>
+          </div>
+          <div>
+            <label htmlFor="rh-simple-address" className="input-label">Relaychain Address</label>
+            <input
+              id="rh-simple-address"
+              type="text"
+              value={address}
+              onChange={e => setAddress(e.target.value)}
+              placeholder="en…"
+              maxLength={60}
+              className={`mt-2 w-full input-field font-mono ${addrErr ? 'ring-1 ring-danger/60' : ''}`}
+            />
+            {addrErr && (
+              <p className="mt-2 flex items-center gap-1.5 text-xs text-danger">
+                <AlertTriangle size={12} className="flex-shrink-0" />{addrErr}
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end pt-1">
+            <button
+              onClick={() => { setSimpleInfoOpen(false); setRhPage(2) }}
+              disabled={!address.trim() || !!addrErr}
+              className="btn-primary px-6 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Simple page 2: Mode ── */}
+      {simpleMode && rhSimpleStep === 2 && !simpleInfoOpen && (
+        <div className="mx-auto w-full max-w-lg data-panel space-y-5">
+          <div>
+            <h2 className="font-headline text-xl font-bold text-text">Choose query mode</h2>
+            <p className="mt-1 text-sm text-text-secondary">Pick how you want to define the reward window.</p>
+          </div>
+          <div className="range-mode-grid">
+            {REWARD_RANGE_MODE_OPTIONS.map(option => {
+              const isActive = rangeMode === option.key
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setRangeMode(option.key)}
+                  className={`range-mode-option ${isActive ? 'range-mode-option-active' : 'range-mode-option-idle'}`}
+                >
+                  <span className="range-mode-badge" aria-hidden="true">{option.badge}</span>
+                  <span className="min-w-0">
+                    <span className={`block text-sm font-semibold ${isActive ? 'text-text' : 'text-text-secondary'}`}>
+                      {option.title}
+                    </span>
+                    <span className={`mt-1 block text-xs leading-5 ${isActive ? 'text-text-secondary' : 'text-muted'}`}>
+                      {option.description}
+                    </span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex justify-between pt-1">
+            <button onClick={() => { setSimpleInfoOpen(false); setRhPage(1) }} className="btn-secondary px-5">Back</button>
+            <button onClick={() => { setSimpleInfoOpen(false); setRhPage(3) }} className="btn-primary px-6">Next</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Simple page 3: Range Parameters ── */}
+      {simpleMode && rhSimpleStep === 3 && !simpleInfoOpen && (
+        <div className="mx-auto w-full max-w-lg data-panel space-y-5">
+          <div>
+            <h2 className="font-headline text-xl font-bold text-text">Set the reward window</h2>
+            <p className="mt-1 text-sm text-text-secondary">
+              {rangeMode === 'era' ? 'Enter start and end era numbers.' : 'Pick a date range to look up.'}
+            </p>
+          </div>
+
+          {/* Live chain snapshot */}
+          {liveChainSnapshot}
+
+          {/* Era range inputs */}
+          {rangeMode === 'era' && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <label className="input-label w-28 flex-shrink-0">Start Era</label>
+                <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
+                  onChange={e => setStartEra(e.target.value)}
+                  placeholder="e.g. 980"
+                  className="flex-1 input-field font-mono" />
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="input-label w-28 flex-shrink-0">End Era</label>
+                <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
+                  onChange={e => setEndEra(e.target.value)}
+                  placeholder="e.g. 1000"
+                  className="flex-1 input-field font-mono" />
+              </div>
+              {eraValidErr && (
+                <p className="flex items-center gap-1 text-xs text-danger">
+                  <AlertTriangle size={11} className="flex-shrink-0" />{eraValidErr}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Date range inputs */}
+          {rangeMode === 'date' && (
+            <div className="space-y-3">
+              <div>
+                <span className="input-label">Quick Range</span>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {DATE_PRESETS.map(({ label, days }) => (
+                    <button key={label} type="button"
+                      onClick={() => applyDatePreset(days, label)}
+                      className={`range-preset-button ${activePreset === label ? 'range-preset-button-active' : 'range-preset-button-idle'}`}>
+                      {label} ago
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="input-label w-28 flex-shrink-0">Start Date</label>
+                <input type="date" max={toDateInput(new Date())} value={startDate}
+                  onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
+                  className="flex-1 input-field font-mono [color-scheme:dark]" />
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="input-label w-28 flex-shrink-0">End Date</label>
+                <input type="date" max={toDateInput(new Date())} value={endDate}
+                  onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
+                  className="flex-1 input-field font-mono [color-scheme:dark]" />
+              </div>
+              {dateValidErr && (
+                <p className="flex items-center gap-1 text-xs text-danger">
+                  <AlertTriangle size={11} className="flex-shrink-0" />{dateValidErr}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Include past pool interactions toggle */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setIncludeHistory(v => !v)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIncludeHistory(v => !v) } }}
+            className="flex cursor-pointer select-none items-start gap-3 rounded-sm border border-[var(--hairline)] bg-card px-4 py-3"
+          >
+            <div
+              role="switch"
+              aria-checked={includeHistory}
+              className={`relative mt-0.5 h-6 w-11 flex-shrink-0 rounded-full transition-colors duration-200 ${includeHistory ? 'bg-primary' : 'bg-surface-bright'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${includeHistory ? 'translate-x-5' : 'translate-x-0'}`} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-text">Include past pool interactions</p>
+              <p className="mt-0.5 text-xs leading-5 text-text-secondary">
+                Also look up historical bond, unbond, and withdraw activity to include pools you've already exited.
+              </p>
+            </div>
+          </div>
+
+          {estimatedEraSpan != null && !((rangeMode === 'era' && eraValidErr) || (rangeMode === 'date' && dateValidErr)) && (
+            <p className="text-xs font-mono text-text-secondary">
+              {rangeMode === 'date' ? `~${estimatedEraSpan.toLocaleString('en')} era estimates` : `${estimatedEraSpan.toLocaleString('en')} eras selected`}
+            </p>
+          )}
+
+          <div className="flex justify-between pt-1">
+            <button onClick={() => { setSimpleInfoOpen(false); setRhPage(2) }} className="btn-secondary px-5">Back</button>
+            <button
+              onClick={handleRun}
+              disabled={rangeMode === 'era' ? (!startEra || !endEra || !!eraValidErr) : (!startDate || !endDate || !!dateValidErr)}
+              className="btn-primary px-6 disabled:opacity-40"
+            >
+              <Play size={14} />
+              Compute Rewards
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Import pane ── */}
-      {tab === 'import' && (
+      {!simpleMode && tab === 'import' && (
         <div className="overflow-hidden rounded-sm border border-[var(--hairline)] bg-surface">
           <div role="tabpanel" className="p-4 sm:p-5 space-y-3">
             <div>
@@ -1662,7 +1902,7 @@ export default function RewardHistoryViewer({ onScanStateChange }) {
       )}
 
       {/* ── Results section ── */}
-      {showResults && (
+      {showResults && (!simpleMode || rhSimpleStep !== 4) && (
         <section ref={resultsRef} className="space-y-4">
           {/* Address summary bar */}
           {(() => { const dispAddr = importedResults ? importedAddress : address; return dispAddr ? (
@@ -1692,8 +1932,8 @@ export default function RewardHistoryViewer({ onScanStateChange }) {
         </section>
       )}
 
-      {/* ── Sticky terminal log — always visible ── */}
-      <TerminalLog logs={logs} sticky onExpandChange={setLogExpanded} />
+      {/* ── Sticky terminal log — advanced only ── */}
+      {!simpleMode && <TerminalLog logs={logs} sticky onExpandChange={setLogExpanded} />}
     </div>
   )
 }

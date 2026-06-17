@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown, Database, ExternalLink, ImageIcon, Loader2, RefreshCw, Search, Square, Wallet } from 'lucide-react'
 import DetailModal from './DetailModal.jsx'
 import PhaseProgressCards from './PhaseProgressCards.jsx'
+import StepProgress from './StepProgress.jsx'
 import TerminalLog from './TerminalLog.jsx'
 import ToolInfoSection from './ToolInfoSection.jsx'
 
@@ -296,7 +297,14 @@ async function fetchTokenDetails(owner, tokenId, signal) {
   return body
 }
 
-export default function InfusionChecker({ onScanStateChange }) {
+const INFUSION_SIMPLE_STEPS = [
+  { key: 'mode',     label: 'Mode'     },
+  { key: 'input',    label: 'Input'    },
+  { key: 'scanning', label: 'Scanning' },
+  { key: 'results',  label: 'Results'  },
+]
+
+export default function InfusionChecker({ onScanStateChange, simpleMode = false }) {
   const [mode, setMode] = useState('single')
   const [tokenId, setTokenId] = useState('')
   const [walletAddress, setWalletAddress] = useState('')
@@ -457,6 +465,29 @@ export default function InfusionChecker({ onScanStateChange }) {
   }, [bulkPageSize, filteredSortedRows, safeBulkPage])
   const failedBulkRows = useMemo(() => rows.filter(row => row.error), [rows])
   const hasRetryingRows = retryingTokenIds.size > 0
+  const [infusionPage, setInfusionPage] = useState(1)
+  const [infusionSimpleRunning, setInfusionSimpleRunning] = useState(false)
+  const [simpleInfoOpen, setSimpleInfoOpen] = useState(false)
+  const infusionSimpleStep = (isLoading && infusionSimpleRunning) ? 3
+    : ((singleStarted || bulkStarted) && infusionSimpleRunning) ? 4
+    : infusionPage
+
+  function handleSimpleReset() {
+    scanAbortRef.current?.abort()
+    setIsLoading(false)
+    setAmount('-')
+    setRawValue('Raw infusion value will appear here.')
+    setBulkStatus('Wallet results will appear here.')
+    setBulkTotal('-')
+    setRows([])
+    setBulkStarted(false)
+    setBulkExpectedTotal(0)
+    setMetadataProgress({ total: 0, completed: 0 })
+    setRetryProgress({ total: 0, completed: 0, active: false })
+    setInfusionPage(1)
+    setInfusionSimpleRunning(false)
+    setSimpleInfoOpen(false)
+  }
 
   useEffect(() => {
     rowsRef.current = rows
@@ -548,6 +579,7 @@ export default function InfusionChecker({ onScanStateChange }) {
   async function handleSingleCheck(event) {
     event.preventDefault()
     const controller = createScanController()
+    setInfusionSimpleRunning(true)
 
     try {
       const parsedTokenId = validateTokenId(normalizeTokenId(tokenId))
@@ -805,6 +837,7 @@ export default function InfusionChecker({ onScanStateChange }) {
   async function handleBulkCheck(event) {
     event.preventDefault()
     const controller = createScanController()
+    setInfusionSimpleRunning(true)
 
     try {
       const address = validateAddress(normalizeAddress(walletAddress))
@@ -922,7 +955,144 @@ export default function InfusionChecker({ onScanStateChange }) {
         </div>
       </section>
 
-      <ToolInfoSection tone="warning">
+      {simpleMode && (
+        <StepProgress
+          steps={INFUSION_SIMPLE_STEPS}
+          currentStep={infusionSimpleStep}
+          onReset={infusionSimpleStep > 1 ? handleSimpleReset : undefined}
+          infoOpen={simpleInfoOpen}
+          onInfoOpenChange={setSimpleInfoOpen}
+          infoContent={
+            <>
+              <p>ERC-20 ENJ is different from native ENJ on the Enjin Blockchain.</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                <div>
+                  <p className="metric-label">Contract</p>
+                  <p className="mt-1 break-all font-mono text-[11px] leading-snug text-text">{CONTRACT_ADDRESS}</p>
+                </div>
+                <div>
+                  <p className="metric-label">RPC</p>
+                  <p className="mt-1 font-semibold text-text">Alchemy/Etherscan</p>
+                </div>
+                <div>
+                  <p className="metric-label">Scope</p>
+                  <p className="mt-1 font-semibold text-text">ERC-1155, Ethereum Mainnet</p>
+                </div>
+              </div>
+              <p className="mt-3"><span className="font-semibold text-text">Wallet scan.</span> Wallet token lists can be incomplete. If a token is missing, use Token ID scan with its Etherscan NFT URL or paste the token ID found after:</p>
+              <code className="mt-1 block break-all rounded-sm border border-[var(--hairline)] bg-term/80 px-2 py-1 font-mono text-[11px] text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>
+            </>
+          }
+        />
+      )}
+
+      {/* ── Simple page 1: Mode selection ── */}
+      {simpleMode && infusionSimpleStep === 1 && !simpleInfoOpen && (
+        <div className="mx-auto w-full max-w-lg data-panel space-y-5">
+          <div>
+            <h2 className="section-title">What do you want to check?</h2>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setMode('single')}
+              className={`flex flex-col items-start gap-2 rounded-sm border p-4 text-left transition-all ${
+                mode === 'single'
+                  ? 'border-primary/50 bg-primary/10 shadow-[0_0_0_1px_rgba(124,58,237,0.3)]'
+                  : 'border-[var(--hairline)] bg-card hover:bg-surface-high'
+              }`}
+            >
+              <Search size={20} className={mode === 'single' ? 'text-primary' : 'text-text-secondary'} />
+              <p className={`font-semibold ${mode === 'single' ? 'text-text' : 'text-text-secondary'}`}>Token ID</p>
+              <p className="text-xs leading-5 text-text-secondary">Check a single ERC-1155 token by ID or Etherscan URL</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('wallet')}
+              className={`flex flex-col items-start gap-2 rounded-sm border p-4 text-left transition-all ${
+                mode === 'wallet'
+                  ? 'border-primary/50 bg-primary/10 shadow-[0_0_0_1px_rgba(124,58,237,0.3)]'
+                  : 'border-[var(--hairline)] bg-card hover:bg-surface-high'
+              }`}
+            >
+              <Wallet size={20} className={mode === 'wallet' ? 'text-primary' : 'text-text-secondary'} />
+              <p className={`font-semibold ${mode === 'wallet' ? 'text-text' : 'text-text-secondary'}`}>Wallet Scan</p>
+              <p className="text-xs leading-5 text-text-secondary">Total infused ENJ across all tokens in a wallet</p>
+            </button>
+          </div>
+          <div className="flex justify-end pt-1">
+            <button type="button" onClick={() => { setSimpleInfoOpen(false); setInfusionPage(2) }} className="btn-primary flex items-center gap-2">
+              Next <span aria-hidden="true">→</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Simple page 2: Input ── */}
+      {simpleMode && infusionSimpleStep === 2 && !simpleInfoOpen && (
+        <div className="mx-auto w-full max-w-lg data-panel space-y-5">
+          <div>
+            <h2 className="section-title">{mode === 'single' ? 'Enter a token ID or URL' : 'Enter a wallet address'}</h2>
+          </div>
+          {mode === 'single' ? (
+            <form className="space-y-4" onSubmit={handleSingleCheck}>
+              <input
+                className="input-field w-full font-mono"
+                value={tokenId}
+                onChange={e => setTokenId(e.target.value)}
+                inputMode="text"
+                autoComplete="off"
+                spellCheck="false"
+                placeholder="Enter token ID or Etherscan NFT URL"
+                required
+              />
+              <div className="flex items-center justify-between pt-1">
+                <button type="button" onClick={() => { setSimpleInfoOpen(false); setInfusionPage(1) }} className="btn-secondary flex items-center gap-2">
+                  <span aria-hidden="true">←</span> Back
+                </button>
+                <button type="submit" className="btn-primary flex items-center gap-2">
+                  <Search size={14} /> Check
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form className="space-y-4" onSubmit={handleBulkCheck}>
+              <input
+                className="input-field w-full font-mono"
+                value={walletAddress}
+                onChange={e => setWalletAddress(e.target.value)}
+                inputMode="text"
+                autoComplete="off"
+                spellCheck="false"
+                placeholder="Enter Ethereum wallet address"
+                required
+              />
+              <div className="flex items-center justify-between pt-1">
+                <button type="button" onClick={() => { setSimpleInfoOpen(false); setInfusionPage(1) }} className="btn-secondary flex items-center gap-2">
+                  <span aria-hidden="true">←</span> Back
+                </button>
+                <button type="submit" className="btn-primary flex items-center gap-2">
+                  <Wallet size={14} /> Bulk Check
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+
+      {/* ── Simple step 3: running screen ── */}
+      {simpleMode && infusionSimpleStep === 3 && !simpleInfoOpen && (
+        <div className="mx-auto w-full max-w-md rounded-sm border border-white/[0.06] bg-surface px-6 py-14 text-center shadow-ambient">
+          <div className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+          <h2 className="mb-1 text-base font-semibold text-text">Scanning…</h2>
+          <button onClick={handleStopScan} className="btn-stop mx-auto flex items-center gap-2">
+            <Square size={14} />
+            Stop
+          </button>
+        </div>
+      )}
+
+      {!simpleMode && <ToolInfoSection tone="warning">
         <p>ERC-20 ENJ is different from native ENJ on the Enjin Blockchain.</p>
         <div className="mt-2 grid gap-2 sm:grid-cols-3">
           <div>
@@ -940,10 +1110,12 @@ export default function InfusionChecker({ onScanStateChange }) {
         </div>
         <p className="mt-3"><span className="font-semibold text-text">Wallet scan.</span> Wallet token lists can be incomplete. If a token is missing, use Token ID scan with its Etherscan NFT URL or paste the token ID found after:</p>
         <code className="mt-1 block break-all rounded-sm border border-[var(--hairline)] bg-term/80 px-2 py-1 font-mono text-[11px] text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>
-      </ToolInfoSection>
+      </ToolInfoSection>}
 
-      <section className="grid gap-4 xl:grid-cols-3 xl:items-stretch">
-        <div className="space-y-4 xl:col-span-2">
+      {(!simpleMode || infusionSimpleStep === 4) && (
+      <section className={`grid gap-4 ${!simpleMode ? 'xl:grid-cols-3 xl:items-stretch' : ''}`}>
+        <div className={`space-y-4 ${!simpleMode ? 'xl:col-span-2' : ''}`}>
+          {!simpleMode && (
           <div className="data-panel space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -1021,7 +1193,9 @@ export default function InfusionChecker({ onScanStateChange }) {
               </form>
             )}
           </div>
+          )}
 
+          {(!simpleMode || infusionSimpleStep === 4) && (
           <div ref={singleResultRef} className="data-panel space-y-4" aria-live="polite">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -1034,6 +1208,7 @@ export default function InfusionChecker({ onScanStateChange }) {
               <p className="metric-value text-primary">{resultAmount}</p>
             </div>
 
+            {!simpleMode && (
             <div className="inset-panel">
               <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-text-secondary">
                 <Database size={14} />
@@ -1041,9 +1216,12 @@ export default function InfusionChecker({ onScanStateChange }) {
               </p>
               <p className="break-words font-mono text-xs leading-6 text-text">{rawValue}</p>
             </div>
+            )}
           </div>
+          )}
         </div>
 
+        {!simpleMode && (
         <PhaseProgressCards
           className="h-full"
           ariaLabel="Infusion scan progress"
@@ -1052,9 +1230,11 @@ export default function InfusionChecker({ onScanStateChange }) {
           summary={progressSummary}
           phases={progressPhases}
         />
+        )}
       </section>
+      )}
 
-      {mode === 'wallet' && bulkStarted && (
+      {mode === 'wallet' && bulkStarted && (!simpleMode || infusionSimpleStep === 4) && (
       <section ref={bulkResultRef} className="data-panel space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -1274,7 +1454,7 @@ export default function InfusionChecker({ onScanStateChange }) {
         onClose={() => setSelectedTokenDetails(null)}
       />
 
-      <TerminalLog
+      {!simpleMode && <TerminalLog
         sticky
         logs={logs.map((l, i) => ({
           id: i,
@@ -1282,7 +1462,7 @@ export default function InfusionChecker({ onScanStateChange }) {
           level: l.level.toUpperCase(),
           message: l.msg,
         }))}
-      />
+      />}
     </div>
   )
 }
