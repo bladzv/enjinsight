@@ -10,6 +10,7 @@ export default function ControlPanel({
   onRun,
   onStop,
   onReset,
+  compact = false,
 }) {
   const [value, setValue] = useState(String(DEFAULT_ERA_COUNT))
   const [error, setError] = useState('')
@@ -92,7 +93,7 @@ export default function ControlPanel({
       </div>
 
       <div className="mt-3 rounded-sm border border-[var(--hairline)] bg-card px-3 py-3 sm:px-4 sm:py-4">
-        <div className="flex items-center justify-between gap-2">
+        <div className={`flex ${compact ? 'items-baseline gap-3' : 'items-center justify-between gap-2'}`}>
           <label htmlFor="reward-count" className="section-label">
             Scan Range
           </label>
@@ -108,7 +109,11 @@ export default function ControlPanel({
             aria-describedby="reward-count-error"
             aria-invalid={!!error}
             maxLength={3}
-            className={`w-20 border-none bg-transparent px-0 py-0 font-mono text-3xl font-bold tracking-tight text-right text-primary focus:outline-none disabled:opacity-50 sm:text-4xl ${error ? 'text-danger' : ''}`}
+            className={`border-none bg-transparent px-0 py-0 font-mono font-bold tracking-tight text-primary focus:outline-none disabled:opacity-50
+              ${compact
+                ? 'w-16 text-[2.5rem]'
+                : 'w-20 text-right text-3xl sm:text-4xl'}
+              ${error ? 'text-danger' : ''}`}
           />
         </div>
 

@@ -399,13 +399,17 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 1050,
       rollupOptions: {
         output: {
-          manualChunks: {
-            vendor:   ['react', 'react-dom'],
-            icons:    ['lucide-react'],
-            chart:    ['chart.js'],
-            // Split heavy polkadot packages into their own chunk to keep
-            // the main app bundle below 500 kB.
-            polkadot: ['@polkadot/api', '@polkadot/util-crypto', '@polkadot/util', '@polkadot/networks'],
+          // rolldown (vite 8) requires manualChunks to be a function, not an object
+          manualChunks(id) {
+            if (id.includes('/node_modules/react/') || id.includes('/node_modules/react-dom/')) return 'vendor'
+            if (id.includes('/node_modules/lucide-react/')) return 'icons'
+            if (id.includes('/node_modules/chart.js/')) return 'chart'
+            if (
+              id.includes('/node_modules/@polkadot/api/') ||
+              id.includes('/node_modules/@polkadot/util-crypto/') ||
+              id.includes('/node_modules/@polkadot/util/') ||
+              id.includes('/node_modules/@polkadot/networks/')
+            ) return 'polkadot'
           },
         },
       },
