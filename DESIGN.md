@@ -148,11 +148,18 @@ Each card includes an icon, name, and description. No navigation occurs during a
 
 **Algorithm (replicates staking-rewards-rpc.py):**
 ```
+pool_reinvested_ENJ = EraRewardsProcessed.reinvested        (pre-v1060 eras, already net)
+                    | Σ max(reward − commission, 0)         (v1060+ eras, from RewardPaid)
+
 reward_per_era = (member_sENJ_balance / pool_total_sENJ) × pool_reinvested_ENJ
 
-APY = ((pool_total_sENJ + reinvested) / pool_total_sENJ)^365 − 1
-     ⚠ Note: unit mismatch — pool_total_sENJ (sENJ) ≠ reinvested (ENJ).
-       See docs/reward-history-computation.md for analysis and corrected formula.
+APY = ((pool_activeStake + reinvested) / pool_activeStake)^365 − 1
+     Denominator is the pool's bonded activeStake (ENJ), unit-matched with reinvested;
+     falls back to pool_total_sENJ only if the staking-ledger read fails.
+
+⚠ Commission is SUBTRACTED, never added — `RewardPaid.reward` is gross, and only
+  reward − commission compounds into the pool. See
+  docs/nomination_pool_reward_accounting_fix.md and docs/reward-history-computation.md.
 ```
 
 **Computation phases:**
@@ -160,7 +167,7 @@ APY = ((pool_total_sENJ + reinvested) / pool_total_sENJ)^365 − 1
 2. **Connect to Archive Node** — WebSocket to `wss://archive.relay.blockchain.enjin.io`
 3. **Discover Pool Membership** — fetch all pools from Subscan; check `MultiTokens.TokenAccounts(collection=1, token=pool_id, address)` at current head to find pools with non-zero sENJ balance
 4. **Query Era Balances** — for each era × member pool: read member sENJ and pool total sENJ at era start block hash via `state_getStorage`
-5. **Fetch Reinvested Amounts** — query Subscan `reward_slash` for the pool stash address in the event block range (era end block +1 to +41); sum all reward amounts = reinvested ENJ
+5. **Fetch Reinvested Amounts** — scan `NominationPools` chain events over the archive RPC in the 41-block window after the era boundary; sum net of commission via `netReinvested()` = reinvested ENJ
 6. **Compute & Display** — apply the reward formula, compute APY, accumulate totals
 
 **Storage Keys (SCALE, Blake2_128Concat):**

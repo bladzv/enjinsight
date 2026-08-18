@@ -522,16 +522,28 @@ Toolbar:
 4. Discover Pool Membership (sENJ balance check at current head)
 5. *(optional)* Fetch Past Pool Interactions
 6. Query Era Balances (member sENJ + pool total at each era start block)
-7. Fetch Reinvested Amounts (Subscan reward_slash events in event-block window after era end)
+7. Fetch Reinvested Amounts (scan `NominationPools` chain events over the archive RPC in the
+   41-block window after the era boundary; net of operator commission)
 
 ### 10.5 Algorithm (do not change formula)
 
 ```
+pool_reinvested_ENJ       = EraRewardsProcessed.reinvested          (pre-v1060 eras)
+                          | Σ max(reward − commission, 0)           (v1060+ eras, RewardPaid)
 reward_per_era[pool, era] = (member_sENJ / pool_total_sENJ) × pool_reinvested_ENJ
-APY                       = ((pool_total_sENJ + reinvested) / pool_total_sENJ)^365 − 1
+APY                       = ((pool_activeStake + reinvested) / pool_activeStake)^365 − 1
+APY_15d                   = same ratio compounded over a sliding 15-era window
 ```
 
-Note the unit-mismatch caveat documented in `docs/reward-history-computation.md`. The redesign must keep the asterisk on "APY*" header and the disclaimer card.
+**Commission must be SUBTRACTED, never added.** `RewardPaid.reward` is the gross figure; only
+`reward − commission` compounds into the pool. Use `netReinvested()` from
+`src/utils/rewardMath.js` — do not re-implement it inline. Adding commission instead overstates
+every figure by `2 × commission` (~+15% at a 7% rate); this was a real defect, documented in
+`docs/nomination_pool_reward_accounting_fix.md`.
+
+The APY denominator is the pool's bonded `activeStake` (unit-matched with `reinvested`), falling
+back to `pool_total_sENJ` only when the staking-ledger read fails. The redesign must keep the
+asterisk on the "APY*" header and the disclaimer card.
 
 ### 10.6 Storage keys (must remain)
 
@@ -902,6 +914,7 @@ A redesign is "complete" only when **all** of the following hold:
 - [ ] BalanceTable renders `newFormat` rows correctly ("frozen" / "n/a" labels).
 - [ ] Reward History Viewer supports Era and Date range modes, optional "include past pool interactions", three charts, a filterable / paginated Ledger table with all 10 columns including APY*, summary stats, and the same export/import flow.
 - [ ] APY column keeps the `*` and the disclaimer card linking to `docs/reward-history-computation.md`.
+- [ ] Reward figures are net of operator commission (`netReinvested()` from `src/utils/rewardMath.js`); the "Historical figures corrected" note remains in the tool info panel.
 - [ ] ENJ Infusion checker supports both Token ID and Wallet modes, RPC fallback chain (Alchemy → Etherscan → public RPC), per-token retry, "Retry All Failed", a sortable bulk results table with image previews, and a token detail modal.
 - [ ] All hook contracts in §15 are honored without modification.
 - [ ] Sticky terminal log appears on every tool view with level-colored entries and works as a drawer.

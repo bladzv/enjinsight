@@ -256,38 +256,53 @@ export function poolIdFromBondedPoolsKey(keyHex) {
   return (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0
 }
 
+/** "modl" — Substrate's module-account prefix. */
+const MOD_PREFIX = new Uint8Array([0x6d, 0x6f, 0x64, 0x6c])
+
 /**
- * Derive the bonded pool account address (AccountId32) for a given pool ID.
+ * The `NominationPools.PalletId` runtime constant on the Enjin relaychain:
+ * 0x70792f6e6f706c73 = b"py/nopls". Verified by querying the constant directly.
+ */
+const NOMINATION_POOLS_PALLET_ID = new Uint8Array([0x70, 0x79, 0x2f, 0x6e, 0x6f, 0x70, 0x6c, 0x73])
+
+/** Pool sub-account indices, matching pallet-nomination-pools. */
+export const POOL_ACCOUNT_BONDED = 1   // holds the actively staked ENJ (Staking.Ledger key)
+export const POOL_ACCOUNT_REWARD = 2   // landing zone for validator payouts
+
+/**
+ * Derive a nomination-pool sub-account (AccountId32) for a given pool ID.
  *
- * Mirrors Substrate's PalletId::into_sub_account_truncating((kind, pool_id)):
- *   entropy = blake2_256(SCALE_encode(("modl", PalletId, (kind: u8, pool_id: u32))))
- * where PalletId = b"py/nopo\0" (8 bytes) and kind = 0 for Bonded.
+ * Mirrors Substrate's `PalletId::into_sub_account`, which builds the account from
+ * `TrailingZeroInput` — the seed bytes are written into a 32-byte buffer and the remainder is
+ * zero-padded. There is NO hashing step.
  *
- * SCALE encoding of the tuple:
- *   b"modl"       = 4 bytes (fixed [u8;4])
- *   b"py/nopo\0"  = 8 bytes (fixed [u8;8], PalletId)
- *   kind (u8)     = 1 byte  (0 = Bonded)
- *   pool_id (u32) = 4 bytes little-endian
- * Total = 17 bytes
+ *   b"modl"      = 4 bytes  (module prefix)
+ *   b"py/nopls"  = 8 bytes  (NominationPools.PalletId)
+ *   index (u8)   = 1 byte   (1 = Bonded, 2 = Reward)
+ *   pool_id(u32) = 4 bytes  little-endian
+ *   zero padding = 15 bytes
+ *
+ * Previously this function blake2b-hashed a 17-byte seed, used the wrong PalletId
+ * (b"py/nopo\0"), and used index 0. All three were wrong, so `Staking.Ledger` lookups silently
+ * returned empty and `activeStake` was always 0n — see
+ * docs/nomination_pool_reward_accounting_fix.md.
  *
  * Returns the raw 32-byte account ID as a hex string (no 0x prefix).
  */
-export function computePoolBondedAccountId(poolId) {
-  const input = new Uint8Array(17)
-  // "modl"
-  input[0] = 0x6d; input[1] = 0x6f; input[2] = 0x64; input[3] = 0x6c
-  // "py/nopo\0"
-  input[4] = 0x70; input[5] = 0x79; input[6] = 0x2f; input[7] = 0x6e
-  input[8] = 0x6f; input[9] = 0x70; input[10] = 0x6f; input[11] = 0x00
-  // kind = 0 (Bonded)
-  input[12] = 0x00
-  // pool_id as u32 LE
-  const id = Number(poolId) >>> 0
-  input[13] = id & 0xff
-  input[14] = (id >>> 8) & 0xff
-  input[15] = (id >>> 16) & 0xff
-  input[16] = (id >>> 24) & 0xff
-  return toHex(blake2b(input, { dkLen: 32 }))
+export function computePoolBondedAccountId(poolId, index = POOL_ACCOUNT_BONDED) {
+  // Substrate's PalletId::into_sub_account uses TrailingZeroInput: the seed bytes are written
+  // into a 32-byte buffer and the remainder is ZERO-PADDED. It is NOT hashed.
+  const out = new Uint8Array(32)
+  out.set(MOD_PREFIX, 0)                       // "modl"                     (4 bytes)
+  out.set(NOMINATION_POOLS_PALLET_ID, 4)       // "py/nopls"                 (8 bytes)
+  out[12] = index & 0xff                       // sub-account index          (1 byte)
+  const id = Number(poolId) >>> 0              // pool_id as u32 LE          (4 bytes)
+  out[13] = id & 0xff
+  out[14] = (id >>> 8) & 0xff
+  out[15] = (id >>> 16) & 0xff
+  out[16] = (id >>> 24) & 0xff
+  // bytes 17..31 remain zero
+  return toHex(out)
 }
 
 /**
@@ -300,25 +315,6 @@ export function decodeU128First(hex) {
   if (b.length < 16) return 0n
   let v = 0n
   for (let i = 15; i >= 0; i--) v = (v << 8n) | BigInt(b[i])
-  return v
-}
-
-/**
- * Decode the first u128 field from an OptionQuery SCALE-encoded storage value.
- *
- * NOTE: This was written under the incorrect assumption that pallet-multi-tokens
- * prefixes stored values with 0x01 (Option::Some).  In reality the raw trie value
- * IS the struct directly — byte 0 is the SCALE compact-encoding header, not an
- * Option prefix.  Use decodeCompactFirst instead for MultiTokens storage.
- *
- * Kept for reference; not used by current code.
- */
-export function decodeU128OptionFirst(hex) {
-  if (!hex || hex === '0x' || hex === null) return 0n
-  const b = fromHex(hex)
-  if (b.length < 17) return 0n   // need 1 option byte + 16 value bytes
-  let v = 0n
-  for (let i = 16; i >= 1; i--) v = (v << 8n) | BigInt(b[i])
   return v
 }
 

@@ -314,9 +314,16 @@ All storage keys use `twox128(palletName) + twox128(itemName) + [per-key suffix]
 
 **Pool bonded account derivation (`computePoolBondedAccountId`):**
 ```
-accountId = blake2_256(SCALE_encode(("modl", b"py/nopo\0", 0, poolId)))
+accountId = b"modl" + b"py/nopls" + index(u8) + poolId(u32 LE) + 15 zero bytes   (32 bytes)
 ```
-This matches the Substrate pallet-nomination-pools account derivation.
+Substrate's `PalletId::into_sub_account` uses `TrailingZeroInput` — the seed is zero-padded to
+32 bytes, **not hashed**. `PalletId` is the runtime constant `NominationPools.PalletId`
+(`0x70792f6e6f706c73` = `b"py/nopls"`), and the bonded sub-account is index `1`
+(index `2` is the reward account).
+
+> This previously read `blake2_256(SCALE_encode(("modl", b"py/nopo\0", 0, poolId)))` — hashed,
+> wrong PalletId, wrong index. The derived account did not exist, so `Staking.Ledger` returned
+> empty and `activeStake` was always `0n`. Covered by tests in `src/utils/substrate.test.js`.
 
 **SCALE decoders:**
 
@@ -645,24 +652,39 @@ For each era × pool combination where the member had non-zero sENJ at the era s
 
 1. Fetch `MultiTokens.TokenAccounts` at `eraStartBlock` hash → `memberBalance` (sENJ, BigInt)
 2. Fetch `MultiTokens.Tokens` at `eraStartBlock` hash → `poolSupply` (total sENJ, BigInt)
-3. Compute event window: `eventStart = endBlock + 1`, `eventEnd = eventStart + 40` (41-block window)
-4. `fetchRewardSlash(poolStashAddress, blockRange)` → sum all reward events → `reinvested` (ENJ planck, BigInt)
+3. Fetch `Staking.Ledger(poolBondedAccount)` at `eraStartBlock` hash → `activeStake` (ENJ, BigInt)
+4. Compute event window: `eventStart = eraEndBoundary`, `eventEnd = eventStart + 40` (41-block window)
+5. Scan `system.events.at(blockHash)` over that window for `NominationPools` events →
+   `reinvested` (ENJ planck, BigInt), net of commission — see below
 
 **Phase 4 — Compute results**
 
 ```
+reinvested  = EraRewardsProcessed.reinvested            (pre-v1060 eras, already net)
+            | Σ max(reward − commission, 0)             (v1060+ eras, from RewardPaid)
 reward      = (memberBalance × reinvested) / poolSupply
 accumulated[pool] += reward
-apy         = ((poolSupply + reinvested) / poolSupply) ^ 365 − 1  × 100
+apy         = ((activeStake + reinvested) / activeStake) ^ 365 − 1  × 100
 ```
 
-APY calculation uses scaled BigInt arithmetic to avoid `Number.MAX_SAFE_INTEGER` precision loss:
+APY calculation uses scaled BigInt arithmetic to avoid `Number.MAX_SAFE_INTEGER` precision loss.
+The denominator is the pool's bonded `activeStake` (ENJ planck, unit-matched with `reinvested`),
+falling back to `poolSupply` only if the ledger read fails. Note: until the pool bonded-account
+derivation was corrected (wrong `PalletId`, hashed instead of zero-padded, wrong sub-account
+index), the ledger read *always* returned empty and this fallback was always taken — see
+`docs/reward-history-computation.md` §6:
 ```js
 const RATIO_PREC = 1_000_000_000n
-const perEraGainScaled = (reinvested * RATIO_PREC) / poolSupply
+const apyDenom = activeStake > 0n ? activeStake : poolSupply
+const perEraGainScaled = apyDenom > 0n ? (reinvested * RATIO_PREC) / apyDenom : 0n
 const ratio = 1 + Number(perEraGainScaled) / Number(RATIO_PREC)
 const apy   = (Math.pow(ratio, 365) - 1) * 100
 ```
+
+`netReinvested()` in [`src/utils/rewardMath.js`](../src/utils/rewardMath.js) is the single source of
+truth for the commission arithmetic. `RewardPaid.reward` is GROSS; only `reward − commission`
+compounds into the pool. See
+[`nomination_pool_reward_accounting_fix.md`](./nomination_pool_reward_accounting_fix.md).
 
 ### sENJ vs ENJ distinction
 
@@ -720,9 +742,10 @@ A new pool starts at rate ≈ 1.0. As the pool earns rewards and compounds, the 
 
 ### Reinvested accuracy notes
 
-- Multiple validator payout events per era are summed — this is correct (each validator fires a separate event)
-- Subscan indexing lag may cause zero results for very recent eras (logged as warning)
-- Legacy chains (pre-v1060): `NominationPools.RewardPaid` per validator; Modern (v1061+): `NominationPools.EraRewardsProcessed` once per pool. Both are captured by Subscan `reward_slash` endpoint; summing is correct either way.
+- Multiple validator payout events per era are summed — this is correct (each validator fires a separate event). Each event's contribution is taken **net of its commission**.
+- If no events land in the 41-block window, the era/pool row is **skipped entirely** (logged as info), so a late payout yields a missing row rather than a visibly wrong number.
+- **Pre-v1060 eras:** `NominationPools.EraRewardsProcessed` fires once per pool, carrying a `reinvested` value already net of commission — used directly. **v1060+ eras:** that event was *removed*; `NominationPools.RewardPaid` fires once per validator with a GROSS `reward` plus a `commission`, so `reinvested = Σ max(reward − commission, 0)`. Since v1060 landed 2025-10-30 (≈ era 880), the `RewardPaid` path covers all recent history.
+- An earlier revision of this document had these two labels inverted, describing `EraRewardsProcessed` as "Modern (v1061+)" — that is backwards.
 
 ---
 
@@ -881,7 +904,7 @@ SSL_CERT_FILE="$(python3 -c 'import certifi; print(certifi.where())')" \
 
 Interactive CLI that mirrors the Reward History Viewer computation. Connects directly to the Enjin Relaychain archive node via `substrate-interface`. Outputs a per-era × per-pool reward table.
 
-Verified against the React hook: 0/18 mismatches for test address `enDr55GTVDWok78KBZgt5N86WNEy55bmMMeC9JsKAaPtiQnct`, eras 1000–1002, pools [14, 17, 18, 21, 23, 26].
+Verified against the React hook: 0/18 mismatches for a test address, eras 1000–1002, pools [14, 17, 18, 21, 23, 26].
 
 ### `scripts/relay-era-range-fetch.py`
 

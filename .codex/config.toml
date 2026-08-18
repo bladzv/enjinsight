@@ -1,0 +1,3 @@
+[mcp_servers.etherscan-mcp]
+url = "https://mcp.etherscan.io/mcp"
+bearer_token_env_var = "ETHERSCAN_API_KEY"

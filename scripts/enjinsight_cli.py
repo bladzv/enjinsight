@@ -496,14 +496,26 @@ def pool_id_from_bonded_pools_key(key_hex: str) -> Optional[int]:
     raw = bytes.fromhex(s[80:88])
     return int.from_bytes(raw, "little")
 
-def compute_pool_bonded_account_id(pool_id: int) -> str:
-    """Derive bonded pool AccountId32 hex from pool_id (mirrors Substrate logic)."""
-    inp = bytearray(17)
-    inp[0:4]  = b"modl"
-    inp[4:12] = b"py/nopo\x00"
-    inp[12]   = 0  # kind = Bonded
-    inp[13:17] = (pool_id & 0xFFFFFFFF).to_bytes(4, "little")
-    return blake2b_256(bytes(inp)).hex()
+NOMINATION_POOLS_PALLET_ID = b"py/nopls"   # runtime constant NominationPools.PalletId
+POOL_ACCOUNT_BONDED = 1                    # sub-account holding the actively staked ENJ
+
+def compute_pool_bonded_account_id(pool_id: int, index: int = POOL_ACCOUNT_BONDED) -> str:
+    """
+    Derive a nomination-pool sub-account (AccountId32 hex) from pool_id.
+
+    Mirrors Substrate's PalletId::into_sub_account, which uses TrailingZeroInput: the seed
+    bytes are written into a 32-byte buffer and the remainder is ZERO-PADDED, never hashed.
+
+        b"modl" + b"py/nopls" + index(u8) + pool_id(u32 LE) + 15 zero bytes
+
+    Previously this hashed a 17-byte seed with the wrong PalletId (b"py/nopo\x00") and index 0,
+    so Staking.Ledger lookups silently returned empty and active stake was always 0.
+    """
+    out = bytearray(32)
+    pre = b"modl" + NOMINATION_POOLS_PALLET_ID + bytes([index & 0xFF]) \
+        + (pool_id & 0xFFFFFFFF).to_bytes(4, "little")
+    out[0:len(pre)] = pre
+    return bytes(out).hex()
 
 def build_staking_ledger_key(account_id_hex: str) -> str:
     """Staking.Ledger(accountId) storage key."""
@@ -2721,7 +2733,9 @@ def _find_reinvested_subscan(subscan: SubscanClient, pool_id: int, era: int,
                     comm_amt = to_bigint(comm_raw.get("amount"))
                 else:
                     comm_amt = to_bigint(comm_raw)
-            s = reward + comm_amt
+            # Net of commission — only this amount actually compounds into the pool.
+            # See docs/nomination_pool_reward_accounting_fix.md.
+            s = max(reward - comm_amt, 0)
             if ev_era == era:
                 total += s
             elif ev_era == era + 1:

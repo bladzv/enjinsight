@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { decodeCompactFirst, decodeU128First } from './substrate.js'
+import { decodeCompactFirst, decodeU128First, computePoolBondedAccountId, POOL_ACCOUNT_BONDED, POOL_ACCOUNT_REWARD } from './substrate.js'
 
 // ── decodeCompactFirst ─────────────────────────────────────────────────────
 // Tests use raw hex values observed from the archive node (era 1000).
@@ -61,5 +61,47 @@ describe('decodeU128First', () => {
     // 1n stored as u128 LE: [0x01, 0x00, ..., 0x00]
     const hex = '0x' + '01' + '00'.repeat(15)
     expect(decodeU128First(hex)).toBe(1n)
+  })
+})
+
+// ── computePoolBondedAccountId ──────────────────────────────────────────────
+// Substrate PalletId::into_sub_account = "modl" + PalletId + index + poolId(u32 LE),
+// zero-padded to 32 bytes. NOT hashed. PalletId is b"py/nopls" (runtime constant
+// NominationPools.PalletId = 0x70792f6e6f706c73), and the bonded sub-account is index 1.
+describe('computePoolBondedAccountId', () => {
+  const MODL = '6d6f646c'
+  const PID  = '70792f6e6f706c73'   // "py/nopls"
+  const PAD  = '00'.repeat(15)
+
+  it('derives the bonded account by zero-padding, not hashing', () => {
+    // pool 14 -> 0x0e000000 little-endian, index 1
+    expect(computePoolBondedAccountId(14)).toBe(`${MODL}${PID}01${'0e000000'}${PAD}`)
+  })
+
+  it('returns a 32-byte account id (64 hex chars, no 0x prefix)', () => {
+    const hex = computePoolBondedAccountId(14)
+    expect(hex).toHaveLength(64)
+    expect(hex.startsWith('0x')).toBe(false)
+  })
+
+  it('encodes pool_id as u32 little-endian', () => {
+    // 258 = 0x00000102 -> LE bytes 02 01 00 00
+    expect(computePoolBondedAccountId(258)).toBe(`${MODL}${PID}01${'02010000'}${PAD}`)
+  })
+
+  it('defaults to the bonded index (1) and supports the reward index (2)', () => {
+    expect(computePoolBondedAccountId(14)).toBe(computePoolBondedAccountId(14, POOL_ACCOUNT_BONDED))
+    expect(POOL_ACCOUNT_BONDED).toBe(1)
+    expect(POOL_ACCOUNT_REWARD).toBe(2)
+    expect(computePoolBondedAccountId(14, POOL_ACCOUNT_REWARD))
+      .toBe(`${MODL}${PID}02${'0e000000'}${PAD}`)
+  })
+
+  it('does not regress to the old blake2b derivation', () => {
+    // The old implementation hashed a 17-byte seed with the wrong PalletId and index 0.
+    // Its output began with neither "modl" nor the PalletId.
+    const hex = computePoolBondedAccountId(14)
+    expect(hex.startsWith(MODL)).toBe(true)
+    expect(hex.slice(8, 24)).toBe(PID)
   })
 })
