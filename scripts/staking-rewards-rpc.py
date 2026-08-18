@@ -69,6 +69,7 @@ SCALE            = 10 ** 18
 ERAS_PER_YEAR    = 365
 ENJ_SS58_PREFIX  = 2135
 COLLECTION_ID    = 1            # sENJ multi-token collection that tracks pool shares
+POOL_ACCOUNT_BONDED = 1         # pool sub-account index holding the actively staked ENJ
 DEFAULT_ENDPOINT    = os.getenv("RPC_ENDPOINT", "wss://archive.relay.blockchain.enjin.io")
 SUBSCAN_HOST        = "enjin.api.subscan.io"
 SUBSCAN_RETRY_DELAY = 5
@@ -109,21 +110,21 @@ def _compute_pool_bonded_account(pool_id):
     """
     Derive the pool-bonded stash SS58 address for a given pool_id.
 
-    The account is a ModuleId-derived address with layout:
-        b"modl" + b"py/nopo\x00" + b"\x00" (kind=Bonded) + pool_id as u32 LE
-    Hashed with blake2b-256, then SS58-encoded with the ENJ prefix.
+    Layout (Substrate PalletId::into_sub_account, zero-padded to 32 bytes -- NOT hashed):
+        b"modl" + b"py/nopls" + b"\x01" (index=Bonded) + pool_id as u32 LE + 15 zero bytes
+    Then SS58-encoded with the ENJ prefix.
+
+    Previously this hashed the seed with the wrong PalletId (b"py/nopo\x00") and index 0, so
+    Staking.Ledger lookups silently returned empty and active stake was always 0.
+    See docs/nomination_pool_reward_accounting_fix.md.
     """
-    buf = bytearray(17)
-    buf[0:4]  = b'modl'
-    buf[4:12] = b'py/nopo\x00'
-    buf[12]   = 0x00           # kind = 0 (Bonded)
-    pid = int(pool_id) & 0xFFFFFFFF
-    buf[13] = pid & 0xFF
-    buf[14] = (pid >> 8) & 0xFF
-    buf[15] = (pid >> 16) & 0xFF
-    buf[16] = (pid >> 24) & 0xFF
-    raw = hashlib.blake2b(bytes(buf), digest_size=32).digest()
-    return _ss58_encode(raw, ENJ_SS58_PREFIX)
+    # Substrate's PalletId::into_sub_account uses TrailingZeroInput: seed bytes written into a
+    # 32-byte buffer, remainder ZERO-PADDED. Never hashed.
+    raw = bytearray(32)
+    pre = b'modl' + b'py/nopls' + bytes([POOL_ACCOUNT_BONDED]) \
+        + (int(pool_id) & 0xFFFFFFFF).to_bytes(4, 'little')
+    raw[0:len(pre)] = pre
+    return _ss58_encode(bytes(raw), ENJ_SS58_PREFIX)
 
 
 # ── Formatting ────────────────────────────────────────────────────────────────
@@ -540,7 +541,9 @@ def find_reinvested(api, pool_id, era, era_end_block):
 
     The events fire in the blocks IMMEDIATELY AFTER the era boundary block:
       - NominationPools.RewardPaid(pool_id, era, validator_stash, reward, commission?)
-        fires once per nominated validator; we sum reward + commission.amount.
+        fires once per nominated validator; we sum max(reward - commission.amount, 0),
+        i.e. net of the operator's commission (only the net amount actually compounds
+        into the pool — see docs/nomination_pool_reward_accounting_fix.md).
       - NominationPools.EraRewardsProcessed(pool_id, era, reinvested, ...)
         fires once per pool and takes precedence if present.
 
@@ -586,7 +589,8 @@ def find_reinvested(api, pool_id, era, era_end_block):
                     reward     = int(attrs.get("reward", 0))
                     commission = attrs.get("commission") or {}
                     comm_amt   = int(commission.get("amount", 0)) if isinstance(commission, dict) else 0
-                    total += reward + comm_amt
+                    # Net of commission — only this amount actually compounds into the pool.
+                    total += max(reward - comm_amt, 0)
 
             except Exception:
                 continue

@@ -48,22 +48,35 @@ The `10^18` is just a scaling factor (like "18 decimal places") so we can work w
 
 Every era, one of two blockchain events fires:
 
-### Event A: `NominationPools.EraRewardsProcessed` (current, new path)
-> This is the modern event fired once per pool per era.
+### Event A: `NominationPools.EraRewardsProcessed` (legacy path — pre-v1060 only)
+> Fired once per pool per era. **Removed in runtime v1060**, so it only appears for
+> historical eras (roughly era < 880, before 2025-10-30). When present it is the most
+> accurate source, because the chain did the arithmetic for us.
 
 It carries:
 - `poolId` — which pool
 - `era` — which era index
-- `reinvested` — total ENJ reinvested into the pool this era (rewards + commission combined)
-- `bonus` — any early-bird bonus paid
+- `reinvested` — total ENJ reinvested into the pool this era, **already net of commission**
+- `bonus` — early-bird bonus paid. The bonus mechanism was **removed in v1060**
+  (no bonus since ~era 903); on the v1060+ path this is always `0`
 - `commission` — if any commission is taken, the amount and beneficiary
 
-### Event B: `NominationPools.RewardPaid` (legacy path, v1060 and older)
-> This fires multiple times per era, once per validator the pool nominated.
+### Event B: `NominationPools.RewardPaid` (current path — v1060 and newer)
+> This fires multiple times per era, once per validator the pool nominated. Since v1060
+> replaced `EraRewardsProcessed` with this event, it is the **only** path for all recent
+> history — not a rare fallback.
 
 It carries:
 - `poolId`, `era`, `validatorStash`, `reward` (+ optionally `commission`)
 - The rewards are **accumulated** across all validator payouts until the era is complete.
+
+> **`reward` is the GROSS amount**, captured before commission is deducted. On chain,
+> `claim_commission()` moves the commission *out* of the pool's reward account and only the
+> remainder is bonded via `bond_extra`. So the amount that actually compounds is
+> `reward − commission`, and `reinvested` must be derived as `Σ max(reward − commission, 0)`.
+> Adding commission instead of subtracting it overstates every downstream figure by
+> `2 × commission` (~+15% at a 7% rate) — see
+> [`nomination_pool_reward_accounting_fix.md`](./nomination_pool_reward_accounting_fix.md).
 
 ---
 
@@ -93,10 +106,24 @@ This is mathematically equivalent to `pool.points`, but re-computed from the cur
 memberReward = (memberPoints * eraReward.reinvested) / totalPoolPoints
 ```
 - `memberPoints` = member's sENJ token balance at the time of the era
-- `eraReward.reinvested` = total ENJ rewards reinvested into the pool this era
+- `eraReward.reinvested` = ENJ that compounded into the pool this era, **net of commission**
 - `totalPoolPoints` = total sENJ supply at the time (see formula above)
 
 **In plain English:** Your share of what was reinvested = (your points / all points) × total reinvested.
+
+> **This is the formula EnjinSight uses.** Enjin's indexer has since moved to an equivalent
+> rate-delta form:
+>
+> ```
+> changeInRate = rate_this_era − rate_previous_era
+> memberReward = memberPoints * changeInRate / 10^18
+> ```
+>
+> The two are algebraically equivalent once `reinvested` is net of commission, since
+> `reinvested ≈ changeInRate * totalPoolPoints / 10^18`. The rate-delta form is more robust: it
+> reads only on-chain state, so it cannot misinterpret commission semantics. Note that
+> `changeInRate` is absent from the field tables below — it is now central to the indexer's
+> calculation.
 
 ---
 
@@ -105,6 +132,11 @@ memberReward = (memberPoints * eraReward.reinvested) / totalPoolPoints
 member.accumulatedRewards = member.accumulatedRewards + memberReward
 ```
 Each era, the member's running total grows by their era reward.
+
+> **Idempotency caveat.** Because `RewardPaid` fires once per validator, this handler re-runs
+> several times for the same era, each pass with a better estimate. The indexer therefore does
+> `previous + eraReward − previousRewardForThisEra`, subtracting any value already recorded for
+> that `(member, era)` so replays do not double-count. A naive `+=` would inflate the total.
 
 ---
 
@@ -181,10 +213,10 @@ One record per (pool × era). Stores the pool-level summary for each era.
 | `era` | `Era` | Which era |
 | `rate` | `bigint` | Pool rate at this era |
 | `active` | `bigint` | Total active staked at this era |
-| `reinvested` | `bigint` | Total ENJ reinvested this era (distributed to members) |
+| `reinvested` | `bigint` | Total ENJ reinvested this era, **net of commission** (distributed to members) |
 | `apy` | `number` | Single-era APY % |
 | `averageApy` | `number` | Smoothed rolling APY % |
-| `bonus` | `bigint` | Any early-bird bonus |
+| `bonus` | `bigint` | Early-bird bonus. **Deprecated** — mechanism removed in v1060; always `0` on the v1060+ path |
 | `commission` | `CommissionPayment` | Commission taken (if any) |
 
 ---
@@ -314,10 +346,12 @@ Here is a simplified walkthrough of what happens each era:
    c. For EACH member of the pool:
       - Gets their sENJ balance (memberPoints)
       - Computes: memberReward = (memberPoints * reinvested) / totalPoolPoints
+        (reinvested is net of commission; the indexer now derives this from changeInRate)
       - Saves a PoolMemberRewards record:
         - id = "{poolId}-{accountId}-{eraIndex}"
         - rewards = memberReward
-        - accumulatedRewards += memberReward
+        - accumulatedRewards += memberReward  (minus any value already stored
+          for this (member, era), so multi-validator replays don't double-count)
 ```
 
 ---
@@ -645,12 +679,16 @@ for (const [key, value] of entries) {
 
 #### Step 6 — Calculate member rewards
 
-This is the **core formula** (identical to what the indexer does):
+This is the **core formula** (what EnjinSight uses; the indexer now uses the equivalent
+rate-delta form `memberPoints * changeInRate / 10^18`):
 
 ```typescript
-// You need the total reinvested amount for the era.
-// This comes from the NominationPools.EraRewardsProcessed event for that era.
-// If querying live, you can scan block events. If using the indexer DB, just read era_reward.reinvested.
+// You need the total reinvested amount for the era, NET OF COMMISSION.
+// Pre-v1060 eras: read it directly from NominationPools.EraRewardsProcessed (already net).
+// v1060+ eras:    EraRewardsProcessed no longer exists. Sum NominationPools.RewardPaid as
+//                 Sum of max(reward - commission, 0) across every nominated validator.
+//                 `reward` is GROSS - adding commission instead of subtracting overstates
+//                 the result by 2 * commission (~+15% at 7%).
 
 const totalPoolPoints = (activeStake * 10n ** 18n) / poolRate
 
@@ -664,7 +702,8 @@ console.log(`Era ${eraIndex} | Pool ${poolId} | Reward: ${rewardENJ.toFixed(6)} 
 
 Where:
 - `poolRate` = `(activeStake * 10^18n) / totalPoolPoints` — you can compute this or read from the indexer DB
-- `eraReinvested` = total ENJ reinvested by the pool this era (from `EraRewardsProcessed` event or indexer DB)
+- `eraReinvested` = total ENJ reinvested by the pool this era, net of commission (from
+  `EraRewardsProcessed` for pre-v1060 eras, or summed from `RewardPaid` for v1060+)
 
 ---
 

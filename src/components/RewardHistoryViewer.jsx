@@ -643,13 +643,13 @@ const TABLE_COLS = [
   { key: 'memberBalance',label: 'Member sENJ',    align: 'right', sortable: true,
     tooltip: 'Your pool share tokens (sENJ) at the era\'s start block. sENJ represents your proportional ownership of the pool — more sENJ = larger share of rewards.' },
   { key: 'reinvested',   label: 'Reinvested ENJ', align: 'right', sortable: true,
-    tooltip: 'Total ENJ reward the entire pool earned this era, automatically compounded back into the pool\'s bonded stake. This is pool-wide — not wallet-specific.' },
+    tooltip: 'Total ENJ the entire pool reinvested this era, net of the pool operator\'s commission, automatically compounded back into the pool\'s bonded stake. This is pool-wide — not wallet-specific.' },
   { key: 'reward',       label: 'Reward ENJ',     align: 'right', sortable: true,
-    tooltip: 'Your wallet\'s share of the pool\'s reinvested reward: (your sENJ ÷ total pool sENJ) × Reinvested ENJ. The ENJ that accrued to your position this era.' },
+    tooltip: 'Your wallet\'s share of the pool\'s reinvested reward (net of operator commission): (your sENJ ÷ total pool sENJ) × Reinvested ENJ. The ENJ that accrued to your position this era.' },
   { key: 'accumulated',  label: 'Cumulative ENJ', align: 'right', sortable: true,
     tooltip: 'Running total of your Reward ENJ across all eras in the result set, per pool.' },
   { key: 'apy',          label: 'APY*',           align: 'right', sortable: true,
-    tooltip: 'Per-era annualised yield: ((bonded ENJ + reinvested) ÷ bonded ENJ)^365 − 1. An estimate — actual returns vary each era.' },
+    tooltip: 'Per-era annualised yield: ((bonded ENJ + reinvested) ÷ bonded ENJ)^365 − 1, where reinvested is net of operator commission. An estimate — actual returns vary each era.' },
   { key: 'rollingApy',   label: 'APY 15d*',       align: 'right', sortable: true,
     tooltip: 'Rolling 15-era APY: the same formula compounded over a sliding 15-era window and annualised. Smooths out single-era spikes.' },
 ]
@@ -1456,6 +1456,8 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
             <p className="mt-1">Archive snapshots reconstruct pool-level rewards and member share over time, so the output is best used for investigation and planning.</p>
             <p className="mt-2"><span className="font-semibold text-text">Pool-level payouts.</span> The pool gets daily rewards, not the user, so these values are estimations rather than wallet-level settlement records.</p>
             <p className="mt-2"><span className="font-semibold text-text">Enjin Wallet may show different values.</span> The wallet derives reward figures from its own data pipeline and may reflect claimable balances or rounding differently from the era-by-era archive reconstruction used here.</p>
+            <p className="mt-2"><span className="font-semibold text-text">Historical figures corrected.</span> Reward, Cumulative, and APY figures shown before this fix were overstated for eras after the pool commission mechanism launched — the calculation mistakenly added the pool operator's commission instead of subtracting it. Figures shown now are net of commission and correct; if you saved or exported numbers earlier, they may be higher than the current values.</p>
+            <p className="mt-2"><span className="font-semibold text-text">APY is now ENJ-denominated.</span> APY previously divided by the pool's sENJ share supply because the pool's bonded-stake lookup was silently failing. It now divides by the actual bonded ENJ, which is the correct unit. Since 1 sENJ is worth well over 1 ENJ in mature pools, APY figures are roughly half what this tool showed before — the lower numbers are the accurate ones.</p>
             <p className="mt-2"><span className="font-semibold text-text">Tax note.</span> Tax treatment depends on your jurisdiction and activity history. Use this tool as a research aid, not tax advice.</p>
           </ToolInfoSection>
 
