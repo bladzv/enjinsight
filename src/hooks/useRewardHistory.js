@@ -21,7 +21,10 @@ import {
 } from '../constants.js'
 import { WsProvider, ApiPromise } from '@polkadot/api'
 import { validateWsEndpoint, buildTokenAccountKey, buildTokenKey, decodeCompactFirst, buildBondedPoolsPrefix, poolIdFromBondedPoolsKey, computePoolBondedAccountId, buildStakingLedgerKey, decodeStakingLedgerActive } from '../utils/substrate.js'
-import { fetchHistoricalPoolIds, fetchAllPools, delay, enqueueRequest } from '../utils/api.js'
+import {
+  fetchHistoricalPoolIds, fetchAllPools, delay, enqueueRequest,
+  resetSubscanRequestCount, readSubscanRequestCount,
+} from '../utils/api.js'
 import { nowHHMMSS } from '../utils/format.js'
 import { netReinvested, poolRate, memberEraReward } from '../utils/rewardMath.js'
 import { SubstrateRPC } from '../utils/rpc.js'
@@ -447,6 +450,7 @@ export function useRewardHistory() {
     const ctrl = new AbortController()
     abortRef.current = ctrl
     const signal = ctrl.signal
+    resetSubscanRequestCount()
     let resolvedEndpoint = ARCHIVE_WSS
 
     // endEra may be clamped to the current active era after connecting (mirrors Python)
@@ -1086,6 +1090,7 @@ export function useRewardHistory() {
 
       const total = results.reduce((s, r) => s + r.reward, 0n)
       logFn('OK', `─── Done. ${results.length} era+pool record(s). Grand total: ${fmtEnj(total)} ENJ ───`)
+      logFn('INFO', `${readSubscanRequestCount()} Subscan requests used this run.`)
       dispatch({ type: 'DONE', results })
 
     } catch (e) {

@@ -1,6 +1,6 @@
 import {
   SUBSCAN_BASE, ENDPOINTS, REQUEST_TIMEOUT_MS,
-  NOMINATORS_ROW, POOLS_PAGE_SIZE, REWARD_SLASH_ROW,
+  SUBSCAN_MAX_ROW, SUBSCAN_MAX_PAGES,
   MAX_RETRIES, API_DELAY_MS, MAX_RETRY_ATTEMPTS, RETRY_BASE_MS,
 } from '../constants.js'
 
@@ -26,6 +26,25 @@ function buildUrl(path) {
 }
 
 const delay = ms => new Promise(r => setTimeout(r, ms))
+
+// ── Per-scan request counter ────────────────────────────────────────────────
+// Purely informational: lets a hook report how many real Subscan HTTP requests
+// (including retries) a scan run used, to give visibility into the free tier's
+// 20,000/day quota. Module-scoped rather than threaded per-call: the app only
+// ever drives one scan at a time in practice (mode switching and starting a
+// second scan are disabled while a run is in progress), so a hook resetting
+// the counter at the start of its run and reading it at the end gets an
+// accurate count for that run. Counts every attempt, including retries, since
+// each is a real request against the quota.
+let _requestCount = 0
+
+export function resetSubscanRequestCount() {
+  _requestCount = 0
+}
+
+export function readSubscanRequestCount() {
+  return _requestCount
+}
 
 // ── In-flight request deduplication ──────────────────────────────────────────
 // If two callers request the exact same Subscan endpoint + body simultaneously,
@@ -126,6 +145,7 @@ async function _subscanPost(path, body, options = {}) {
 
     let response
     try {
+      _requestCount++
       response = await fetch(url, {
         method:  'POST',
         headers: {
@@ -200,6 +220,79 @@ async function _subscanPost(path, body, options = {}) {
   throw new Error('Retries exhausted while contacting Subscan.')
 }
 
+// ── Pagination ─────────────────────────────────────────────────────────────
+
+/**
+ * Walk a paginated Subscan endpoint, accumulating every record.
+ *
+ * The free plan caps `row` at SUBSCAN_MAX_ROW (25), so any call that previously
+ * fetched a single page of 100 now has to page for the remainder.  `row` is held
+ * constant across pages on purpose: Subscan computes the offset as page * row,
+ * so shrinking `row` on the final page would re-read earlier records instead of
+ * the tail.  Over-fetch and slice to `max` instead.
+ *
+ * Stops on the first short page, once `count` (reported on page 0) is reached,
+ * once `max` records are held, or at SUBSCAN_MAX_PAGES as a quota backstop.
+ *
+ * @param {string} path    endpoint from ENDPOINTS
+ * @param {object} body    request body minus `page` / `row`
+ * @param {string} proxyUrl
+ * @param {object} options subscanPost options ({ signal, attempts, onRetry })
+ * @param {object} pageOpts
+ * @param {number}   [pageOpts.max]      stop once this many records are held
+ * @param {function} [pageOpts.listOf]   extract the record array from a response
+ * @param {function} [pageOpts.countOf]  extract the total count from a response
+ * @param {function} [pageOpts.onPage]   called (pageNum, itemsInPage) after each page
+ * @param {number}   [pageOpts.delayMs]  inter-page delay (overridable for tests)
+ * @param {function} [pageOpts.post]     injection seam for tests
+ * @returns {Promise<Array>}
+ */
+export async function fetchPaged(path, body, proxyUrl, options = {}, pageOpts = {}) {
+  const {
+    max     = Infinity,
+    listOf  = d => d?.data?.list ?? [],
+    countOf = d => d?.data?.count ?? null,
+    onPage,
+    delayMs = API_DELAY_MS,
+    post    = subscanPost,
+  } = pageOpts
+
+  const { signal } = options
+  const out = []
+  let total = null
+
+  for (let page = 0; page < SUBSCAN_MAX_PAGES; page++) {
+    if (signal?.aborted) throw new Error('Aborted')
+
+    const data = await post(path, { ...body, page, row: SUBSCAN_MAX_ROW }, proxyUrl, options)
+    const list = listOf(data) ?? []
+
+    // `count` is the total matching records; capture it from the first response
+    // that reports one so we can stop without issuing a probing empty page.
+    if (total === null) {
+      const c = countOf(data)
+      if (c != null) total = c
+    }
+
+    out.push(...list)
+    if (onPage) onPage(page, list.length)
+
+    if (list.length < SUBSCAN_MAX_ROW) break
+    if (total !== null && out.length >= total) break
+    if (out.length >= max) break
+    if (page === SUBSCAN_MAX_PAGES - 1) {
+      console.warn(
+        `fetchPaged: hit the ${SUBSCAN_MAX_PAGES}-page cap on ${path} — results are truncated at ${out.length} records.`,
+      )
+      break
+    }
+
+    await delay(delayMs)
+  }
+
+  return Number.isFinite(max) ? out.slice(0, max) : out
+}
+
 // ── Typed helpers ──────────────────────────────────────────────────────────
 
 export async function fetchValidators(proxyUrl, signal) {
@@ -217,14 +310,12 @@ export async function fetchNominators(address, proxyUrl, options = {}) {
   if (options && typeof options === 'object' && typeof options.addEventListener === 'function') {
     options = { signal: options }
   }
-  const { signal } = options
-  const data = await subscanPost(
+  return fetchPaged(
     ENDPOINTS.nominators,
-    { page: 0, row: NOMINATORS_ROW, address, order: 'desc', order_field: 'bonded' },
+    { address, order: 'desc', order_field: 'bonded' },
     proxyUrl,
     options,
   )
-  return data?.data?.list ?? []
 }
 
 export async function fetchEraStat(address, row, proxyUrl, options = {}) {
@@ -232,13 +323,13 @@ export async function fetchEraStat(address, row, proxyUrl, options = {}) {
   if (options && typeof options === 'object' && typeof options.addEventListener === 'function') {
     options = { signal: options }
   }
-  const data = await subscanPost(
+  return fetchPaged(
     ENDPOINTS.eraStat,
-    { address, row, page: 0 },
+    { address },
     proxyUrl,
     options,
+    { max: row },
   )
-  return data?.data?.list ?? []
 }
 
 /** Re-export the delay utility for hooks. */
@@ -266,6 +357,7 @@ export async function probeEndpoint(path, _body, signal) {
   }
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
+    _requestCount++
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -321,37 +413,20 @@ export async function probeEndpoint(path, _body, signal) {
 
 /**
  * Fetch all nomination pools using multi-page loop.
- * Continues fetching until a page returns fewer items than POOLS_PAGE_SIZE.
+ * Continues fetching until a page returns fewer items than SUBSCAN_MAX_ROW.
  * @param {string} proxyUrl
  * @param {AbortSignal} signal
  * @param {function} [onPage] - optional callback(pageNum, itemsInPage) for logging
  * @returns {Promise<Array>} concatenated pool list
  */
 export async function fetchAllPools(proxyUrl, signal, onPage) {
-  const allPools = []
-  let page = 0
-  let totalCount = null
-  while (true) {
-    const data = await subscanPost(
-      ENDPOINTS.pools,
-      { multi_state: ['Open', 'Blocked'], page, row: POOLS_PAGE_SIZE },
-      proxyUrl,
-      { signal },
-    )
-    const list = data?.data?.list ?? []
-    // Capture the total count from the first page so we can stop as soon
-    // as we have fetched all pools, even if each page returns exactly POOLS_PAGE_SIZE items.
-    if (totalCount === null && data?.data?.count != null) {
-      totalCount = data.data.count
-    }
-    allPools.push(...list)
-    if (onPage) onPage(page, list.length)
-    if (list.length < POOLS_PAGE_SIZE) break
-    if (totalCount !== null && allPools.length >= totalCount) break
-    page++
-    await delay(API_DELAY_MS)
-  }
-  return allPools
+  return fetchPaged(
+    ENDPOINTS.pools,
+    { multi_state: ['Open', 'Blocked'] },
+    proxyUrl,
+    { signal },
+    { onPage },
+  )
 }
 
 /**
@@ -380,20 +455,17 @@ export async function fetchVoted(address, proxyUrl, signal) {
  * @returns {Promise<Array>}
  */
 export async function fetchRewardSlash(address, blockRange, proxyUrl, signal) {
-  const data = await subscanPost(
+  return fetchPaged(
     ENDPOINTS.rewardSlash,
     {
       address,
       is_stash: true,
       category: 'Reward',
       block_range: blockRange,
-      page: 0,
-      row: REWARD_SLASH_ROW,
     },
     proxyUrl,
     { signal },
   )
-  return data?.data?.list ?? []
 }
 
 // Module-level cache: address → Set<number>. Persists across runs for the same address.
@@ -415,6 +487,11 @@ export function clearHistPoolCache(address) {
  * Results are cached in memory by address; a second call for the same address
  * returns immediately without any network requests.
  *
+ * NOTE (free plan): Subscan only indexes the past 3 months, so for an address
+ * whose pool activity predates that window this returns an INCOMPLETE set.  The
+ * incomplete set is then cached, so a retry will not re-fetch it — call sites
+ * must not treat the result as an exhaustive history.
+ *
  * @param {string} address - Relaychain wallet address
  * @param {AbortSignal} signal
  * @param {function} [onPage] - optional callback(page, count) for progress logging
@@ -424,7 +501,7 @@ export async function fetchHistoricalPoolIds(address, signal, onPage) {
   if (_histPoolCache.has(address)) return _histPoolCache.get(address)
   const poolIds = new Set()
   let page = 0
-  const rowPerPage = 100
+  const rowPerPage = SUBSCAN_MAX_ROW
   const allowedCalls = new Set([
     'bond',
     'unbond',
@@ -458,6 +535,8 @@ export async function fetchHistoricalPoolIds(address, signal, onPage) {
 
     if (indices.length) {
       try {
+        // Second request against the same rate-limit bucket — space it out.
+        await delay(API_DELAY_MS)
         const paramsResp = await subscanPost(
           ENDPOINTS.extrinsicParams,
           { extrinsic_index: indices },

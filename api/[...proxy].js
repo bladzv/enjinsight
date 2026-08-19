@@ -14,23 +14,13 @@ const MAX_BODY_BYTES = 32 * 1024
 // cross-instance coordination (that would require Vercel KV / Redis).  For free-tier
 // traffic this provides meaningful protection within a single warm instance.
 //
-// Free-tier Subscan allows ~1 req/s sustained.  We allow a burst of 3 tokens
-// (absorbed instantly) then refill at 1 token/s, matching the free-tier limit.
+// Free-tier Subscan allows ~2 req/s sustained.  We allow a burst of 4 tokens
+// (absorbed instantly) then refill at 2 tokens/s, matching the free-tier limit.
 const _bucket = {
-  tokens:    3,            // initial burst allowance
-  max:       3,            // maximum burst
-  rate:      1,            // tokens refilled per second
+  tokens:    4,            // initial burst allowance
+  max:       4,            // maximum burst
+  rate:      2,            // tokens refilled per second
   lastRefill: Date.now(),
-}
-
-function consumeToken() {
-  const now     = Date.now()
-  const elapsed = (now - _bucket.lastRefill) / 1000
-  _bucket.tokens     = Math.min(_bucket.max, _bucket.tokens + elapsed * _bucket.rate)
-  _bucket.lastRefill = now
-  if (_bucket.tokens < 1) return false
-  _bucket.tokens -= 1
-  return true
 }
 
 // ── In-process response cache ─────────────────────────────────────────────────
@@ -122,7 +112,11 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-async function takeApiToken(bucket) {
+// `maxWaitMs` bounds how long a caller will block for a token before giving up
+// (Infinity preserves the original unbounded-wait behaviour for Etherscan/Alchemy/
+// OpenSea, none of which have a fail-fast fallback path). Returns false on timeout.
+async function takeApiToken(bucket, maxWaitMs = Infinity) {
+  const deadline = Date.now() + maxWaitMs
   while (true) {
     const now = Date.now()
     const elapsed = (now - bucket.lastRefill) / 1000
@@ -131,10 +125,12 @@ async function takeApiToken(bucket) {
 
     if (bucket.tokens >= 1) {
       bucket.tokens -= 1
-      return
+      return true
     }
 
-    await delay(Math.ceil((1 - bucket.tokens) / bucket.rate * 1000))
+    const waitMs = Math.ceil((1 - bucket.tokens) / bucket.rate * 1000)
+    if (Number.isFinite(maxWaitMs) && now + waitMs > deadline) return false
+    await delay(waitMs)
   }
 }
 
@@ -148,6 +144,14 @@ function takeAlchemyToken() {
 
 function takeOpenSeaToken() {
   return takeApiToken(_openSeaBucket)
+}
+
+// Subscan bucket: block briefly for a token rather than failing fast, since a
+// token refills in well under a second at the 2 req/s free-tier rate — but cap
+// the wait so a request can never hang the function indefinitely.
+const SUBSCAN_TOKEN_WAIT_MS = 2000
+function takeSubscanToken() {
+  return takeApiToken(_bucket, SUBSCAN_TOKEN_WAIT_MS)
 }
 
 async function fetchWithRetries(url, options, retryOptions = {}) {
@@ -964,7 +968,9 @@ export default async function handler(req, res) {
 
     // ── Token-bucket rate limiter ─────────────────────────────────────────
     // Applied after cache hits so cached responses are never throttled.
-    if (!consumeToken()) {
+    // Blocks briefly for a token (see takeSubscanToken); only 429s if the wait
+    // exceeds SUBSCAN_TOKEN_WAIT_MS, which the client's own backoff already expects.
+    if (!(await takeSubscanToken())) {
       res.setHeader('Retry-After', '1')
       res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '')
       res.statusCode = 429
