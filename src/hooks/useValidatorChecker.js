@@ -1,6 +1,7 @@
 import { useReducer, useCallback, useRef } from 'react'
 import {
   fetchValidators, fetchNominators, fetchEraStat, probeEndpoint, delay,
+  resetSubscanRequestCount, readSubscanRequestCount,
 } from '../utils/api.js'
 import { computeMissedEras, resolveLatestEra } from '../utils/eraAnalysis.js'
 import { nowHHMMSS, safeInt, parseCommission } from '../utils/format.js'
@@ -130,6 +131,7 @@ export function useValidatorChecker() {
     // create a fresh controller for this run
     abortControllerRef.current = new AbortController()
     dispatch({ type: 'START' })
+    resetSubscanRequestCount()
     const proxy = state.proxyUrl
     const signal = abortControllerRef.current.signal
     const phases = [
@@ -324,7 +326,7 @@ export function useValidatorChecker() {
 
     phases[3] = { ...phases[3], status: 'completed' }
     syncProgress()
-    log('DONE', 'All data loaded. Summary generated below.')
+    log('DONE', `All data loaded. Summary generated below. (${readSubscanRequestCount()} Subscan requests used this run.)`)
     dispatch({ type: 'DONE' })
   }, [state.proxyUrl, log])
 

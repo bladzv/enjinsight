@@ -23,7 +23,7 @@ import PhaseProgressCards from './PhaseProgressCards.jsx'
 import StepProgress from './StepProgress.jsx'
 import TerminalLog from './TerminalLog.jsx'
 import ToolInfoSection from './ToolInfoSection.jsx'
-import { PLANCK_PER_ENJ } from '../constants.js'
+import { PLANCK_PER_ENJ, SUBSCAN_HISTORY_DAYS } from '../constants.js'
 import { aesEncrypt, aesDecrypt, downloadFile, safeFilename } from '../utils/balanceExport.js'
 import { MAX_IMPORT_MB } from '../constants.js'
 
@@ -86,12 +86,13 @@ function findErasForDateRange(eraData, startDateStr, endDateStr) {
 
 function toDateInput(d) { return d.toISOString().slice(0, 10) }
 
+// Subscan's free-plan history window is the past 3 months, so presets beyond
+// that (6 months, 1 year) are dropped — they would return truncated or empty
+// results for the portion of the range Subscan no longer indexes.
 const DATE_PRESETS = [
   { label: '1 week',   days: 7   },
   { label: '1 month',  days: 30  },
   { label: '3 months', days: 90  },
-  { label: '6 months', days: 180 },
-  { label: '1 year',   days: 365 },
 ]
 
 function estimateRewardEraSpan(rangeMode, startEra, endEra, startDate, endDate) {
@@ -1582,6 +1583,9 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                 {/* Quick presets */}
                 <div>
                   <span className="input-label">Quick Range</span>
+                  <p className="mt-0.5 text-xs text-text-secondary">
+                    Subscan's free tier only indexes the past {SUBSCAN_HISTORY_DAYS} days.
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {DATE_PRESETS.map(({ label, days }) => (
                       <button key={label} type="button"
@@ -1785,6 +1789,9 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
             <div className="space-y-3">
               <div>
                 <span className="input-label">Quick Range</span>
+                <p className="mt-0.5 text-xs text-text-secondary">
+                  Subscan's free tier only indexes the past {SUBSCAN_HISTORY_DAYS} days.
+                </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {DATE_PRESETS.map(({ label, days }) => (
                     <button key={label} type="button"
