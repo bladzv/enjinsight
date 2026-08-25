@@ -5,7 +5,6 @@ import {
 } from '../constants.js'
 
 export default function ControlPanel({
-  mode,
   status,
   onRun,
   onStop,
@@ -17,7 +16,6 @@ export default function ControlPanel({
 
   const isLoading = status === 'loading'
   const isResetState = status === 'done' || status === 'stopped' || status === 'error'
-  const isPoolMode = mode === 'pools'
   const title = 'Cadence Controls'
   const helper = 'Set how many recent eras to check.'
 

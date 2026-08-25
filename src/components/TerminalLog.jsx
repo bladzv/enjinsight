@@ -66,13 +66,13 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
         if (!el) return
         const h = el.offsetHeight || 0
         document.body.style.paddingBottom = `${h}px`
-      } catch (e) {}
+      } catch {}
     }
     updateBodyPadding()
     window.addEventListener('resize', updateBodyPadding)
     return () => {
       window.removeEventListener('resize', updateBodyPadding)
-      try { document.body.style.paddingBottom = prevPaddingBottom } catch (e) {}
+      try { document.body.style.paddingBottom = prevPaddingBottom } catch {}
     }
   }, [sticky, expanded])
 

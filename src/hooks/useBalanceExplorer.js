@@ -23,7 +23,6 @@
  */
 import { useReducer, useCallback, useRef, useEffect } from 'react'
 import {
-  WS_DEFAULT_ENDPOINT,
   MAX_RPC_CALLS,
 } from '../constants.js'
 import {

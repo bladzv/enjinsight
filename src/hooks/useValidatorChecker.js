@@ -185,7 +185,7 @@ export function useValidatorChecker() {
     let rawValidators
     try {
       rawValidators = await fetchValidators(proxy, signal)
-    } catch (err) {
+    } catch {
       if (signal.aborted) return
       // Generic user-facing error (avoid exposing upstream details)
       log('ERR', 'Failed to fetch validators — please check your network or proxy and retry.')
@@ -339,13 +339,13 @@ export function useValidatorChecker() {
 
   const reset = useCallback(() => {
     // cancel in-flight requests
-    try { abortControllerRef.current?.abort() } catch (e) { /* noop */ }
+    try { abortControllerRef.current?.abort() } catch { /* noop */ }
     abortControllerRef.current = null
     dispatch({ type: 'RESET' })
   }, [])
 
   const stop = useCallback(() => {
-    try { abortControllerRef.current?.abort() } catch (e) { /* noop */ }
+    try { abortControllerRef.current?.abort() } catch { /* noop */ }
     abortControllerRef.current = null
     dispatch({ type: 'STOP' })
     log('WARN', 'Scan stopped by user.')

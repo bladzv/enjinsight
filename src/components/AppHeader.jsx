@@ -274,7 +274,7 @@ function RailContent({ view, isLoading, tools, workspace, onNavigate, onAbout, t
             </button>
           </li>
           <li>
-            <ExternalRailLink href="https://github.com/bladzv/enjinsight" icon={Github}>GitHub</ExternalRailLink>
+            <ExternalRailLink href={GITHUB_URL} icon={Github}>GitHub</ExternalRailLink>
           </li>
         </ul>
 

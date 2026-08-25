@@ -125,7 +125,6 @@ export default function PhaseProgressCards({
   title,
   summary,
   phases = [],
-  eyebrow = '',
   indexLabel = 'Phase',
   ariaLabel = 'Progress',
   className = '',

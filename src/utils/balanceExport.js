@@ -247,7 +247,7 @@ export function parseImport(text, ext) {
         })
       } catch (e) {
         // +2: one for the header row, one for 1-based line numbering.
-        throw new Error(`CSV row ${i + 2}: ${e.message}`)
+        throw new Error(`CSV row ${i + 2}: ${e.message}`, { cause: e })
       }
     })
     return { records, rpcConfig: (endpoint || address) ? { endpoint, address } : null }

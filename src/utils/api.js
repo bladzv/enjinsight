@@ -1,7 +1,7 @@
 import {
   SUBSCAN_BASE, ENDPOINTS, REQUEST_TIMEOUT_MS,
   SUBSCAN_MAX_ROW, SUBSCAN_MAX_PAGES,
-  MAX_RETRIES, API_DELAY_MS, MAX_RETRY_ATTEMPTS, RETRY_BASE_MS,
+  API_DELAY_MS, MAX_RETRY_ATTEMPTS, RETRY_BASE_MS,
 } from '../constants.js'
 
 // Exact allowlist of permitted upstream path suffixes
@@ -110,7 +110,7 @@ class RequestQueue {
       const { fn, onStart, resolve, reject } = this.queue.shift()
       try {
         if (typeof onStart === 'function') {
-          try { onStart() } catch (e) { /* ignore */ }
+          try { onStart() } catch { /* ignore */ }
         }
         const result = await fn()
         resolve(result)
@@ -131,7 +131,7 @@ export const enqueueRequest = (fn) => requestQueue.add(fn)
  * Core fetch wrapper.
  * - Enforces timeout via AbortController
  * - Validates Content-Type of response
- * - Retries up to MAX_RETRIES times on 429 (rate-limit) responses
+ * - Retries up to MAX_RETRY_ATTEMPTS times on 429 (rate-limit) responses
  * - Reads retry-after header for precise back-off timing
  * - Never surfaces raw server errors to the UI
  * - Input body values are serialised as JSON (no eval, no injection)
@@ -182,25 +182,25 @@ async function _subscanPost(path, body, options = {}) {
       if (external) external.removeEventListener('abort', onExternalAbort)
       if (err.name === 'AbortError') {
         // If external aborted, propagate immediately
-        if (external && external.aborted) throw new Error('Request aborted.')
+        if (external && external.aborted) throw new Error('Request aborted.', { cause: err })
         // Otherwise treat as timeout
         if (attempt < attempts) {
           const waitMs = Math.round(retryBase * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.2))
           if (typeof options.onRetry === 'function') options.onRetry(attempt, err, waitMs)
           await abortableDelay(waitMs, external)
-          if (external?.aborted) throw new Error('Request aborted.')
+          if (external?.aborted) throw new Error('Request aborted.', { cause: err })
           continue
         }
-        throw new Error('Request timed out after 15 s.')
+        throw new Error('Request timed out after 15 s.', { cause: err })
       }
       if (attempt < attempts) {
         const waitMs = Math.round(retryBase * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.2))
         if (typeof options.onRetry === 'function') options.onRetry(attempt, err, waitMs)
         await abortableDelay(waitMs, external)
-        if (external?.aborted) throw new Error('Request aborted.')
+        if (external?.aborted) throw new Error('Request aborted.', { cause: err })
         continue
       }
-      throw new Error('Network error — check your connection or proxy URL.')
+      throw new Error('Network error — check your connection or proxy URL.', { cause: err })
     } finally {
       clearTimeout(timer)
       if (external) external.removeEventListener('abort', onExternalAbort)

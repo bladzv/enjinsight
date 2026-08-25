@@ -9,7 +9,7 @@ export async function probeProxy(proxyUrl) {
     // Use a short-lived probe; rely on subscanPost timeout for timing
     const list = await fetchValidators(proxyUrl)
     return Array.isArray(list)
-  } catch (err) {
+  } catch {
     return false
   }
 }

@@ -279,7 +279,6 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
   const [startDate, setStartDate]   = useState('')
   const [endDate,   setEndDate]     = useState('')
   const [eraLoadErr, setEraLoadErr] = useState(null)
-  const [eraDataRef, setEraDataRef] = useState(null)  // loaded era data for step computation
   const [startEraNum, setStartEraNum] = useState('')
   const [endEraNum,   setEndEraNum]   = useState('')
 
@@ -318,7 +317,7 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
   // Load era data when date range or era range is active
   useEffect(() => {
     if ((rangeMode === 'date' || rangeMode === 'era') && isDateRangeSupported) {
-      loadEraData(activeNetwork.eraRefCsv).then(setEraDataRef).catch(() => {})
+      loadEraData(activeNetwork.eraRefCsv).catch(() => {})
     }
   }, [rangeMode, isDateRangeSupported, activeNetwork.eraRefCsv])
 
@@ -402,11 +401,6 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
     ? Math.round((Math.min(activePhase.completed, activePhase.total) / activePhase.total) * 100)
     : 0
   const completedPhaseCount = phases.filter(p => p.status === 'completed').length
-  const progressTitle = status === STATUS.DONE
-    ? 'Balance snapshots ready'
-    : status === STATUS.CANCELLED
-      ? 'Balance query stopped'
-      : (activePhase?.label ?? 'Balance query in progress')
   const progressMeta = activePhase && activePhase.total > 0
     ? `${activePhase.completed ?? 0} / ${activePhase.total} (${activePhasePct}%)`
     : `${completedPhaseCount} / ${phases.length} phases complete`
@@ -419,7 +413,6 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
     { key: 'finalize', label: 'Assemble Records',          status: 'pending', total: 1, completed: 0 },
   ], [])
   const displayPhases  = phases.length > 0 ? phases : previewPhases
-  const displayTitle   = phases.length > 0 ? progressTitle   : 'Ready to query'
   const displaySummary = phases.length > 0 ? progressSummary : null
   const displayMeta    = phases.length > 0 ? progressMeta    : null
   const liveChainSnapshot = (
@@ -447,7 +440,6 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
       let eraData
       try {
         eraData = await loadEraData(activeNetwork.eraRefCsv)
-        setEraDataRef(eraData)
       } catch {
         setEraLoadErr('Failed to load era reference data. Check network.')
         return
@@ -475,7 +467,6 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
       let eraData
       try {
         eraData = await loadEraData(activeNetwork.eraRefCsv)
-        setEraDataRef(eraData)
       } catch {
         setEraLoadErr('Failed to load era reference data. Check network.')
         return
@@ -610,7 +601,6 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
   const stepMin         = 1
   const stepPlaceholder = rangeMode === 'date' ? '1' :
                           rangeMode === 'era'  ? '1' : '14400'
-  const rangeModeLabel = rangeMode === 'date' ? 'Date Range' : rangeMode === 'era' ? 'Era Range' : 'Block Range'
   const rangeModeOptions = [
     { key: 'block', badge: 'BLK', title: 'Block Range', description: 'Query exact archive block heights.' },
     { key: 'era', badge: 'ERA', title: 'Era Range', description: 'Resolve the window through staking eras.' },
@@ -1279,7 +1269,6 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
               {!simpleMode && (
                 <div className="hidden xl:flex xl:flex-col">
                   <PhaseProgressCards
-                    eyebrow=""
                     indexLabel="Phase"
                     title="Scan Progress"
                     summary={displaySummary}
@@ -1294,7 +1283,6 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
           {!simpleMode && (
             <div className="xl:hidden mt-4">
               <PhaseProgressCards
-                eyebrow=""
                 indexLabel="Phase"
                 title="Scan Progress"
                 summary={displaySummary}

@@ -450,7 +450,7 @@ export function useRewardHistory() {
         try {
           midEra = await eraAtBlock(rpc, mid)
           break
-        } catch (e) {
+        } catch {
           if (attempt < 2) await delay(1000)
         }
       }
@@ -477,7 +477,7 @@ export function useRewardHistory() {
         try {
           prevEra = await eraAtBlock(rpc, result - 1)
           break
-        } catch (e) {
+        } catch {
           if (attempt < 2) await delay(1000)
         }
       }
@@ -498,7 +498,7 @@ export function useRewardHistory() {
     abortRef.current = ctrl
     const signal = ctrl.signal
     resetSubscanRequestCount()
-    let resolvedEndpoint = ARCHIVE_WSS
+    let resolvedEndpoint  // always assigned before use, at validateWsEndpoint() below
 
     // endEra may be clamped to the current active era after connecting (mirrors Python)
     let endEra = endEraInput
@@ -1181,6 +1181,15 @@ export function useRewardHistory() {
       if (eventApiRef.current === eventApiHandle) eventApiRef.current = null
       if (abortRef.current === ctrl) abortRef.current = null
     }
+    // findEraStartBlock/findReinvestedViaRpc (and everything they call:
+    // eraAtBlock, toIntLoose, toBigIntLoose, eventField, parseBigIntLoose) are
+    // pure — parameter-driven only, no closure over hook state/props/refs — so
+    // they cannot go stale despite being recreated on every render. Adding them
+    // here would only make `run` itself unstable across every render for no
+    // correctness benefit. The correct long-term fix is hoisting them to module
+    // scope so they are actually reference-stable too; deferred as a larger,
+    // separate change rather than folded into this lint pass.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teardown])
 
   const stop = useCallback(() => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { findConsecutiveGroups, getSeverity } from '../utils/eraAnalysis.js'
 import { poolExplorerUrl, poolLabel } from '../utils/format.js'
@@ -20,15 +20,15 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
     .filter(p => !hasNoNominatedValidators(p))
     .map(p => ({ p, groups: findConsecutiveGroups(p.missedEras) }))
     .filter(({ groups }) => groups.length > 0)
-  const cleanPreview = clean.slice(0, 4)
 
-  // Gap table pagination
+  // Gap table pagination. Clamp on read (safeGapPage), not via a sync-back
+  // effect — see SummarySection.jsx for the identical bug this mirrors: the
+  // effect was called conditionally (this component returns early above when
+  // pools is empty), a Rules of Hooks violation, and gapPageItems previously
+  // sliced with the raw, unclamped gapPage.
   const gapPages     = Math.max(1, Math.ceil(withGaps.length / gapPageSize))
-  const gapPageItems = withGaps.slice(gapPage * gapPageSize, (gapPage + 1) * gapPageSize)
   const safeGapPage  = Math.min(gapPage, gapPages - 1)
-  useEffect(() => {
-    if (safeGapPage !== gapPage) setGapPage(safeGapPage)
-  }, [safeGapPage, gapPage])
+  const gapPageItems = withGaps.slice(safeGapPage * gapPageSize, (safeGapPage + 1) * gapPageSize)
 
   return (
     <section aria-labelledby="pool-summary-heading" className="space-y-3 animate-fade-in sm:space-y-4">
@@ -100,7 +100,7 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
               const missed   = p.missedEras.length
               const rewarded = Math.max(0, eraCount - missed)
               return (
-                <article
+                <div
                   key={`m-${p.poolId}`}
                   className="cursor-pointer rounded-sm border border-[var(--hairline)] bg-card p-2.5 transition-colors hover:bg-surface-high focus:outline-none focus:ring-1 focus:ring-primary"
                   role="button"
@@ -142,7 +142,7 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
                     </p>
                     <SeverityBadge sev={sev} />
                   </div>
-                </article>
+                </div>
               )
             })}
           </div>
@@ -160,7 +160,7 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
                 </tr>
               </thead>
               <tbody>
-                {gapPageItems.map((p, i) => {
+                {gapPageItems.map((p) => {
                   const sev      = getSeverity(p.missedEras.length)
                   const missed   = p.missedEras.length
                   const rewarded = Math.max(0, eraCount - missed)
@@ -240,15 +240,15 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
               </div>
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setGapPage(p => Math.max(0, p - 1))}
-                  disabled={gapPage === 0}
+                  onClick={() => setGapPage(Math.max(0, safeGapPage - 1))}
+                  disabled={safeGapPage === 0}
                   className="btn-ghost disabled:opacity-30"
                   aria-label="Previous page"
                 >‹ Prev</button>
-                <span className="px-2">{gapPage + 1} / {gapPages}</span>
+                <span className="px-2">{safeGapPage + 1} / {gapPages}</span>
                 <button
-                  onClick={() => setGapPage(p => Math.min(gapPages - 1, p + 1))}
-                  disabled={gapPage >= gapPages - 1}
+                  onClick={() => setGapPage(Math.min(gapPages - 1, safeGapPage + 1))}
+                  disabled={safeGapPage >= gapPages - 1}
                   className="btn-ghost disabled:opacity-30"
                   aria-label="Next page"
                 >Next ›</button>
