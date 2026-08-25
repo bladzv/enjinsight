@@ -848,7 +848,7 @@
   /* ── Buttons — flat, sharp, single border ─────────────────────────── */
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-on-primary transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
+    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-on-primary transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
     background: theme('colors.primary');
     border: 1px solid theme('colors.primary-dim');
   }
@@ -860,6 +860,7 @@
 
   .btn-primary:active:not(:disabled) {
     background: theme('colors.primary-dim');
+    transform: scale(var(--m-scale-press));
   }
 
   .staking-scan-button {
@@ -872,7 +873,7 @@
 
   .btn-stop,
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-white transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-danger focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
+    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-white transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-danger focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
     background: theme('colors.danger');
     border: 1px solid theme('colors.danger-dim');
   }
@@ -882,8 +883,13 @@
     background: theme('colors.danger-dim');
   }
 
+  .btn-stop:active:not(:disabled),
+  .btn-danger:active:not(:disabled) {
+    transform: scale(var(--m-scale-press));
+  }
+
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-text transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
+    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-text transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
     background: var(--card);
     border: 1px solid var(--hairline);
   }
@@ -893,8 +899,12 @@
     background: var(--surface-high);
   }
 
+  .btn-secondary:active:not(:disabled) {
+    transform: scale(var(--m-scale-press));
+  }
+
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium text-text-secondary transition duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary;
   }
 
   .btn-ghost:hover {
@@ -902,13 +912,21 @@
     color: theme('colors.text');
   }
 
+  .btn-ghost:active {
+    transform: scale(var(--m-scale-press));
+  }
+
   .btn-icon {
-    @apply inline-flex min-h-[34px] min-w-[34px] items-center justify-center rounded-sm text-text-secondary transition-colors duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary;
+    @apply inline-flex min-h-[34px] min-w-[34px] items-center justify-center rounded-sm text-text-secondary transition duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary;
   }
 
   .btn-icon:hover {
     background: rgba(var(--hover-rgb), 0.07);
     color: theme('colors.text');
+  }
+
+  .btn-icon:active {
+    transform: scale(var(--m-scale-press));
   }
 
   /* ── Status badges ────────────────────────────────────────────────── */
@@ -954,6 +972,48 @@
   .sev-high {
     @apply inline-flex items-center gap-1 rounded-sm border border-danger/35 bg-danger/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.10em] text-danger;
     font-family: theme('fontFamily.mono');
+  }
+
+  /* ── Reveal (stagger-entrance on scroll into view) ───────────────────
+     Delay is computed in CSS from the --i custom property Reveal.jsx sets
+     inline, not as an inline style itself — that is what lets the reduced-
+     motion block zero --m-stagger/--m-stagger-cap and disable every
+     Reveal's delay in one place instead of hunting down each usage. */
+  .reveal {
+    opacity: 0;
+    transform: translateY(var(--m-rise));
+    transition: opacity var(--m-base) var(--m-ease-out), transform var(--m-base) var(--m-ease-out);
+    transition-delay: calc(min(var(--i, 0), var(--m-stagger-cap)) * var(--m-stagger));
+  }
+
+  .reveal-in {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ── Toast entrance ────────────────────────────────────────────────── */
+  @keyframes toast-enter {
+    from { opacity: 0; transform: translateY(calc(-1 * var(--m-slide))); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .toast-card {
+    animation: toast-enter var(--m-base) var(--m-overshoot) both;
+  }
+
+  /* ── Landing tool card: hover lift + border glow ─────────────────────
+     The glow reuses staking-scan-hover-glow's box-shadow technique rather
+     than a conic-gradient + mask "true" traveling beam — consistent with
+     the one glow effect already in the codebase, and box-shadow gated
+     strictly to :hover/:focus-within carries far less risk than a masked
+     pseudo-element. Never animates while idle. The smooth transform is
+     already covered by the "transition" Tailwind utility on the card
+     itself (its default property list includes transform) — no separate
+     transition declaration needed here. */
+  .tool-card:hover,
+  .tool-card:focus-within {
+    transform: translateY(var(--m-lift));
+    animation: staking-scan-hover-glow var(--m-glow-dur) ease-in-out infinite alternate;
   }
 }
 
