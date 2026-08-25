@@ -1,11 +1,10 @@
 import { useState } from 'react'
-import { Copy, CheckCircle2 } from 'lucide-react'
+import CopyButton from './CopyButton.jsx'
 import { formatENJ, truncateAddress } from '../utils/format.js'
 
 export default function NominatorsTable({ nominators, onRetry, validatorAddress, validatorFetchStatus }) {
   const [page, setPage]         = useState(0)
   const [pageSize, setPageSize] = useState(10)
-  const [copied, setCopied]     = useState(null)
 
   if (!nominators || nominators.length === 0) {
     return (
@@ -15,14 +14,6 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
 
   const pages     = Math.ceil(nominators.length / pageSize)
   const pageItems = nominators.slice(page * pageSize, (page + 1) * pageSize)
-
-  async function copyAddr(addr) {
-    try {
-      await navigator.clipboard.writeText(addr)
-      setCopied(addr)
-      setTimeout(() => setCopied(null), 2000)
-    } catch { /* clipboard access denied */ }
-  }
 
   return (
     <div>
@@ -43,16 +34,12 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
             <div className="flex items-center gap-2">
               <span className="font-mono text-[10px] text-muted">#{page * pageSize + i + 1}</span>
               <span className="break-all font-mono text-[11px] text-text-secondary">{truncateAddress(n.address)}</span>
-              <button
-                onClick={() => copyAddr(n.address)}
+              <CopyButton
+                value={n.address}
+                label={`Copy address ${n.address}`}
                 className="btn-icon ml-auto h-7 w-7"
-                aria-label={`Copy address ${n.address}`}
-              >
-                {copied === n.address
-                  ? <CheckCircle2 size={12} className="text-success" />
-                  : <Copy size={12} />
-                }
-              </button>
+                size={12}
+              />
             </div>
             <div className="mt-1 flex items-center justify-between text-[11px] text-text-secondary">
               <span className="truncate">{n.display || <span className="text-muted">—</span>}</span>
@@ -84,16 +71,7 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
                     <span className="font-mono text-text-secondary">
                       {truncateAddress(n.address)}
                     </span>
-                    <button
-                      onClick={() => copyAddr(n.address)}
-                      className="btn-icon"
-                      aria-label={`Copy address ${n.address}`}
-                    >
-                      {copied === n.address
-                        ? <CheckCircle2 size={11} className="text-success" />
-                        : <Copy size={11} />
-                      }
-                    </button>
+                    <CopyButton value={n.address} label={`Copy address ${n.address}`} size={11} />
                   </div>
                 </td>
                 <td className="px-3 py-2.5 text-text-secondary">

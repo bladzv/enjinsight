@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Copy, CheckCircle2, Shield, Clock, ExternalLink } from 'lucide-react'
+import { Shield, Clock, ExternalLink } from 'lucide-react'
+import CopyButton from './CopyButton.jsx'
 import { formatENJ, truncateAddress, validatorExplorerUrl } from '../utils/format.js'
 
 /**
@@ -10,7 +11,6 @@ import { formatENJ, truncateAddress, validatorExplorerUrl } from '../utils/forma
 export default function PoolValidatorsTable({ validators, onRetry }) {
   const [page, setPage]         = useState(0)
   const [pageSize, setPageSize] = useState(10)
-  const [copied, setCopied]     = useState(null)
 
   if (!validators || validators.length === 0) {
     return <p className="text-xs text-dim py-4 text-center">No nominated validators found.</p>
@@ -18,14 +18,6 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
 
   const pages     = Math.ceil(validators.length / pageSize)
   const pageItems = validators.slice(page * pageSize, (page + 1) * pageSize)
-
-  async function copyAddr(addr) {
-    try {
-      await navigator.clipboard.writeText(addr)
-      setCopied(addr)
-      setTimeout(() => setCopied(null), 2000)
-    } catch { /* clipboard access denied */ }
-  }
 
   return (
     <div>
@@ -72,16 +64,12 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
               <span className="font-mono text-[10px] text-muted">#{page * pageSize + i + 1}</span>
               <span className="break-all font-mono text-[11px] text-text-secondary">{truncateAddress(v.address)}</span>
               <div className="ml-auto flex items-center gap-0.5">
-                <button
-                  onClick={() => copyAddr(v.address)}
+                <CopyButton
+                  value={v.address}
+                  label={`Copy validator address ${v.address}`}
                   className="btn-icon h-7 w-7"
-                  aria-label={`Copy validator address ${v.address}`}
-                >
-                  {copied === v.address
-                    ? <CheckCircle2 size={12} className="text-success" />
-                    : <Copy size={12} />
-                  }
-                </button>
+                  size={12}
+                />
                 <a
                   href={validatorExplorerUrl(v.address)}
                   target="_blank"
@@ -139,16 +127,7 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
                     <span className="font-mono text-text-secondary">
                       {truncateAddress(v.address)}
                     </span>
-                    <button
-                      onClick={() => copyAddr(v.address)}
-                      className="btn-icon"
-                      aria-label={`Copy validator address ${v.address}`}
-                    >
-                      {copied === v.address
-                        ? <CheckCircle2 size={11} className="text-success" />
-                        : <Copy size={11} />
-                      }
-                    </button>
+                    <CopyButton value={v.address} label={`Copy validator address ${v.address}`} size={11} />
                     <a
                       href={validatorExplorerUrl(v.address)}
                       target="_blank"

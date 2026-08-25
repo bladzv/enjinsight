@@ -1015,6 +1015,111 @@
     transform: translateY(var(--m-lift));
     animation: staking-scan-hover-glow var(--m-glow-dur) ease-in-out infinite alternate;
   }
+
+  /* ── Modal entrance ("Command Palette Bloom") ─────────────────────────
+     Runs automatically on mount via the keyframe itself — no JS class
+     toggle needed, so there is nothing to race against useFocusTrap's own
+     mount-time rAF. The trap calls focus({preventScroll:true}) specifically
+     because this rule's transform would otherwise make the browser's
+     default focus-scroll target a still-animating, not-yet-final rect. */
+  @keyframes modal-bloom {
+    from { opacity: 0; transform: scale(var(--m-scale-in)); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+
+  .modal-panel {
+    animation: modal-bloom var(--m-base) var(--m-overshoot) both;
+  }
+
+  /* ── Step/phase progress fill — transform instead of width ───────────
+     Avoids a layout-triggering width transition; scaleX only ever touches
+     compositing. Always rendered (not gated on progress > 0) so it can
+     transition smoothly in both directions. */
+  .progress-fill {
+    transition: transform var(--m-slow) var(--m-standard);
+  }
+
+  /* ── Success check — stroke-draw ──────────────────────────────────────
+     pathLength="1" (set on the <path> in SuccessCheck.jsx) normalizes the
+     dash units, so this one rule works at any icon size with no
+     measurement. Decorative — the icon itself is aria-hidden. */
+  @keyframes success-check-draw {
+    from { stroke-dashoffset: 1; }
+    to   { stroke-dashoffset: 0; }
+  }
+
+  .success-check path {
+    stroke-dasharray: 1;
+    animation: success-check-draw var(--m-slow) var(--m-ease-out) both;
+  }
+
+  /* ── Accordion — grid-template-rows 0fr→1fr ───────────────────────────
+     No JS height measurement: a single-row grid's own intrinsic sizing
+     lets the browser interpolate between "collapsed" and "fits content"
+     smoothly. Content stays mounted so it animates closed as well as open
+     (the maxHeight-based version this replaces had no closing transition).
+     overflow:hidden lives on -inner, one level in, so a bordered child
+     clips cleanly at 0fr instead of leaving a border sliver. */
+  .accordion-rows {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--m-slow) var(--m-standard);
+  }
+
+  .accordion-rows-open {
+    grid-template-rows: 1fr;
+  }
+
+  .accordion-rows-inner {
+    overflow: hidden;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  /* ── Error shake ───────────────────────────────────────────────────────
+     Applied alongside the existing ring-1 ring-danger validation styling.
+     Retriggers whenever the class transitions from absent to present —
+     i.e. exactly when a field newly becomes invalid — and is always paired
+     with a visible, aria-describedby-linked error message, never a
+     motion-only signal. */
+  @keyframes error-shake {
+    0%, 100% { transform: translateX(0); }
+    20%      { transform: translateX(calc(-1 * var(--m-shake))); }
+    40%      { transform: translateX(var(--m-shake)); }
+    60%      { transform: translateX(calc(-0.6 * var(--m-shake))); }
+    80%      { transform: translateX(calc(0.6 * var(--m-shake))); }
+  }
+
+  .error-shake {
+    animation: error-shake var(--m-slow) var(--m-standard);
+  }
+
+  /* ── Copy button icon morph ────────────────────────────────────────────
+     Both icons share one grid cell (grid-area: 1/1) so the swap is a
+     cross-fade + scale instead of an instant replace. */
+  .copy-icon-swap {
+    display: inline-grid;
+  }
+
+  .copy-icon {
+    grid-area: 1 / 1;
+    transition: opacity var(--m-fast) var(--m-ease-out), transform var(--m-fast) var(--m-overshoot);
+  }
+
+  .copy-icon-done {
+    opacity: 0;
+    transform: scale(var(--m-scale-in));
+  }
+
+  .copy-icon-swap.is-copied .copy-icon-idle {
+    opacity: 0;
+    transform: scale(var(--m-scale-in));
+  }
+
+  .copy-icon-swap.is-copied .copy-icon-done {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @layer utilities {

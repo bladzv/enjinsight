@@ -5,10 +5,12 @@
  * with an EKG canvas, an era progress bar, and a past-era lookup tool.
  * Network: Enjin Relaychain only.
  */
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { AlertTriangle, ChevronDown, ChevronUp, Search, Globe, Clock, Copy, CheckCircle2 } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback, useId } from 'react'
+import { AlertTriangle, ChevronDown, ChevronUp, Search, Globe, Clock } from 'lucide-react'
 import { useEraExplorer, ERA_STATUS } from '../hooks/useEraExplorer.js'
+import { useCountUp } from '../hooks/useCountUp.js'
 import TerminalLog from './TerminalLog.jsx'
+import CopyButton from './CopyButton.jsx'
 
 const HEARTBEAT_PATH = 'M0 20 L20 20 L25 10 L30 30 L35 20 L100 20'
 
@@ -107,15 +109,22 @@ export default function EraBlockExplorer() {
   const [eraInput, setEraInput] = useState('')
   const [showDebug, setShowDebug] = useState(false)
   const [localTime, setLocalTime] = useState(false)
-  const [hashCopied, setHashCopied] = useState(false)
   const [pulseKey, setPulseKey] = useState(0)
   const lastSeenBlock = useRef(null)
+  const eraInputErrorId = useId()
 
   const eraEnd = eraStart != null ? eraStart + ERA_LEN - 1 : null
   const remaining = eraEnd != null && block != null ? Math.max(0, eraEnd - block) : null
   const pct = eraStart != null && block != null
     ? Math.min(100, Math.round(Math.max(0, block - eraStart) / ERA_LEN * 100))
     : 0
+
+  // One-shot lookup results, not a continuously-ticking live value like the
+  // telemetry tiles above — a discrete count-up on arrival reads as a real
+  // reveal instead of fighting a live ticker. Target falls back to 0 so the
+  // hook can be called unconditionally before `lookup` exists.
+  const startBlockCount = useCountUp(lookup?.startBlock ?? 0, { format: n => Math.round(n).toLocaleString() })
+  const endBlockCount = useCountUp(lookup?.endBlock ?? 0, { format: n => Math.round(n).toLocaleString() })
 
   const statusCfg = STATUS_CONFIG[status] ?? STATUS_CONFIG[ERA_STATUS.IDLE]
   const strokeColor = status === ERA_STATUS.LIVE
@@ -268,8 +277,10 @@ export default function EraBlockExplorer() {
               value={eraInput}
               onChange={event => { setEraInput(event.target.value); resetLookup() }}
               placeholder="Era number"
-              className={`w-32 input-field font-mono sm:w-40 ${eraInputErr ? 'ring-1 ring-danger' : ''}`}
+              className={`w-32 input-field font-mono sm:w-40 ${eraInputErr ? 'error-shake ring-1 ring-danger' : ''}`}
               aria-label="Era number to look up"
+              aria-invalid={!!eraInputErr}
+              aria-describedby={eraInputErr ? eraInputErrorId : undefined}
             />
             <button
               type="submit"
@@ -281,7 +292,7 @@ export default function EraBlockExplorer() {
             </button>
           </div>
           {eraInputErr ? (
-            <p className="flex items-center gap-1 text-xs text-danger">
+            <p id={eraInputErrorId} className="flex items-center gap-1 text-xs text-danger">
               <AlertTriangle size={11} className="flex-shrink-0" />
               {eraInputErr}
             </p>
@@ -294,15 +305,32 @@ export default function EraBlockExplorer() {
           </p>
         ) : null}
 
-        {lookup ? (
-          <div className="mt-4 grid animate-fade-in grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {lookupLoading ? (
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <div className="metric-card">
               <p className="metric-label">Start Block</p>
-              <p className="metric-value text-base">{lookup.startBlock.toLocaleString()}</p>
+              <div className="skeleton mt-2 h-6 w-20" aria-hidden="true" />
             </div>
             <div className="metric-card">
               <p className="metric-label">End Block</p>
-              <p className="metric-value text-base">{lookup.endBlock.toLocaleString()}</p>
+              <div className="skeleton mt-2 h-6 w-20" aria-hidden="true" />
+            </div>
+          </div>
+        ) : lookup ? (
+          <div className="mt-4 grid animate-fade-in grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="metric-card">
+              <p className="metric-label">Start Block</p>
+              <p className="metric-value text-base">
+                <span className="sr-only">{lookup.startBlock.toLocaleString()}</span>
+                <span aria-hidden="true">{startBlockCount}</span>
+              </p>
+            </div>
+            <div className="metric-card">
+              <p className="metric-label">End Block</p>
+              <p className="metric-value text-base">
+                <span className="sr-only">{lookup.endBlock.toLocaleString()}</span>
+                <span aria-hidden="true">{endBlockCount}</span>
+              </p>
             </div>
 
             {lookup.startDateUtc ? (() => {
@@ -331,22 +359,7 @@ export default function EraBlockExplorer() {
               <div className="metric-card col-span-2 sm:col-span-2 lg:col-span-4">
                 <div className="flex items-center gap-2">
                   <p className="metric-label">Start Block Hash</p>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(lookup.startBlockHash)
-                        setHashCopied(true)
-                        setTimeout(() => setHashCopied(false), 2000)
-                      } catch {
-                        // Clipboard access denied.
-                      }
-                    }}
-                    className="btn-icon"
-                    aria-label="Copy start block hash"
-                  >
-                    {hashCopied ? <CheckCircle2 size={12} className="text-success" /> : <Copy size={12} />}
-                  </button>
+                  <CopyButton value={lookup.startBlockHash} label="Copy start block hash" size={12} />
                 </div>
                 <p className="mt-1.5 break-all font-mono text-xs text-text">{lookup.startBlockHash}</p>
               </div>
@@ -362,37 +375,51 @@ export default function EraBlockExplorer() {
           onClick={() => setShowDebug(value => !value)}
           className="flex w-full items-center gap-2 bg-surface-high px-4 py-2.5 text-left transition-colors hover:bg-surface-highest"
           aria-expanded={showDebug}
+          aria-controls="era-debug-panel"
           aria-label={showDebug ? 'Collapse debug panel' : 'Expand debug panel'}
         >
           <span className="section-label">Debug</span>
           <span className="flex-1" />
           {showDebug ? <ChevronUp size={13} className="text-muted" /> : <ChevronDown size={13} className="text-muted" />}
         </button>
-        {showDebug ? (
-          <div className="grid grid-cols-1 gap-x-8 gap-y-1 bg-term px-4 py-3 font-mono text-xs animate-slide-down sm:grid-cols-2">
-            {[
-              ['WS state', debug.wsState],
-              ['Staking pallet', debug.stakingPallet],
-              ['Session pallet', debug.sessionPallet],
-              ['Block hex', debug.blockHex],
-              ['Block dec', debug.blockDec],
-              ['Era hex', debug.eraHex],
-              ['Era raw', debug.eraRaw],
-              ['Session hex', debug.sessHex],
-              ['Session raw', debug.sessRaw],
-              ['Last error', debug.lastError],
-            ].map(([key, value]) => (
-              <div key={key} className="flex flex-col gap-0.5 py-0.5 sm:flex-row sm:justify-between sm:gap-2">
-                <span className="text-muted">{key}</span>
-                <span className="whitespace-normal break-all text-left text-text sm:max-w-[60%] sm:text-right">{value}</span>
+        {/* grid-rows accordion — stays mounted so it animates closed too,
+            unlike the old mount/unmount-on-maxHeight version, which never
+            had a close transition and thrashed layout while opening. */}
+        <div
+          id="era-debug-panel"
+          className={`accordion-rows ${showDebug ? 'accordion-rows-open' : ''}`}
+          aria-hidden={!showDebug}
+        >
+          <div className="accordion-rows-inner">
+            {/* Padding lives here, one level in from -inner — padding on
+                the animated grid item itself would add to its rendered
+                height regardless of the track's animated size, so the
+                panel would never collapse below ~2 * py. */}
+            <div className="grid grid-cols-1 gap-x-8 gap-y-1 bg-term px-4 py-3 font-mono text-xs sm:grid-cols-2">
+              {[
+                ['WS state', debug.wsState],
+                ['Staking pallet', debug.stakingPallet],
+                ['Session pallet', debug.sessionPallet],
+                ['Block hex', debug.blockHex],
+                ['Block dec', debug.blockDec],
+                ['Era hex', debug.eraHex],
+                ['Era raw', debug.eraRaw],
+                ['Session hex', debug.sessHex],
+                ['Session raw', debug.sessRaw],
+                ['Last error', debug.lastError],
+              ].map(([key, value]) => (
+                <div key={key} className="flex flex-col gap-0.5 py-0.5 sm:flex-row sm:justify-between sm:gap-2">
+                  <span className="text-muted">{key}</span>
+                  <span className="whitespace-normal break-all text-left text-text sm:max-w-[60%] sm:text-right">{value}</span>
+                </div>
+              ))}
+              <div className="col-span-2 mt-1">
+                <p className="mb-0.5 text-muted">Era key</p>
+                <p className="break-all leading-relaxed text-text">{debug.eraKey}</p>
               </div>
-            ))}
-            <div className="col-span-2 mt-1">
-              <p className="mb-0.5 text-muted">Era key</p>
-              <p className="break-all leading-relaxed text-text">{debug.eraKey}</p>
             </div>
           </div>
-        ) : null}
+        </div>
       </section>
 
       <TerminalLog logs={logs} sticky />
