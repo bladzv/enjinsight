@@ -21,7 +21,7 @@
  *  - Address validated via buildStorageKey() which calls ss58Decode()
  *  - No user-supplied data is interpolated into evaluated code
  */
-import { useReducer, useCallback, useRef } from 'react'
+import { useReducer, useCallback, useRef, useEffect } from 'react'
 import {
   WS_DEFAULT_ENDPOINT,
   MAX_RPC_CALLS,
@@ -34,7 +34,7 @@ import {
   isValidBlockHash,
 } from '../utils/substrate.js'
 import { parseImport, aesDecrypt } from '../utils/balanceExport.js'
-import { SubstrateRPC } from '../utils/rpc.js'
+import { SubstrateRPC, isCancelled } from '../utils/rpc.js'
 import { loadEraCsvRows, buildEraHashMap } from '../utils/eraCache.js'
 
 // ── Status values ─────────────────────────────────────────────────────────
@@ -152,6 +152,22 @@ export default function useBalanceExplorer() {
   const [state, dispatch] = useReducer(reducer, initialState)
   // Hold a ref to the active RPC instance so cancel() can reach it
   const rpcRef = useRef(null)
+  // AbortController for the active run. The RPC ref alone is not enough: a user
+  // can cancel before the socket exists (during the era-CSV fetch), and the
+  // in-flight fan-out tasks need a way to see that they should stop dispatching.
+  const abortRef = useRef(null)
+
+  /** Abort the active run and tear down its socket. Safe to call repeatedly. */
+  const teardown = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    rpcRef.current?.close()
+    rpcRef.current = null
+  }, [])
+
+  // Unmounting mid-scan previously left the archive WebSocket open and the block
+  // loop running, dispatching into a reducer that no longer exists.
+  useEffect(() => teardown, [teardown])
 
   const log = useCallback((level, msg) => {
     dispatch({
@@ -168,18 +184,14 @@ export default function useBalanceExplorer() {
   }, [])
 
   const reset = useCallback(() => {
-    rpcRef.current?.cancel()
-    rpcRef.current?.close()
-    rpcRef.current = null
+    teardown()
     dispatch({ type: 'RESET' })
-  }, [])
+  }, [teardown])
 
   const cancel = useCallback(() => {
-    rpcRef.current?.cancel()
-    rpcRef.current?.close()
-    rpcRef.current = null
+    teardown()
     dispatch({ type: 'CANCELLED' })
-  }, [])
+  }, [teardown])
 
   /**
    * Run a block-range balance query over WebSocket RPC.
@@ -187,6 +199,14 @@ export default function useBalanceExplorer() {
    * @param {{ endpoint, address, startBlock, endBlock, step }} params
    */
   const runQuery = useCallback(async ({ endpoint, address, startBlock, endBlock, step }) => {
+    // Abort any previous run before starting a new one, so two runs can never
+    // interleave dispatches into the same reducer.
+    teardown()
+
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
+    const { signal } = ctrl
+
     dispatch({ type: 'RESET' })
 
     // ── Input validation ────────────────────────────────────────────────
@@ -247,6 +267,14 @@ export default function useBalanceExplorer() {
       }
     }
 
+    // The CSV fetch above is the window in which no socket exists yet. Without
+    // this check a cancel during the fetch dispatched CANCELLED, then the scan
+    // carried on and overwrote it with DONE.
+    if (signal.aborted) {
+      log('warn', 'Query cancelled by user')
+      return
+    }
+
     // ── Query ────────────────────────────────────────────────────────────
     dispatch({ type: 'STATUS', payload: STATUS.CONNECTING })
     dispatch({
@@ -269,6 +297,8 @@ export default function useBalanceExplorer() {
     // The semaphore manages back-pressure across all parallel block fetches.
     const rpc = new SubstrateRPC(ep, { concurrency: 3 })
     rpcRef.current = rpc
+    // Abort tears the socket down even if the abort arrives mid-handshake.
+    signal.addEventListener('abort', () => rpc.close(), { once: true })
     // Pre-allocate results array so parallel writes by index are safe.
     const results = new Array(blocks.length).fill(null)
     let connected = false
@@ -323,13 +353,19 @@ export default function useBalanceExplorer() {
             }
           }
         } catch (e) {
-          if (e.message === 'Cancelled') throw e   // propagate cancel to Promise.all
+          // Propagate cancellation to Promise.all; anything else is per-block noise.
+          if (isCancelled(e) || signal.aborted) throw e
           log('warn', `Block #${blk.toLocaleString('en')}: RPC error — ${e.message}`)
           results[i] = {
             block: blk, blockHash: '', free: 0n, reserved: 0n,
             miscFrozen: 0n, feeFrozen: 0n, nonce: 0, newFormat: false,
           }
         }
+
+        // Promise.all rejects on the first cancelled task, but the other in-flight
+        // tasks still run their tail. Without this guard they dispatch records and
+        // progress *after* the reducer has already moved to CANCELLED.
+        if (signal.aborted) return
 
         queriedBlocks++
         dispatch({
@@ -369,7 +405,7 @@ export default function useBalanceExplorer() {
       })
 
     } catch (e) {
-      if (e.message === 'Cancelled') {
+      if (isCancelled(e) || signal.aborted) {
         log('warn', 'Query cancelled by user')
         dispatch({
           type: 'CANCELLED',
@@ -389,9 +425,11 @@ export default function useBalanceExplorer() {
     } finally {
       rpc.close()
       log('info', 'WebSocket connection closed')
+      // Only clear refs this run still owns — a newer run may have replaced them.
       if (rpcRef.current === rpc) rpcRef.current = null
+      if (abortRef.current === ctrl) abortRef.current = null
     }
-  }, [log])
+  }, [log, teardown])
 
   /**
    * Import balance data from a parsed file string.

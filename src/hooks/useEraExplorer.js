@@ -10,11 +10,14 @@
  */
 import { useReducer, useCallback, useRef, useEffect } from 'react'
 import { loadEraCsvRows } from '../utils/eraCache.js'
+import { WS_CONNECT_TIMEOUT_MS, WS_CALL_TIMEOUT_MS } from '../constants.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const WSS            = 'wss://rpc.relay.blockchain.enjin.io'
 const ARCHIVE_WSS    = 'wss://archive.relay.blockchain.enjin.io'
 const ERA_LEN        = 14400
+// Minimum gap between archive re-reads when an era appears to have run long.
+const ERA_REFRESH_COOLDOWN_MS = 60000
 const SESSION_LEN    = 2400
 const HISTORY_DEPTH  = 84
 const ERA_START_ITEM = 'ErasStartSessionIndex'
@@ -162,6 +165,8 @@ class EraExplorerController {
     this.pollTimer   = null
     this.lastBlockTs = 0
     this.beatCallback = null
+    this.eraRefreshInFlight = false
+    this.lastEraRefreshTs = 0
   }
 
   log(level, message) {
@@ -177,7 +182,7 @@ class EraExplorerController {
   }
 
   // RPC call over main live WS
-  rpc(method, params = [], ms = 15000) {
+  rpc(method, params = [], ms = WS_CALL_TIMEOUT_MS) {
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
         return reject(new Error('not connected'))
@@ -199,7 +204,7 @@ class EraExplorerController {
       try { ws = new WebSocket(ARCHIVE_WSS) } catch(e) { return reject(e) }
       this._archiveWs = ws
       const pending = {}, reqIdA = { v: 1 }
-      const call = (method, params = [], ms = 30000) =>
+      const call = (method, params = [], ms = WS_CALL_TIMEOUT_MS) =>
         new Promise((r, e) => {
           if (this.killed) return e(new Error('destroyed'))
           if (!ws || ws.readyState !== WebSocket.OPEN) return e(new Error('archive not open'))
@@ -222,20 +227,27 @@ class EraExplorerController {
       ws.onerror = () => {}
       let settled = false
       const openTimeout = setTimeout(() => {
+        if (this._archiveWs === ws) this._archiveWs = null
         try { ws.close() } catch {}
         if (!settled) { settled = true; reject(new Error('archive open timeout')) }
-      }, 10000)
+      }, WS_CONNECT_TIMEOUT_MS)
       const finish = cb => {
         settled = true
         clearTimeout(openTimeout)
-        this._archiveWs = null
+        if (this._archiveWs === ws) this._archiveWs = null
         try { ws.close() } catch {}
         cb()
       }
       ws.onclose = () => {
+        // Reject every in-flight archive call. Without this they sat unresolved
+        // until their own timeout fired, one full call timeout each.
+        const err = new Error('archive WS closed')
+        Object.values(pending).forEach(p => p.reject(err))
+        for (const id of Object.keys(pending)) delete pending[id]
+
         if (settled) return
         clearTimeout(openTimeout)
-        this._archiveWs = null
+        if (this._archiveWs === ws) this._archiveWs = null
         reject(new Error('archive WS closed unexpectedly'))
       }
       ws.onopen  = () => {
@@ -445,14 +457,42 @@ class EraExplorerController {
       if (eraChanged) await this.resolveEraStart()
     } catch (e) { this.log('warn', `queryChain: ${e.message}`) }
 
-    // Block-number-based era rollover detection (works even if live node lacks state_getStorage)
+    // Block-number-based era rollover detection (works even if the live node lacks
+    // state_getStorage). The era number is read back from the archive rather than
+    // incremented locally: a locally invented era is not a fact about the chain,
+    // and if an era runs long the UI would display an era that does not exist.
     if (this.lockedStart != null && this.chain.block != null
         && this.chain.block > this.lockedStart + ERA_LEN
-        && this.chain.era === this.lockedEra) {
-      this.log('info', 'Block passed era boundary — refreshing via archive')
-      this.chain.era = (this.chain.era || 0) + 1
-      this.dispatch({ type: 'CHAIN_UPDATE', patch: { era: this.chain.era } })
-      await this.resolveEraStart()
+        && this.chain.era === this.lockedEra
+        && !this.eraRefreshInFlight
+        && Date.now() - this.lastEraRefreshTs > ERA_REFRESH_COOLDOWN_MS) {
+      this.eraRefreshInFlight = true
+      this.lastEraRefreshTs = Date.now()
+      this.log('info', 'Block passed era boundary — reading active era from archive')
+      try {
+        const realEra = await this.archiveRpc(async callFn => {
+          if (!this.keys.activeEra) return null
+          const hdr = await callFn('chain_getHeader', []).catch(() => null)
+          if (!hdr?.number) return null
+          const bh = await callFn('chain_getBlockHash', [hexToNum(hdr.number)]).catch(() => null)
+          if (!bh) return null
+          return decodeActiveEra(await callFn('state_getStorage', [this.keys.activeEra, bh]))
+        })
+
+        if (realEra != null && realEra !== this.chain.era) {
+          this.chain.era = realEra
+          this.dispatch({ type: 'CHAIN_UPDATE', patch: { era: realEra } })
+          await this.resolveEraStart()
+        } else {
+          // The era has not actually rolled over yet — this one is simply running
+          // long. Say nothing to the UI and re-check after the cooldown.
+          this.log('info', 'Archive reports the era has not rolled over yet')
+        }
+      } catch (e) {
+        this.log('warn', `era rollover refresh: ${e.message}`)
+      } finally {
+        this.eraRefreshInFlight = false
+      }
     }
   }
 
@@ -500,22 +540,35 @@ class EraExplorerController {
       if (!this.killed) this.reconnTimer = setTimeout(() => this.connect(), 5000)
       return
     }
+    // Close any socket this controller still owns before taking on a new one,
+    // otherwise a reconnect can leave the previous connection live.
+    if (this.ws && this.ws !== ws) {
+      const prev = this.ws
+      prev.onopen = prev.onmessage = prev.onerror = prev.onclose = null
+      try { prev.close(1000, 'superseded') } catch { /* noop */ }
+    }
     this.ws = ws
 
     ws.onopen = async () => {
+      // A stale socket can win the race and open after it was superseded.
+      if (this.ws !== ws || this.killed) {
+        try { ws.close(1000, 'superseded') } catch { /* noop */ }
+        return
+      }
       this.log('ok', 'Live node connected')
       this.dispatch({ type: 'DEBUG', patch: { wsState: 'OPEN' } })
       // Pallet keys, lockedEra and lockedStart are carried over from archiveInit
       // — do NOT reset them here so reconnects don't lose the era start data.
       await this.queryChain()
       try {
-        await this.rpc('chain_subscribeNewHeads', [], 10000)
+        await this.rpc('chain_subscribeNewHeads', [], WS_CONNECT_TIMEOUT_MS)
         this.log('info', 'Subscribed to new heads')
       } catch (e) { this.log('warn', `subscribeNewHeads: ${e.message}`) }
       this.dispatch({ type: 'STATUS', payload: ERA_STATUS.LIVE })
     }
 
     ws.onmessage = ev => {
+      if (this.ws !== ws) return   // ignore traffic from a superseded socket
       let msg; try { msg = JSON.parse(ev.data) } catch { return }
       if (!msg || typeof msg !== 'object') return
       if (msg.id != null && this.pending[msg.id]) {
@@ -544,6 +597,11 @@ class EraExplorerController {
     }
 
     ws.onclose = e => {
+      // Only the socket this controller currently owns may drive reconnection.
+      // A superseded socket firing onclose used to null out this.ws and schedule
+      // another connect(), which could leave two live sockets running.
+      if (this.ws !== ws) return
+
       this.log('warn', `Disconnected (code=${e.code}) — reconnecting in 5 s…`)
       this.dispatch({ type: 'STATUS', payload: ERA_STATUS.DISCONNECTED })
       this.dispatch({ type: 'DEBUG', patch: { wsState: 'CLOSED' } })
@@ -552,7 +610,10 @@ class EraExplorerController {
       this.ws = null
       clearInterval(this.pollTimer)
       this.pollTimer = null
-      if (!this.killed) this.reconnTimer = setTimeout(() => this.connect(), 5000)
+      if (!this.killed) {
+        clearTimeout(this.reconnTimer)
+        this.reconnTimer = setTimeout(() => this.connect(), 5000)
+      }
     }
 
     // Periodic polling: refresh chain state every 12 s even if subscription stalls

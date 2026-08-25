@@ -19,6 +19,26 @@
  */
 import { WS_CONNECT_TIMEOUT_MS, WS_CALL_TIMEOUT_MS } from '../constants.js'
 
+// ── Cancellation ──────────────────────────────────────────────────────────────
+
+/**
+ * Typed cancellation error. Callers previously compared `err.message === 'Cancelled'`,
+ * which silently breaks the moment any message text is reworded. Use `isCancelled()`
+ * rather than matching on strings.
+ */
+export class CancelledError extends Error {
+  constructor(message = 'Cancelled') {
+    super(message)
+    this.name = 'CancelledError'
+  }
+}
+
+/** True for our own cancellations and for AbortController-generated aborts. */
+export function isCancelled(err) {
+  if (!err) return false
+  return err instanceof CancelledError || err.name === 'CancelledError' || err.name === 'AbortError'
+}
+
 // ── Semaphore ─────────────────────────────────────────────────────────────────
 
 /**
@@ -95,21 +115,50 @@ export class SubstrateRPC {
       catch (e) { return rej(new Error(`Cannot open WebSocket: ${e.message}`)) }
       this.ws = ws
 
-      const tout = setTimeout(
-        () => rej(new Error(`Connection timed out (${this.connectTimeoutMs / 1000} s)`)),
-        this.connectTimeoutMs,
-      )
-
-      ws.onopen  = () => { clearTimeout(tout); res() }
-      ws.onerror = () => {
+      // The connect promise must settle exactly once. Closing a socket fires
+      // onclose synchronously, so without this guard the timeout path would
+      // reject with 'Connection closed' instead of the timeout message.
+      let settled = false
+      const settle = (fn, value) => {
+        if (settled) return
+        settled = true
         clearTimeout(tout)
-        rej(new Error('WebSocket connection failed — check endpoint'))
+        fn(value)
+      }
+
+      // On timeout the socket must be closed, not merely abandoned: an un-closed
+      // socket can still complete its handshake moments later and then stay open
+      // for the lifetime of the page, with this.ws still pointing at it.
+      const tout = setTimeout(() => {
+        this.dead = true
+        settle(rej, new Error(`Connection timed out (${this.connectTimeoutMs / 1000} s)`))
+        try { ws.close(4000, 'connect timeout') } catch {}
+      }, this.connectTimeoutMs)
+
+      ws.onopen = () => {
+        // cancel()/close() may have fired while the handshake was still in flight.
+        if (this.dead) {
+          settle(rej, new CancelledError())
+          try { ws.close(1000, 'cancelled') } catch {}
+          return
+        }
+        settle(res)
+      }
+      ws.onerror = () => {
+        settle(rej, new Error('WebSocket connection failed — check endpoint'))
+        try { ws.close() } catch {}
       }
       ws.onclose = () => {
+        // The socket is gone, so no further call can succeed. Marking the client
+        // dead keeps the fast-fail flag in sync with reality instead of relying
+        // solely on the readyState check in _rawCall.
+        this.dead = true
         // Reject any calls that are still in-flight when the socket drops.
         const err = new Error('Connection closed')
         this.pend.forEach(p => p.rej(err))
         this.pend.clear()
+        // Only meaningful if the socket died mid-handshake; a no-op afterwards.
+        settle(rej, err)
       }
       // Handle both individual responses and batch (array) responses so the
       // message handler is forward-compatible with JSON-RPC batch mode.
@@ -150,7 +199,7 @@ export class SubstrateRPC {
   _rawCall(method, params) {
     return new Promise((res, rej) => {
       if (this.dead || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-        return rej(new Error('Cancelled'))
+        return rej(new CancelledError())
       }
       const id = ++this.id
       const t  = setTimeout(() => {
@@ -172,7 +221,7 @@ export class SubstrateRPC {
    */
   cancel() {
     this.dead = true
-    const err = new Error('Cancelled')
+    const err = new CancelledError()
     this._sem.drainWithError(err)
     this.pend.forEach(p => p.rej(err))
     this.pend.clear()
