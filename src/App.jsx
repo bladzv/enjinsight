@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Suspense, lazy } from 'react'
 import { ChevronDown, ChevronUp, Square } from 'lucide-react'
 import { DEFAULT_ERA_COUNT } from './constants.js'
 import { useValidatorChecker } from './hooks/useValidatorChecker.js'
@@ -9,10 +9,7 @@ import AppHeader           from './components/AppHeader.jsx'
 import StepProgress        from './components/StepProgress.jsx'
 import DisclaimerModal, { useFirstVisitDisclaimer } from './components/DisclaimerModal.jsx'
 import LandingPage         from './components/LandingPage.jsx'
-import BalanceExplorer     from './components/BalanceExplorer.jsx'
-import RewardHistoryViewer from './components/RewardHistoryViewer.jsx'
-import EraBlockExplorer    from './components/EraBlockExplorer.jsx'
-import InfusionChecker     from './components/InfusionChecker.jsx'
+import ErrorBoundary       from './components/ErrorBoundary.jsx'
 import ModeSelector        from './components/ModeSelector.jsx'
 import ControlPanel        from './components/ControlPanel.jsx'
 import ValidatorCard       from './components/ValidatorCard.jsx'
@@ -21,6 +18,20 @@ import TerminalLog         from './components/TerminalLog.jsx'
 import SummarySection      from './components/SummarySection.jsx'
 import PoolSummarySection  from './components/PoolSummarySection.jsx'
 import PhaseProgressCards  from './components/PhaseProgressCards.jsx'
+
+const BalanceExplorer     = lazy(() => import('./components/BalanceExplorer.jsx'))
+const RewardHistoryViewer = lazy(() => import('./components/RewardHistoryViewer.jsx'))
+const EraBlockExplorer    = lazy(() => import('./components/EraBlockExplorer.jsx'))
+const InfusionChecker     = lazy(() => import('./components/InfusionChecker.jsx'))
+
+/** Suspense fallback for a lazy-loaded tool view — mirrors the spinner used elsewhere. */
+function ViewLoadingFallback() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center">
+      <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+    </div>
+  )
+}
 
 const VALIDATOR_PREVIEW_PHASES = [
   { key: 'probe', label: 'Check API Endpoints', total: 1, completed: 0, status: 'pending' },
@@ -264,13 +275,11 @@ export default function App() {
     : ((status === 'done' || status === 'error' || status === 'stopped') && stakingSimpleRunning) ? 4
     : stakingPage
 
-  useEffect(() => {
-    if (safeValidatorPage !== validatorPage) setValidatorPage(safeValidatorPage)
-  }, [safeValidatorPage, validatorPage])
-
-  useEffect(() => {
-    if (safePoolPage !== poolPage) setPoolPage(safePoolPage)
-  }, [safePoolPage, poolPage])
+  // safeValidatorPage/safePoolPage already clamp on every render (see their
+  // definitions above) — this used to also write the clamped value back into
+  // validatorPage/poolPage state, which forced an extra render pass to do
+  // nothing render-visible; the clamp-on-read is sufficient on its own, the
+  // same pattern BalanceTable.jsx uses for its own page state.
 
   useEffect(() => {
     setSelectedPoolId(null)
@@ -307,26 +316,44 @@ export default function App() {
       <div className="relative flex min-w-0 flex-col">
 
       {/* ── Era Block Explorer ────────────────────────────────────── */}
-      {view === 'era' && <EraBlockExplorer />}
+      {view === 'era' && (
+        <ErrorBoundary label="Era Explorer">
+          <Suspense fallback={<ViewLoadingFallback />}>
+            <EraBlockExplorer />
+          </Suspense>
+        </ErrorBoundary>
+      )}
 
       {/* ── Balance Viewer ──────────────────────────────────────────── */}
       {view === 'balance' && (
         <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
-          <BalanceExplorer onScanStateChange={setBalanceScanActive} simpleMode={simpleMode} />
+          <ErrorBoundary label="Balance Viewer">
+            <Suspense fallback={<ViewLoadingFallback />}>
+              <BalanceExplorer onScanStateChange={setBalanceScanActive} simpleMode={simpleMode} />
+            </Suspense>
+          </ErrorBoundary>
         </main>
       )}
 
       {/* ── Reward History Viewer ─────────────────────────────────────────── */}
       {view === 'reward-history' && (
         <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
-          <RewardHistoryViewer onScanStateChange={setRewardScanActive} simpleMode={simpleMode} />
+          <ErrorBoundary label="Reward History">
+            <Suspense fallback={<ViewLoadingFallback />}>
+              <RewardHistoryViewer onScanStateChange={setRewardScanActive} simpleMode={simpleMode} />
+            </Suspense>
+          </ErrorBoundary>
         </main>
       )}
 
       {/* ── ENJ Infusion Checker ─────────────────────────────────────────── */}
       {view === 'infusion' && (
         <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
-          <InfusionChecker onScanStateChange={setInfusionScanActive} simpleMode={simpleMode} />
+          <ErrorBoundary label="ENJ Infusion Checker">
+            <Suspense fallback={<ViewLoadingFallback />}>
+              <InfusionChecker onScanStateChange={setInfusionScanActive} simpleMode={simpleMode} />
+            </Suspense>
+          </ErrorBoundary>
         </main>
       )}
 

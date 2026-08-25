@@ -1,4 +1,4 @@
-import { useReducer, useCallback, useRef, useEffect } from 'react'
+import { useReducer, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   fetchValidators, fetchNominators, fetchEraStat, probeEndpoint, delay,
   resetSubscanRequestCount, readSubscanRequestCount,
@@ -404,10 +404,14 @@ export function useValidatorChecker() {
     }
   }, [state.proxyUrl, log])
 
-  // Derive latestEra and missedEras after loading
-  const enrichedValidators = state.status === 'done' || state.status === 'loading'
-    ? enrichValidators(state.validators)
-    : state.validators
+  // Derive latestEra and missedEras after loading. Previously recomputed on
+  // every render of this hook's consumer — including every appended log line —
+  // regardless of whether state.validators had actually changed.
+  const enrichedValidators = useMemo(() => (
+    state.status === 'done' || state.status === 'loading'
+      ? enrichValidators(state.validators)
+      : state.validators
+  ), [state.status, state.validators])
 
   return {
     ...state,
@@ -425,12 +429,14 @@ function enrichValidators(validators) {
   if (!validators.length) return validators
   const latestEra = resolveLatestEra(validators)
   if (!latestEra) return validators
+  // Hoisted out of the per-validator map below: this value does not depend on
+  // which validator is being enriched, so it was previously recomputed once
+  // per validator instead of once per call — O(n^2) for no reason.
+  const eraCount = Math.max(...validators
+    .filter(x => x.eraStat?.length)
+    .map(x => x.eraStat.length), 1)
   return validators.map(v => {
     if (!Array.isArray(v.eraStat) || !v.eraStat.length) return v
-    // Use the max era across all validators as the reference point
-    const eraCount = Math.max(...validators
-      .filter(x => x.eraStat?.length)
-      .map(x => x.eraStat.length), 1)
     const missedEras = computeMissedEras(v.eraStat, latestEra, eraCount)
     return { ...v, missedEras }
   })

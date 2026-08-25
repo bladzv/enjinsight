@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, memo } from 'react'
 import { ChevronDown, ChevronUp, Terminal } from 'lucide-react'
 
 const LEVEL_CLASS = {
@@ -8,6 +8,24 @@ const LEVEL_CLASS = {
   ERR: 'log-err',
   DONE: 'log-done',
 }
+
+/**
+ * A single log line, memoized so appending a new entry does not re-render (and
+ * re-run the retry regex on) every existing row — the previous inline map ran
+ * this work for all up to 500 entries on every append.
+ */
+const LogRow = memo(function LogRow({ entry }) {
+  const isRetry = typeof entry.message === 'string' && /Retry\s+\d+\/\d+/i.test(entry.message)
+  return (
+    <div className="grid grid-cols-[auto_auto_minmax(0,1fr)] gap-x-2 gap-y-1 leading-relaxed sm:gap-x-3">
+      <span className="select-none text-muted">{entry.ts}</span>
+      <span className={`select-none ${LEVEL_CLASS[entry.level]}`}>[{entry.level}]</span>
+      <span className={`break-all text-text ${isRetry ? 'log-retry' : ''}`}>
+        {entry.message}
+      </span>
+    </div>
+  )
+})
 
 export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
   const [expanded, setExpanded] = useState(false)
@@ -38,6 +56,10 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
   // overlaps page content.
   useEffect(() => {
     if (!sticky) return
+    // Save and restore the prior value on cleanup rather than hardcoding it back
+    // to '', matching how the modals handle body.style.overflow — an unconditional
+    // reset would clobber anything else that had set padding-bottom in the meantime.
+    const prevPaddingBottom = document.body.style.paddingBottom
     function updateBodyPadding() {
       try {
         const el = wrapRef.current
@@ -50,7 +72,7 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
     window.addEventListener('resize', updateBodyPadding)
     return () => {
       window.removeEventListener('resize', updateBodyPadding)
-      try { document.body.style.paddingBottom = '' } catch (e) {}
+      try { document.body.style.paddingBottom = prevPaddingBottom } catch (e) {}
     }
   }, [sticky, expanded])
 
@@ -115,18 +137,7 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
             <p className="px-4 py-4 text-muted italic">// no output yet</p>
           ) : (
             <div className="space-y-0.5 px-4 py-3">
-              {logs.map(entry => {
-                const isRetry = typeof entry.message === 'string' && /Retry\s+\d+\/\d+/i.test(entry.message)
-                return (
-                  <div key={entry.id} className="grid grid-cols-[auto_auto_minmax(0,1fr)] gap-x-2 gap-y-1 leading-relaxed sm:gap-x-3">
-                    <span className="select-none text-muted">{entry.ts}</span>
-                    <span className={`select-none ${LEVEL_CLASS[entry.level]}`}>[{entry.level}]</span>
-                    <span className={`break-all text-text ${isRetry ? 'log-retry' : ''}`}>
-                      {entry.message}
-                    </span>
-                  </div>
-                )
-              })}
+              {logs.map(entry => <LogRow key={entry.id} entry={entry} />)}
               <div ref={endRef} />
             </div>
           )}

@@ -1,4 +1,4 @@
-import { useReducer, useCallback, useRef, useEffect } from 'react'
+import { useReducer, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   fetchAllPools, fetchVoted, fetchEraStat,
   fetchRewardSlash, probeEndpoint, delay,
@@ -557,8 +557,9 @@ export function usePoolChecker() {
     log('WARN', 'Pool scan stopped by user.')
   }, [log])
 
-  // Derive latestEra from pools' eraRewards for enrichment
-  const latestEra = resolvePoolLatestEra(state.pools)
+  // Derive latestEra from pools' eraRewards for enrichment. Previously
+  // recomputed on every render regardless of whether state.pools had changed.
+  const latestEra = useMemo(() => resolvePoolLatestEra(state.pools), [state.pools])
 
   return {
     ...state,

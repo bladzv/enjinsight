@@ -332,12 +332,20 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
   const singleResultRef = useRef(null)
   const bulkResultRef = useRef(null)
   const previousLoadingRef = useRef(false)
+  // Monotonic id assigned once per entry at creation. Deriving `id` from array
+  // position at render time (the previous approach) breaks down once the log
+  // hits its 500-entry cap: .slice(-500) shifts every remaining entry's index,
+  // so every row's "identity" changes on every append past the cap — which
+  // defeats memoizing the row component and rebuilds a fresh 500-element array
+  // into TerminalLog on every render regardless of whether logs had changed.
+  const nextLogIdRef = useRef(0)
 
   const log = useCallback((level, msg) => {
     setLogs(prev => {
       const entry = {
-        level,
-        msg: String(msg),
+        id: nextLogIdRef.current++,
+        level: level.toUpperCase(),
+        message: String(msg),
         ts: new Date().toLocaleTimeString('en', {
           hour12: false, hour: '2-digit', minute: '2-digit',
           second: '2-digit', fractionalSecondDigits: 2,
@@ -1454,15 +1462,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
         onClose={() => setSelectedTokenDetails(null)}
       />
 
-      {!simpleMode && <TerminalLog
-        sticky
-        logs={logs.map((l, i) => ({
-          id: i,
-          ts: l.ts,
-          level: l.level.toUpperCase(),
-          message: l.msg,
-        }))}
-      />}
+      {!simpleMode && <TerminalLog sticky logs={logs} />}
     </div>
   )
 }
