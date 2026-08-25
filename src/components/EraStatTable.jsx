@@ -1,24 +1,29 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 
 export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra }) {
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(10)
+
+  // Rebuilds a Set, a Map, and the full row array from scratch. Previously ran
+  // on every render (e.g. a page-size change) even when eraStat/missedEras/
+  // eraCount/latestEra had not changed.
+  const rows = useMemo(() => {
+    const missedSet = new Set(missedEras ?? [])
+    const eraMap = new Map((eraStat ?? []).map(e => [e.era, e]))
+    const allEras = latestEra
+      ? Array.from({ length: eraCount }, (_, i) => latestEra - i)
+      : (eraStat ?? []).map(e => e.era).sort((a, b) => b - a)
+
+    return allEras.map(era => ({
+      era,
+      data:   eraMap.get(era) ?? null,
+      missed: missedSet.has(era),
+    }))
+  }, [eraStat, missedEras, eraCount, latestEra])
+
   if (!eraStat || eraStat.length === 0) {
     return <p className="text-xs text-dim py-4 text-center">No era stat data available.</p>
   }
-
-  const missedSet = new Set(missedEras ?? [])
-
-  const eraMap = new Map(eraStat.map(e => [e.era, e]))
-  const allEras = latestEra
-    ? Array.from({ length: eraCount }, (_, i) => latestEra - i)
-    : eraStat.map(e => e.era).sort((a, b) => b - a)
-
-  const rows = allEras.map(era => ({
-    era,
-    data:   eraMap.get(era) ?? null,
-    missed: missedSet.has(era),
-  }))
 
   const pages = Math.ceil(rows.length / pageSize)
   const pageItems = rows.slice(page * pageSize, (page + 1) * pageSize)

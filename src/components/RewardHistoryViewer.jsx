@@ -680,7 +680,11 @@ function RewardTableV2({ results, onFilter }) {
   }
 
   const filtered = useMemo(() => {
-    let rows = results
+    // .filter() below always returns a fresh array, but when no filter is
+    // active `rows` stays the `results` reference straight through to .sort(),
+    // which mutates in place — silently reordering the hook's own state out
+    // from under any other consumer of it (e.g. the chart and summary).
+    let rows = results.slice()
     if (filterPools !== null) rows = rows.filter(r => filterPools.has(r.poolId))
     if (filterEraMin) rows = rows.filter(r => r.era >= parseInt(filterEraMin, 10))
     if (filterEraMax) rows = rows.filter(r => r.era <= parseInt(filterEraMax, 10))
@@ -834,24 +838,41 @@ function RewardTableV2({ results, onFilter }) {
 
 // ── Summary section ──────────────────────────────────────────────────────────
 function RewardSummary({ results }) {
-  if (!results.length) return null
+  // All of this is a pure function of `results` alone. Previously recomputed
+  // on every render — two full sorts, three Set builds, and two spread
+  // Math.min/max calls that would also blow the argument limit on a large
+  // result set — regardless of whether `results` had actually changed.
+  const summary = useMemo(() => {
+    if (!results.length) return null
 
-  const totalReward  = results.reduce((s, r) => s + r.reward, 0n)
-  const avgApy       = results.reduce((s, r) => s + r.apy, 0) / results.length
-  const maxApyRow    = [...results].sort((a, b) => b.apy - a.apy)[0]
-  const maxRewardRow = [...results].sort((a, b) => (b.reward > a.reward ? 1 : -1))[0]
-  const poolCount    = new Set(results.map(r => r.poolId)).size
-  const eraCount     = new Set(results.map(r => r.era)).size
-  const eraMin       = Math.min(...results.map(r => r.era))
-  const eraMax       = Math.max(...results.map(r => r.era))
+    let eraMin = Infinity, eraMax = -Infinity
+    const poolIds = new Set()
+    const eraIds  = new Set()
+    const byPool  = new Map()
 
-  // Per-pool totals
-  const byPool = new Map()
-  for (const r of results) {
-    const cur = byPool.get(r.poolId) ?? { label: r.poolLabel, total: 0n, rows: 0 }
-    byPool.set(r.poolId, { label: cur.label, total: cur.total + r.reward, rows: cur.rows + 1 })
-  }
-  const bestPool = [...byPool.entries()].sort((a, b) => (b[1].total > a[1].total ? 1 : -1))[0]
+    for (const r of results) {
+      if (r.era < eraMin) eraMin = r.era
+      if (r.era > eraMax) eraMax = r.era
+      poolIds.add(r.poolId)
+      eraIds.add(r.era)
+      const cur = byPool.get(r.poolId) ?? { label: r.poolLabel, total: 0n, rows: 0 }
+      byPool.set(r.poolId, { label: cur.label, total: cur.total + r.reward, rows: cur.rows + 1 })
+    }
+
+    const totalReward  = results.reduce((s, r) => s + r.reward, 0n)
+    const avgApy       = results.reduce((s, r) => s + r.apy, 0) / results.length
+    const maxApyRow    = [...results].sort((a, b) => b.apy - a.apy)[0]
+    const maxRewardRow = [...results].sort((a, b) => (b.reward > a.reward ? 1 : -1))[0]
+    const bestPool      = [...byPool.entries()].sort((a, b) => (b[1].total > a[1].total ? 1 : -1))[0]
+
+    return {
+      totalReward, avgApy, maxApyRow, maxRewardRow, bestPool,
+      poolCount: poolIds.size, eraCount: eraIds.size, eraMin, eraMax,
+    }
+  }, [results])
+
+  if (!summary) return null
+  const { totalReward, avgApy, poolCount, eraCount, bestPool } = summary
 
   const stats = [
     { label: 'Total Rewards',    value: `${fmtEnj(totalReward)}`, unit: 'ENJ', accent: 'text-success',      border: 'metric-card-left-success' },

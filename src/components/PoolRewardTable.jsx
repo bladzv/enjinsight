@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { CheckCircle2, XCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { formatENJ, truncateAddress, validatorExplorerUrl } from '../utils/format.js'
 
@@ -15,32 +15,37 @@ export default function PoolRewardTable({
   const [pageSize, setPageSize] = useState(10)
   const [expandedEra, setExpandedEra] = useState(null)
 
+  // Re-parses every reward's BigInt amount and rebuilds the full row array.
+  // Previously ran on every render (e.g. toggling a row's expansion) even when
+  // none of these props had changed.
+  const rows = useMemo(() => {
+    const missedSet = new Set(missedEras ?? [])
+
+    // Build a lookup from era → summed reward amount (BigInt)
+    const rewardTotals = new Map()
+    if (Array.isArray(eraRewards)) {
+      for (const r of eraRewards) {
+        const era = parseInt(String(r.era), 10)
+        if (!Number.isFinite(era)) continue
+        const amtStr = String(r.amount ?? '0').replace(/[^0-9]/g, '') || '0'
+        let amt
+        try { amt = BigInt(amtStr) } catch { amt = 0n }
+        rewardTotals.set(era, (rewardTotals.get(era) || 0n) + amt)
+      }
+    }
+
+    // Build merged rows: all expected eras (descending), with reward data or gap marker
+    const allEras = latestEra && eraCount ? Array.from({ length: eraCount }, (_, i) => latestEra - i) : []
+    return allEras.map(era => ({
+      era,
+      rewardTotal: rewardTotals.get(era) ?? 0n,
+      missed: missedSet.has(era),
+    }))
+  }, [eraRewards, missedEras, eraCount, latestEra])
+
   if (!latestEra || !eraCount) {
     return <p className="text-xs text-dim py-4 text-center">No reward data available.</p>
   }
-
-  const missedSet = new Set(missedEras ?? [])
-
-  // Build a lookup from era → summed reward amount (BigInt)
-  const rewardTotals = new Map()
-  if (Array.isArray(eraRewards)) {
-    for (const r of eraRewards) {
-      const era = parseInt(String(r.era), 10)
-      if (!Number.isFinite(era)) continue
-      const amtStr = String(r.amount ?? '0').replace(/[^0-9]/g, '') || '0'
-      let amt
-      try { amt = BigInt(amtStr) } catch { amt = 0n }
-      rewardTotals.set(era, (rewardTotals.get(era) || 0n) + amt)
-    }
-  }
-
-  // Build merged rows: all expected eras (descending), with reward data or gap marker
-  const allEras = Array.from({ length: eraCount }, (_, i) => latestEra - i)
-  const rows = allEras.map(era => ({
-    era,
-    rewardTotal: rewardTotals.get(era) ?? 0n,
-    missed: missedSet.has(era),
-  }))
 
   const pages     = Math.ceil(rows.length / pageSize)
   const pageItems = rows.slice(page * pageSize, (page + 1) * pageSize)
