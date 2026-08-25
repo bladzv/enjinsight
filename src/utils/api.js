@@ -27,6 +27,28 @@ function buildUrl(path) {
 
 const delay = ms => new Promise(r => setTimeout(r, ms))
 
+/**
+ * Backoff that resolves early when `signal` aborts.
+ * A plain delay() left an aborted scan sitting through the remaining backoff —
+ * up to ~16 s at MAX_RETRY_ATTEMPTS=5 / RETRY_BASE_MS=1000 — before the next
+ * attempt noticed the abort.
+ */
+function abortableDelay(ms, signal) {
+  if (!signal) return delay(ms)
+  if (signal.aborted) return Promise.resolve()
+  return new Promise(resolve => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    function onAbort() {
+      clearTimeout(timer)
+      resolve()
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
 // ── Per-scan request counter ────────────────────────────────────────────────
 // Purely informational: lets a hook report how many real Subscan HTTP requests
 // (including retries) a scan run used, to give visibility into the free tier's
@@ -165,7 +187,8 @@ async function _subscanPost(path, body, options = {}) {
         if (attempt < attempts) {
           const waitMs = Math.round(retryBase * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.2))
           if (typeof options.onRetry === 'function') options.onRetry(attempt, err, waitMs)
-          await delay(waitMs)
+          await abortableDelay(waitMs, external)
+          if (external?.aborted) throw new Error('Request aborted.')
           continue
         }
         throw new Error('Request timed out after 15 s.')
@@ -173,7 +196,8 @@ async function _subscanPost(path, body, options = {}) {
       if (attempt < attempts) {
         const waitMs = Math.round(retryBase * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.2))
         if (typeof options.onRetry === 'function') options.onRetry(attempt, err, waitMs)
-        await delay(waitMs)
+        await abortableDelay(waitMs, external)
+        if (external?.aborted) throw new Error('Request aborted.')
         continue
       }
       throw new Error('Network error — check your connection or proxy URL.')
@@ -189,7 +213,8 @@ async function _subscanPost(path, body, options = {}) {
         ? retryAfter * 1000
         : Math.round(retryBase * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.2))
       if (typeof options.onRetry === 'function') options.onRetry(attempt, { status: response.status }, waitMs)
-      await delay(waitMs)
+      await abortableDelay(waitMs, external)
+      if (external?.aborted) throw new Error('Request aborted.')
       continue
     }
 
@@ -509,7 +534,10 @@ export async function fetchHistoricalPoolIds(address, signal, onPage) {
     'withdraw_unbonded_kill',
   ])
 
-  while (true) {
+  // Bounded like fetchPaged: an address with a long extrinsic history would
+  // otherwise page indefinitely at two requests per page, against the same daily
+  // quota that SUBSCAN_MAX_PAGES exists to protect.
+  for (; page < SUBSCAN_MAX_PAGES; page++) {
     if (signal?.aborted) throw new Error('Aborted')
 
     const data = await subscanPost(
@@ -586,7 +614,14 @@ export async function fetchHistoricalPoolIds(address, signal, onPage) {
     if (onPage) onPage(page, records.length)
 
     if (records.length < rowPerPage) break
-    page++
+
+    if (page === SUBSCAN_MAX_PAGES - 1) {
+      console.warn(
+        `fetchHistoricalPoolIds: hit the ${SUBSCAN_MAX_PAGES}-page cap for ${address} — pool discovery may be incomplete.`,
+      )
+      break
+    }
+
     await delay(API_DELAY_MS)
   }
 

@@ -13,7 +13,7 @@
  *  6. Reward = (memberBalance × reinvested) / poolSupply.
  *     APY    = ((poolSupply + reinvested) / poolSupply)^365 − 1.
  */
-import { useReducer, useCallback, useRef } from 'react'
+import { useReducer, useCallback, useRef, useEffect } from 'react'
 import {
   WS_CONNECT_TIMEOUT_MS,
   PLANCK_PER_ENJ,
@@ -157,6 +157,27 @@ function reducer(state, action) {
 export function useRewardHistory() {
   const [state, dispatch] = useReducer(reducer, initialState)
   const abortRef = useRef(null)
+  // The AbortController alone only gates the checkpoint polls between awaits.
+  // Without direct handles, stop() left the raw RPC issuing calls and the
+  // polkadot-js provider auto-reconnecting in the background.
+  const rpcRef = useRef(null)
+  const eventApiRef = useRef(null)
+
+  /** Abort the active run and tear down both transports. Safe to call repeatedly. */
+  const teardown = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    try { rpcRef.current?.close() } catch { /* noop */ }
+    rpcRef.current = null
+    const handle = eventApiRef.current
+    eventApiRef.current = null
+    // close() is async; nothing awaits it here, but failures must not escape.
+    if (handle?.close) Promise.resolve(handle.close()).catch(() => {})
+  }, [])
+
+  // Unmounting mid-scan previously left the archive socket and a full ApiPromise
+  // alive, both dispatching into a reducer that no longer exists.
+  useEffect(() => teardown, [teardown])
 
   const log = useCallback((level, message) => {
     dispatch({ type: 'LOG', payload: { id: Date.now() + Math.random(), ts: nowHHMMSS(), level, message } })
@@ -447,6 +468,10 @@ export function useRewardHistory() {
 
   // ── Main run ──────────────────────────────────────────────────────────
   const run = useCallback(async ({ address, startEra, endEra: endEraInput, endpoint, includeHistory = false }) => {
+    // Abort any previous run before replacing the controller. Two overlapping
+    // runs would otherwise interleave SET_RESULTS/DONE into the same reducer.
+    teardown()
+
     const ctrl = new AbortController()
     abortRef.current = ctrl
     const signal = ctrl.signal
@@ -541,6 +566,8 @@ export function useRewardHistory() {
       // ── Phase 1: Connect to archive ──────────────────────────────────
       logPhase('connect', 'INFO', `(${resolvedEndpoint})`)
       rpc = new SubstrateRPC(resolvedEndpoint, { concurrency: 3 })
+      rpcRef.current = rpc
+      signal.addEventListener('abort', () => { try { rpc.close() } catch { /* noop */ } }, { once: true })
       await rpc.connect()
       logFn('OK', 'Archive node connected.')
 
@@ -878,6 +905,11 @@ export function useRewardHistory() {
       // Open a dedicated polkadot-js API client for runtime event decoding via RPC.
       // This keeps reward scanning RPC-only (no Subscan events).
       eventApiHandle = await openRpcEventApi(resolvedEndpoint)
+      eventApiRef.current = eventApiHandle
+      // WsProvider reconnects on its own; only an explicit disconnect stops it.
+      signal.addEventListener('abort', () => {
+        Promise.resolve(eventApiHandle.close?.()).catch(() => {})
+      }, { once: true })
 
       // ── Phase 4: Scan reward events around era boundaries ──────────────
       logPhase('rewards', 'INFO', `for ${eraPoolData.length} era+pool pair(s)`)
@@ -1101,20 +1133,24 @@ export function useRewardHistory() {
         dispatch({ type: 'ERROR', msg: e.message })
       }
     } finally {
-      try { await eventApiHandle?.close?.() } catch {}
+      try { await eventApiHandle?.close?.() } catch { /* noop */ }
       rpc?.close()
+      // Only release refs this run still owns — a newer run may have replaced them.
+      if (rpcRef.current === rpc) rpcRef.current = null
+      if (eventApiRef.current === eventApiHandle) eventApiRef.current = null
+      if (abortRef.current === ctrl) abortRef.current = null
     }
-  }, [])
+  }, [teardown])
 
   const stop = useCallback(() => {
-    abortRef.current?.abort()
+    teardown()
     dispatch({ type: 'STOP' })
-  }, [])
+  }, [teardown])
 
   const reset = useCallback(() => {
-    abortRef.current?.abort()
+    teardown()
     dispatch({ type: 'RESET' })
-  }, [])
+  }, [teardown])
 
   return { ...state, run, stop, reset, log }
 }

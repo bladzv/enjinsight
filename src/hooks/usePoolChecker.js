@@ -1,4 +1,4 @@
-import { useReducer, useCallback, useRef } from 'react'
+import { useReducer, useCallback, useRef, useEffect } from 'react'
 import {
   fetchAllPools, fetchVoted, fetchEraStat,
   fetchRewardSlash, probeEndpoint, delay,
@@ -157,6 +157,13 @@ function shuffle(arr) {
 export function usePoolChecker() {
   const [state, dispatch] = useReducer(reducer, initialState)
   const abortControllerRef = useRef(null)
+
+  // Abort any in-flight scan on unmount. Without this, navigating away mid-scan
+  // left the request chain running and dispatching into a dead reducer.
+  useEffect(() => () => {
+    try { abortControllerRef.current?.abort() } catch { /* noop */ }
+    abortControllerRef.current = null
+  }, [])
 
   const log = useCallback((level, message) => {
     dispatch({ type: 'LOG', level, message })

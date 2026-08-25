@@ -198,3 +198,32 @@ describe('subscan request counter', () => {
     fetchSpy.mockRestore()
   })
 })
+
+// ── Abort-aware retry backoff (Phase 2) ──────────────────────────────────────
+describe('abort-aware retry backoff', () => {
+  it('gives up promptly when the signal aborts mid-backoff', async () => {
+    const ctrl = new AbortController()
+    // Always fail with a retryable network error so the retry path is taken.
+    const fetchSpy = vi.fn(async () => { throw new TypeError('network down') })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    const started = Date.now()
+    const p = subscanPost('/api/scan/staking/validators', {}, '', {
+      signal: ctrl.signal,
+      attempts: 5,
+      retryBaseMs: 5000,   // first backoff alone is 5s if it is not abort-aware
+    })
+    const assertion = expect(p).rejects.toThrow(/abort/i)
+
+    // Abort while the first backoff is still sleeping.
+    await new Promise(r => setTimeout(r, 20))
+    ctrl.abort()
+    await assertion
+
+    // The point of the fix: the abort must cut the 5s backoff short rather than
+    // sleeping through it. Comfortably under 5000ms, comfortably over the ~20ms
+    // it takes when working.
+    expect(Date.now() - started).toBeLessThan(1500)
+    vi.unstubAllGlobals()
+  })
+})
