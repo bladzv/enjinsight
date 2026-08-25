@@ -37,6 +37,7 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
             value={pageSize}
             onChange={e => { setPageSize(Number(e.target.value)); setPage(0) }}
             className="select-compact"
+            aria-label="Rows per page"
           >
             {[5, 10, 20].map(n => <option key={n} value={n}>{n}</option>)}
           </select>
@@ -116,13 +117,14 @@ export default function PoolValidatorsTable({ validators, onRetry }) {
       </div>
       <div className="hidden sm:block data-table-wrap">
         <table className="data-table min-w-[480px]">
+          <caption className="sr-only">Validators nominated by this pool</caption>
           <thead>
             <tr className="data-table-head">
-              <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-8">#</th>
-              <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Address</th>
-              <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Display Name</th>
-              <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold hidden md:table-cell">Bonded</th>
-              <th className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Status</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-8">#</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Address</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Display Name</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold hidden md:table-cell">Bonded</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Status</th>
             </tr>
           </thead>
           <tbody>

@@ -89,12 +89,27 @@ export default function App() {
   const previousStakingStatusRef = useRef(null)
   const { show: showFirstVisit, accept: acceptFirstVisit } = useFirstVisitDisclaimer()
 
-  // Sync URL hash when view changes
+  // Sync URL hash when view changes. The very first sync (mount) uses
+  // replaceState so it doesn't stack an extra entry on top of whatever
+  // history entry actually loaded the page; every navigation after that uses
+  // pushState so Back/Forward move between tools. The previous code always
+  // used replaceState, so the history stack never grew at all — Back never
+  // moved between tools and instead left the site entirely on the first press.
+  const isFirstHashSyncRef = useRef(true)
+  const isPopStateRef = useRef(false)
   useEffect(() => {
-    window.history.replaceState(
-      null, '',
-      view === 'home' ? window.location.pathname : `#${view}`
-    )
+    const url = view === 'home' ? window.location.pathname : `#${view}`
+    if (isPopStateRef.current) {
+      // Already reflects a browser-driven Back/Forward; the browser moved the
+      // history pointer itself, so pushing again here would create a
+      // duplicate, incorrect entry.
+      isPopStateRef.current = false
+    } else if (isFirstHashSyncRef.current) {
+      isFirstHashSyncRef.current = false
+      window.history.replaceState({ view }, '', url)
+    } else {
+      window.history.pushState({ view }, '', url)
+    }
   }, [view])
 
   useEffect(() => {
@@ -154,6 +169,43 @@ export default function App() {
 
   const validatorLatestEra = resolveLatestEra(validators)
   const isNavigationLocked = isLoading || balanceScanActive || rewardScanActive || infusionScanActive
+
+  // Browser Back/Forward. If a scan is in progress, cancel the navigation by
+  // re-pushing the current entry (there is no way to preventDefault a
+  // popstate) and show the same lock toast a blocked click gets.
+  useEffect(() => {
+    function onPopState() {
+      if (isNavigationLocked) {
+        showScanLockToast()
+        isPopStateRef.current = true
+        window.history.pushState(
+          { view },
+          '',
+          view === 'home' ? window.location.pathname : `#${view}`,
+        )
+        return
+      }
+      const hash = window.location.hash.slice(1)
+      const nextView = ['home', 'staking', 'balance', 'era', 'reward-history', 'infusion'].includes(hash) ? hash : 'home'
+      if (nextView === view) return
+      if (view === 'staking' && nextView !== 'staking') {
+        // Inlined rather than calling handleReset() directly: that function is
+        // redefined every render, which would force this effect to re-attach
+        // the popstate listener on every render too. vReset/pReset are already
+        // stable (useCallback inside their hooks), so depending on those plus
+        // the primitive isValidatorMode keeps this effect's identity stable.
+        if (isValidatorMode) vReset()
+        else pReset()
+        setStakingPage(1)
+        setStakingSimpleRunning(false)
+      }
+      isPopStateRef.current = true
+      setView(nextView)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [view, isNavigationLocked, isValidatorMode, vReset, pReset])
+
   const headerStatus = isNavigationLocked ? 'loading' : status
   const activeRecords = isValidatorMode ? validators : pools
   const validatorPages = Math.max(1, Math.ceil(validators.length / STAKING_RESULTS_PAGE_SIZE))
@@ -292,6 +344,12 @@ export default function App() {
 
   return (
     <div className="app-shell relative min-h-dvh">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[200] focus:rounded-sm focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white focus:outline-none focus:ring-2 focus:ring-white/70"
+      >
+        Skip to main content
+      </a>
       <AppHeader
         status={headerStatus}
         view={view}
@@ -318,7 +376,7 @@ export default function App() {
 
       {/* ── Balance Viewer ──────────────────────────────────────────── */}
       {view === 'balance' && (
-        <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
+        <main id="main-content" className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
           <ErrorBoundary label="Balance Viewer">
             <Suspense fallback={<ViewLoadingFallback />}>
               <BalanceExplorer onScanStateChange={setBalanceScanActive} simpleMode={simpleMode} />
@@ -329,7 +387,7 @@ export default function App() {
 
       {/* ── Reward History Viewer ─────────────────────────────────────────── */}
       {view === 'reward-history' && (
-        <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
+        <main id="main-content" className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
           <ErrorBoundary label="Reward History">
             <Suspense fallback={<ViewLoadingFallback />}>
               <RewardHistoryViewer onScanStateChange={setRewardScanActive} simpleMode={simpleMode} />
@@ -340,7 +398,7 @@ export default function App() {
 
       {/* ── ENJ Infusion Checker ─────────────────────────────────────────── */}
       {view === 'infusion' && (
-        <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
+        <main id="main-content" className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
           <ErrorBoundary label="ENJ Infusion Checker">
             <Suspense fallback={<ViewLoadingFallback />}>
               <InfusionChecker onScanStateChange={setInfusionScanActive} simpleMode={simpleMode} />
@@ -351,14 +409,14 @@ export default function App() {
 
       {/* ── Home / Landing ──────────────────────────────────────────── */}
       {view === 'home' && (
-        <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-6 sm:px-6 sm:py-8 pb-16 sm:pb-20">
+        <main id="main-content" className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-6 sm:px-6 sm:py-8 pb-16 sm:pb-20">
           <LandingPage onNavigate={handleNavigate} />
         </main>
       )}
 
       {/* ── Staking view ────────────────────────────────────────────── */}
       {view === 'staking' && (
-      <main className="relative z-10 mx-auto w-full max-w-[100rem] space-y-4 px-3 py-4 pb-32 sm:px-6 sm:py-6 sm:space-y-5">
+      <main id="main-content" className="relative z-10 mx-auto w-full max-w-[100rem] space-y-4 px-3 py-4 pb-32 sm:px-6 sm:py-6 sm:space-y-5">
 
         <section className="page-hero">
           <div className="relative z-10 flex flex-col gap-2">
@@ -593,7 +651,11 @@ export default function App() {
       )}
 
       {scanToastVisible && (
-        <div className="pointer-events-none fixed top-6 left-1/2 z-[120] w-[min(92vw,44rem)] -translate-x-1/2 rounded-sm border border-warning/40 bg-card/95 px-4 py-3 shadow-ambient backdrop-blur-sm">
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none fixed top-6 left-1/2 z-[120] w-[min(92vw,44rem)] -translate-x-1/2 rounded-sm border border-warning/40 bg-card/95 px-4 py-3 shadow-ambient backdrop-blur-sm"
+        >
           <p className="text-sm font-medium text-warning">Scan in progress.</p>
           <p className="text-xs text-text-secondary">If you want to open another tool or page, stop the current scan first.</p>
         </div>

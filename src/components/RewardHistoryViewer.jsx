@@ -741,10 +741,12 @@ function RewardTableV2({ results, onFilter }) {
           <span className="text-[10px] font-bold tracking-widest uppercase text-text-secondary">Era:</span>
           <input type="number" placeholder="Min" value={filterEraMin}
             onChange={e => { setFilterEraMin(e.target.value); setPage(1) }}
+            aria-label="Minimum era"
             className="w-20 input-field font-mono !rounded-full" />
           <span className="text-text-secondary text-xs">–</span>
           <input type="number" placeholder="Max" value={filterEraMax}
             onChange={e => { setFilterEraMax(e.target.value); setPage(1) }}
+            aria-label="Maximum era"
             className="w-20 input-field font-mono !rounded-full" />
         </div>
         <div className="ml-auto flex items-center gap-1.5">
@@ -759,19 +761,34 @@ function RewardTableV2({ results, onFilter }) {
       {/* Table */}
       <div className="overflow-x-auto rounded-sm bg-card/70 p-1">
         <table className="border-collapse text-xs font-mono w-full min-w-max">
+          <caption className="sr-only">Per-era pool reward history</caption>
           <thead className="sticky top-0 z-10">
             <tr>
               {TABLE_COLS.map(col => {
                 const isSorted = sortCol === col.key
+                const directionLabel = isSorted
+                  ? `sorted ${sortDir === 1 ? 'ascending' : 'descending'}`
+                  : 'not sorted'
                 return (
-                  <th key={col.key} onClick={() => col.sortable && handleSort(col.key)}
+                  <th key={col.key}
+                    scope="col"
+                    aria-sort={col.sortable ? (isSorted ? (sortDir === 1 ? 'ascending' : 'descending') : 'none') : undefined}
                     className={`bg-surface-high px-3 py-3 font-bold tracking-widest
-                                uppercase select-none whitespace-nowrap transition-colors text-[10px]
+                                uppercase whitespace-nowrap text-[10px]
                                 relative group
-                                ${col.align === 'right' ? 'text-right' : 'text-left'}
-                                ${col.sortable ? 'cursor-pointer' : ''}
-                                ${isSorted ? 'text-cyan' : 'text-primary/70 hover:text-cyan'}`}>
-                    {col.label}{isSorted && (sortDir === 1 ? ' ↑' : ' ↓')}
+                                ${col.align === 'right' ? 'text-right' : 'text-left'}`}>
+                    {col.sortable ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSort(col.key)}
+                        className={`select-none transition-colors ${isSorted ? 'text-cyan' : 'text-primary/70 hover:text-cyan'}`}
+                        aria-label={`Sort by ${col.label} (${directionLabel})`}
+                      >
+                        {col.label}{isSorted && (sortDir === 1 ? ' ↑' : ' ↓')}
+                      </button>
+                    ) : (
+                      <span className="text-primary/70">{col.label}</span>
+                    )}
                     {col.tooltip && (
                       <div className={`pointer-events-none absolute z-50 top-full mt-1 w-56 p-2.5
                                        rounded-lg border border-rim bg-ink shadow-xl shadow-black/60
@@ -1620,14 +1637,14 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                     <input id="reward-start-date" type="date" placeholder="2026-03-01" max={toDateInput(new Date())} value={startDate}
                       onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
-                      className="flex-1 input-field font-mono [color-scheme:dark]" />
+                      className="flex-1 input-field font-mono" />
                   </div>
                   <div className="flex items-center gap-3">
                     <label htmlFor="reward-end-date" className="input-label w-28 flex-shrink-0">End Date</label>
                     <input id="reward-end-date" type="date" placeholder="2026-03-04" max={toDateInput(new Date())} value={endDate}
                       onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
-                      className="flex-1 input-field font-mono [color-scheme:dark]" />
+                      className="flex-1 input-field font-mono" />
                   </div>
                 </div>
                 {dateValidErr && <p className="flex items-center gap-1 text-xs text-danger"><AlertTriangle size={11} className="flex-shrink-0"/>{dateValidErr}</p>}
@@ -1819,13 +1836,13 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                 <label htmlFor="reward-start-date" className="input-label w-28 flex-shrink-0">Start Date</label>
                 <input id="reward-start-date" type="date" max={toDateInput(new Date())} value={startDate}
                   onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
-                  className="flex-1 input-field font-mono [color-scheme:dark]" />
+                  className="flex-1 input-field font-mono" />
               </div>
               <div className="flex items-center gap-3">
                 <label htmlFor="reward-end-date" className="input-label w-28 flex-shrink-0">End Date</label>
                 <input id="reward-end-date" type="date" max={toDateInput(new Date())} value={endDate}
                   onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
-                  className="flex-1 input-field font-mono [color-scheme:dark]" />
+                  className="flex-1 input-field font-mono" />
               </div>
               {dateValidErr && (
                 <p className="flex items-center gap-1 text-xs text-danger">

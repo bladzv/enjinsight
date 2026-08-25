@@ -171,14 +171,15 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
           </div>
           <div className="hidden sm:block data-table-wrap">
             <table className="data-table min-w-[520px]">
+              <caption className="sr-only">Validators with missing rewards</caption>
               <thead>
                 <tr className="data-table-head">
-                  <th className="text-left px-4 py-3">Validator</th>
-                  <th className="text-center px-3 py-3">Checked</th>
-                  <th className="text-center px-3 py-3">Rewarded</th>
-                  <th className="text-center px-3 py-3">Missed</th>
-                  <th className="text-left px-3 py-3 hidden sm:table-cell">Missing Eras</th>
-                  <th className="text-center px-3 py-3">Severity</th>
+                  <th scope="col" className="text-left px-4 py-3">Validator</th>
+                  <th scope="col" className="text-center px-3 py-3">Checked</th>
+                  <th scope="col" className="text-center px-3 py-3">Rewarded</th>
+                  <th scope="col" className="text-center px-3 py-3">Missed</th>
+                  <th scope="col" className="text-left px-3 py-3 hidden sm:table-cell">Missing Eras</th>
+                  <th scope="col" className="text-center px-3 py-3">Severity</th>
                 </tr>
               </thead>
               <tbody>

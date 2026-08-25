@@ -154,7 +154,7 @@ export default function EraBlockExplorer() {
   }, [eraInput, eraInputErr, lookupEra])
 
   return (
-    <main className="relative z-10 mx-auto w-full max-w-[100rem] space-y-4 px-3 py-4 pb-32 sm:space-y-5 sm:px-6 sm:py-6">
+    <main id="main-content" className="relative z-10 mx-auto w-full max-w-[100rem] space-y-4 px-3 py-4 pb-32 sm:space-y-5 sm:px-6 sm:py-6">
       {/* Hero */}
       <section className="page-hero">
         <div className="relative z-10 flex flex-col gap-3 sm:gap-4">

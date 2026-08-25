@@ -63,12 +63,13 @@ export default function NominatorsTable({ nominators, onRetry, validatorAddress,
       </div>
       <div className="hidden sm:block data-table-wrap">
         <table className="data-table min-w-[480px]">
+          <caption className="sr-only">Nominators for this validator</caption>
           <thead>
             <tr className="data-table-head">
-              <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-8">#</th>
-              <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Address</th>
-              <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Display Name</th>
-              <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Bonded</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-8">#</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Address</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Display Name</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Bonded</th>
             </tr>
           </thead>
           <tbody>

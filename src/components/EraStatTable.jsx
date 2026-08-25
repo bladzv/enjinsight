@@ -37,6 +37,7 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
             value={pageSize}
             onChange={e => { setPageSize(Number(e.target.value)); setPage(0) }}
             className="select-compact"
+            aria-label="Rows per page"
           >
             {[5,10,20,50].map(n => <option key={n} value={n}>{n}</option>)}
           </select>
@@ -90,13 +91,14 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
       {/* Desktop table */}
       <div className="hidden sm:block data-table-wrap">
         <table className="data-table min-w-[520px]">
+          <caption className="sr-only">Era statistics for the scanned validator</caption>
           <thead>
             <tr className="data-table-head">
-              <th className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-16">Era</th>
-              <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Start Block</th>
-              <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">End Block</th>
-              <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Reward Point</th>
-              <th className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Blocks Produced</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-left px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-16">Era</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Start Block</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">End Block</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Reward Point</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Blocks Produced</th>
             </tr>
           </thead>
           <tbody>

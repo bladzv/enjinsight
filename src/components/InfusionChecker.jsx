@@ -570,7 +570,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
       : 'not sorted'
 
     return (
-      <th className={`px-3 py-3 text-center ${className}`} aria-sort={isSorted ? (bulkSort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <th scope="col" className={`px-3 py-3 text-center ${className}`} aria-sort={isSorted ? (bulkSort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
         <button
           type="button"
           onClick={() => handleBulkSort(key)}
@@ -1316,6 +1316,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
 
         <div className="data-table-wrap">
           <table className="data-table min-w-[760px]">
+            <caption className="sr-only">Bulk ENJ infusion lookup results</caption>
             <thead className="data-table-head">
               <tr>
                 {renderSortableHeader('tokenId')}
@@ -1323,7 +1324,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
                 {renderSortableHeader('tokenName')}
                 {renderSortableHeader('amount')}
                 {renderSortableHeader('raw')}
-                <th className="px-3 py-3 text-center">More Details</th>
+                <th scope="col" className="px-3 py-3 text-center">More Details</th>
               </tr>
             </thead>
             <tbody>
