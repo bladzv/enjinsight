@@ -148,15 +148,16 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
           </div>
           <div className="hidden sm:block data-table-wrap">
             <table className="data-table min-w-[520px]">
+              <caption className="sr-only">Pools with missing rewards</caption>
               <thead>
                 <tr className="data-table-head">
-                  <th className="text-center px-4 py-3 w-[40%]">Pool</th>
-                  <th className="text-center px-3 py-3">Checked</th>
-                  <th className="text-center px-3 py-3">Rewarded</th>
-                  <th className="text-center px-3 py-3">Missed</th>
-                  <th className="text-left px-3 py-3 hidden sm:table-cell">Missing Eras</th>
-                  <th className="text-left px-3 py-3 hidden lg:table-cell">Reason</th>
-                  <th className="text-center px-3 py-3">Severity</th>
+                  <th scope="col" className="text-center px-4 py-3 w-[40%]">Pool</th>
+                  <th scope="col" className="text-center px-3 py-3">Checked</th>
+                  <th scope="col" className="text-center px-3 py-3">Rewarded</th>
+                  <th scope="col" className="text-center px-3 py-3">Missed</th>
+                  <th scope="col" className="text-left px-3 py-3 hidden sm:table-cell">Missing Eras</th>
+                  <th scope="col" className="text-left px-3 py-3 hidden lg:table-cell">Reason</th>
+                  <th scope="col" className="text-center px-3 py-3">Severity</th>
                 </tr>
               </thead>
               <tbody>

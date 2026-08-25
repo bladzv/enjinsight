@@ -812,11 +812,11 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
               <div className="space-y-2">
                 <div className="flex items-center gap-3">
                   <label htmlFor="bal-start-date-sm" className="input-label w-40 flex-shrink-0">Start Date</label>
-                  <input id="bal-start-date-sm" type="date" max={toDateInput(new Date())} value={startDate} onChange={e => { setStartDate(e.target.value); setActivePreset(null); clearResolvedRange() }} className={`flex-1 ${inputField} [color-scheme:dark]`} />
+                  <input id="bal-start-date-sm" type="date" max={toDateInput(new Date())} value={startDate} onChange={e => { setStartDate(e.target.value); setActivePreset(null); clearResolvedRange() }} className={`flex-1 ${inputField}`} />
                 </div>
                 <div className="flex items-center gap-3">
                   <label htmlFor="bal-end-date-sm" className="input-label w-40 flex-shrink-0">End Date</label>
-                  <input id="bal-end-date-sm" type="date" max={toDateInput(new Date())} value={endDate} onChange={e => { setEndDate(e.target.value); setActivePreset(null); clearResolvedRange() }} className={`flex-1 ${inputField} [color-scheme:dark]`} />
+                  <input id="bal-end-date-sm" type="date" max={toDateInput(new Date())} value={endDate} onChange={e => { setEndDate(e.target.value); setActivePreset(null); clearResolvedRange() }} className={`flex-1 ${inputField}`} />
                 </div>
                 <div className="flex items-center gap-3">
                   <label htmlFor="bal-step-date-sm" className="input-label w-40 flex-shrink-0">{stepLabel}</label>
@@ -1140,7 +1140,7 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
                         clearResolvedRange()
                       }}
                       disabled={isLoading}
-                      className={`flex-1 ${inputField} [color-scheme:dark]`}
+                      className={`flex-1 ${inputField}`}
                     />
                   </div>
                   <div className="flex items-center gap-3">
@@ -1159,7 +1159,7 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
                         clearResolvedRange()
                       }}
                       disabled={isLoading}
-                      className={`flex-1 ${inputField} [color-scheme:dark]`}
+                      className={`flex-1 ${inputField}`}
                     />
                   </div>
                   <div className="flex items-center gap-3">

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useFocusTrap } from '../hooks/useFocusTrap.js'
 import {
   BarChart3,
   BookOpen,
@@ -34,7 +35,12 @@ const BRAND_LOGO_URL = '/assets/brand/enjinsight_brand.png'
  */
 export default function AppHeader({ status, view, onNavigate, onAbout, theme = 'dark', onToggleTheme, onThemeChange, simpleMode = false, onSimpleModeChange }) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const drawerRef = useRef(null)
   const isLoading = status === 'loading'
+
+  // Traps Tab within the drawer while open and returns focus to the hamburger
+  // button on close — the drawer previously had no keyboard containment at all.
+  useFocusTrap(drawerRef, mobileOpen)
 
   // Close drawer on Escape
   useEffect(() => {
@@ -117,7 +123,7 @@ export default function AppHeader({ status, view, onNavigate, onAbout, theme = '
             onClick={() => setMobileOpen(false)}
             aria-hidden="true"
           />
-          <aside className="rail-mobile-drawer lg:hidden" aria-label="Primary">
+          <aside ref={drawerRef} tabIndex={-1} role="dialog" aria-modal="true" className="rail-mobile-drawer lg:hidden" aria-label="Primary navigation">
             <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--hairline)' }}>
               <button
                 type="button"
@@ -184,6 +190,7 @@ function RailContent({ view, isLoading, tools, workspace, onNavigate, onAbout, t
               <RailLink
                 item={item}
                 active={view === item.key}
+                locked={isLoading}
                 onClick={() => onNavigate(item.key)}
               />
             </li>
@@ -248,6 +255,7 @@ function RailContent({ view, isLoading, tools, workspace, onNavigate, onAbout, t
               <RailLink
                 item={item}
                 active={view === item.key}
+                locked={isLoading}
                 onClick={() => onNavigate(item.key)}
               />
             </li>
@@ -284,14 +292,19 @@ function RailContent({ view, isLoading, tools, workspace, onNavigate, onAbout, t
   )
 }
 
-function RailLink({ item, active, onClick }) {
+function RailLink({ item, active, locked = false, onClick }) {
   const Icon = item.icon
   return (
     <button
       type="button"
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
-      className={`rail-item w-full text-left ${active ? 'rail-item-active' : ''}`}
+      // aria-disabled, not the disabled attribute: a scan in progress blocks
+      // navigation but the click handler still needs to run so the user gets
+      // the "stop the scan first" toast — a real disabled button would take
+      // the control out of the tab order and swallow the click entirely.
+      aria-disabled={locked || undefined}
+      className={`rail-item w-full text-left ${active ? 'rail-item-active' : ''} ${locked ? 'opacity-60' : ''}`}
     >
       <Icon size={15} strokeWidth={2} className="shrink-0 opacity-90" />
       <span className="flex-1 truncate">{item.label}</span>

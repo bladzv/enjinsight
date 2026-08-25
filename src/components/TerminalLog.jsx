@@ -31,6 +31,11 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
   const [expanded, setExpanded] = useState(false)
   const endRef = useRef(null)
   const wrapRef = useRef(null)
+  const bodyRef = useRef(null)
+  // Tracks whether the user is scrolled to (or near) the bottom, so streamed
+  // output follows along by default but a deliberate scroll-up to read
+  // earlier lines is never yanked back down by the next appended entry.
+  const stickToBottomRef = useRef(true)
 
   function toggle() {
     setExpanded(prev => {
@@ -75,6 +80,20 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
       try { document.body.style.paddingBottom = prevPaddingBottom } catch {}
     }
   }, [sticky, expanded])
+
+  // Follow streamed output, but only while already scrolled to the bottom.
+  // endRef was previously declared and attached with nothing ever calling
+  // scrollIntoView on it, so the drawer never actually followed a live scan.
+  useEffect(() => {
+    if (!expanded || !stickToBottomRef.current) return
+    endRef.current?.scrollIntoView({ block: 'end' })
+  }, [logs, expanded])
+
+  function onBodyScroll() {
+    const el = bodyRef.current
+    if (!el) return
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24
+  }
 
   return (
     <div ref={wrapRef} className={wrapClass}>
@@ -126,12 +145,14 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
 
       {expanded && (
         <div
+          ref={bodyRef}
           id="terminal-body"
           className="overflow-y-auto bg-term scrollbar-thin"
           style={{ maxHeight: sticky ? 'min(320px, 42dvh)' : '340px' }}
           role="log"
-          aria-live="polite"
+          aria-live="off"
           aria-label="Logs output"
+          onScroll={onBodyScroll}
         >
           {logs.length === 0 ? (
             <p className="px-4 py-4 text-muted italic">// no output yet</p>
@@ -143,6 +164,12 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
           )}
         </div>
       )}
+      {/* A live region over the full 500-entry log would announce every appended
+          line during a scan. Mirror only the newest entry instead — enough for a
+          screen-reader user to follow progress without a wall of announcements. */}
+      <div className="sr-only" role="status" aria-live="polite">
+        {lastLog ? `${lastLog.level}: ${lastLog.message}` : ''}
+      </div>
     </div>
   )
 }
