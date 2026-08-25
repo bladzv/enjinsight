@@ -187,22 +187,6 @@ export default function App() {
     }
   }, [])
 
-  // Dynamically load Vercel Analytics React component if the package is installed.
-  const [AnalyticsComponent, setAnalyticsComponent] = useState(null)
-  useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      try {
-        const path = '@vercel/analytics/react'
-        const mod = await import(/* @vite-ignore */ path)
-        if (mounted && mod && mod.Analytics) setAnalyticsComponent(() => mod.Analytics)
-      } catch (err) {
-        // Package not installed or failed to load — skip analytics silently.
-      }
-    })()
-    return () => { mounted = false }
-  }, [])
-
   async function handleRun(eraCount) {
     setLastEraCount(eraCount)
     setStakingSimpleRunning(true)
@@ -598,8 +582,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Vercel Analytics (lazy-loaded if dependency installed) */}
-      {AnalyticsComponent && <AnalyticsComponent />}
     </div>
   )
 }
