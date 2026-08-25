@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, Suspense, lazy } from 'react'
+import { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react'
 import { ChevronDown, ChevronUp, Square } from 'lucide-react'
 import { DEFAULT_ERA_COUNT } from './constants.js'
 import { useValidatorChecker } from './hooks/useValidatorChecker.js'
 import { usePoolChecker }      from './hooks/usePoolChecker.js'
 import { resolveLatestEra }    from './utils/eraAnalysis.js'
+import { useToast } from './hooks/useToast.jsx'
 
 import AppHeader           from './components/AppHeader.jsx'
 import StepProgress        from './components/StepProgress.jsx'
@@ -83,11 +84,17 @@ export default function App() {
   const [balanceScanActive, setBalanceScanActive] = useState(false)
   const [rewardScanActive, setRewardScanActive] = useState(false)
   const [infusionScanActive, setInfusionScanActive] = useState(false)
-  const [scanToastVisible, setScanToastVisible] = useState(false)
-  const scanToastTimerRef = useRef(null)
   const previousNavigationLockRef = useRef(false)
   const previousStakingStatusRef = useRef(null)
   const { show: showFirstVisit, accept: acceptFirstVisit } = useFirstVisitDisclaimer()
+  const toast = useToast()
+
+  const showScanLockToast = useCallback(() => {
+    toast.push('Scan in progress.', {
+      detail: 'If you want to open another tool or page, stop the current scan first.',
+      key: 'scan-lock',
+    })
+  }, [toast])
 
   // Sync URL hash when view changes. The very first sync (mount) uses
   // replaceState so it doesn't stack an extra entry on top of whatever
@@ -204,7 +211,7 @@ export default function App() {
     }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
-  }, [view, isNavigationLocked, isValidatorMode, vReset, pReset])
+  }, [view, isNavigationLocked, isValidatorMode, vReset, pReset, showScanLockToast])
 
   const headerStatus = isNavigationLocked ? 'loading' : status
   const activeRecords = isValidatorMode ? validators : pools
@@ -221,26 +228,12 @@ export default function App() {
     safePoolPage * STAKING_RESULTS_PAGE_SIZE,
   )
 
-  function showScanLockToast() {
-    window.clearTimeout(scanToastTimerRef.current)
-    setScanToastVisible(true)
-    scanToastTimerRef.current = window.setTimeout(() => {
-      setScanToastVisible(false)
-    }, 4200)
-  }
-
   useEffect(() => {
     if (isNavigationLocked && !previousNavigationLockRef.current) {
       showScanLockToast()
     }
     previousNavigationLockRef.current = isNavigationLocked
-  }, [isNavigationLocked])
-
-  useEffect(() => {
-    return () => {
-      window.clearTimeout(scanToastTimerRef.current)
-    }
-  }, [])
+  }, [isNavigationLocked, showScanLockToast])
 
   async function handleRun(eraCount) {
     setLastEraCount(eraCount)
@@ -650,16 +643,6 @@ export default function App() {
         <DisclaimerModal mode="about" onClose={() => setShowAbout(false)} />
       )}
 
-      {scanToastVisible && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="pointer-events-none fixed top-6 left-1/2 z-[120] w-[min(92vw,44rem)] -translate-x-1/2 rounded-sm border border-warning/40 bg-card/95 px-4 py-3 shadow-ambient backdrop-blur-sm"
-        >
-          <p className="text-sm font-medium text-warning">Scan in progress.</p>
-          <p className="text-xs text-text-secondary">If you want to open another tool or page, stop the current scan first.</p>
-        </div>
-      )}
 
     </div>
   )
