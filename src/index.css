@@ -821,9 +821,6 @@
     to   { opacity: 1; transform: translateY(0); }
   }
 
-  /* Pointer aura is suppressed in this design */
-  .pointer-aura { display: none !important; }
-
   .editorial-divider {
     width: 1px;
     align-self: stretch;
