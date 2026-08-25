@@ -109,7 +109,6 @@ export default function App() {
   // Validator hook
   const {
     status: vStatus, validators, logs: vLogs,
-    proxyUrl: vProxyUrl, setProxy: vSetProxy,
     runCheck: vRunCheck, stop: vStop, reset: vReset, retryValidator: vRetryValidator,
     progress: vProgress,
   } = useValidatorChecker()
@@ -117,7 +116,6 @@ export default function App() {
   // Pool hook
   const {
     status: pStatus, pools, logs: pLogs,
-    proxyUrl: pProxyUrl, setProxy: pSetProxy,
     runCheck: pRunCheck, stop: pStop, reset: pReset, retryPoolValidator: pRetryPoolValidator,
     latestEra: poolLatestEra,
     progress: pProgress,
@@ -127,7 +125,6 @@ export default function App() {
   const isValidatorMode = mode === 'validators'
   const status    = isValidatorMode ? vStatus   : pStatus
   const logs      = isValidatorMode ? vLogs     : pLogs
-  const proxyUrl  = isValidatorMode ? vProxyUrl : pProxyUrl
   const isLoading = status === 'loading'
   const isDone    = status === 'done'
   const activeProgress = isValidatorMode ? vProgress : pProgress
@@ -141,11 +138,6 @@ export default function App() {
 
   const allCompleted = phases.length > 0 && phases.every(p => p.status === 'completed')
   const completedPhaseCount = phases.filter(p => p.status === 'completed').length
-  const topLabel = allCompleted
-    ? 'Scan successful!'
-    : (status === 'stopped'
-      ? 'Scan stopped'
-      : (activePhase ? `Step ${phases.findIndex(p => p.key === activePhase.key) + 1}: ${activePhase.label}` : 'Scanning'))
   const progressMeta = activePhase && activePhase.total > 0
     ? `${activePhase.completed ?? 0} / ${activePhase.total} (${activePhasePct}%)`
     : `${completedPhaseCount} / ${phases.length} steps complete`
@@ -393,7 +385,6 @@ export default function App() {
           <div className="grid gap-3 sm:gap-4 xl:grid-cols-3 xl:items-stretch">
             <ModeSelector mode={mode} onModeChange={handleModeChange} disabled={isLoading} />
             <ControlPanel
-              mode={mode}
               status={status}
               onRun={handleRun}
               onStop={handleStop}
@@ -428,7 +419,6 @@ export default function App() {
         {simpleMode && stakingSimpleStep === 2 && (
           <div className="mx-auto w-full max-w-[360px] space-y-3">
             <ControlPanel
-              mode={mode}
               status={status}
               onRun={handleRun}
               onStop={handleStop}

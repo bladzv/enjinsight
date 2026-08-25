@@ -644,7 +644,7 @@ async function proxyEnjWalletTokens(req, res) {
 
     try {
       tokens = await fetchCurrentWalletTokens(owner)
-    } catch (error) {
+    } catch {
       tokens = await fetchWalletTokensViaAlchemy(owner)
       provider = 'alchemy'
     }
@@ -669,7 +669,7 @@ function parseInfusionEthCall(rawBody) {
   try {
     payload = JSON.parse(rawBody.toString('utf8'))
   } catch (error) {
-    throw new Error('Invalid JSON-RPC body.')
+    throw new Error('Invalid JSON-RPC body.', { cause: error })
   }
 
   if (payload?.method !== 'eth_call') throw new Error('Only eth_call is allowed.')
@@ -735,7 +735,7 @@ async function proxyAlchemyEthCall(req, res) {
     if (upstreamRes.ok) {
       return finish(upstreamRes.status, text, upstreamRes.headers.get('content-type') || 'application/json; charset=utf-8', 'Alchemy')
     }
-  } catch (error) {
+  } catch {
     // Fall back to Etherscan below.
   }
 
@@ -1030,7 +1030,7 @@ export default async function handler(req, res) {
     let target;
     try {
       target = decodeURIComponent(encodedTarget);
-    } catch (e) {
+    } catch {
       res.statusCode = 400;
       return res.end('Invalid encoded target');
     }

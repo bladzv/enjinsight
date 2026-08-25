@@ -14,8 +14,8 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   Play, Square, RotateCcw, Download, Upload,
-  ChevronDown, ChevronUp, Lock, Unlock, FolderOpen,
-  AlertTriangle, AlertCircle, Server, Info, XCircle, CheckCircle,
+  ChevronDown, Lock, Unlock, FolderOpen,
+  AlertTriangle, Server, Info, XCircle, CheckCircle,
 } from 'lucide-react'
 import { useRewardHistory, RH_STATUS } from '../hooks/useRewardHistory.js'
 import { fetchLiveChainInfo } from '../utils/chainInfo.js'
@@ -379,7 +379,7 @@ function RewardChart({ data }) {
     })
 
     return () => { destroyed = true; chartRef.current?.destroy(); chartRef.current = null }
-  }, [data]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data])
 
   const uniqueEras = [...new Set(data.map(r => r.era))]
   if (!data.length || uniqueEras.length < 2) return null
@@ -709,7 +709,9 @@ function RewardTableV2({ results, onFilter }) {
   }, [results, sortCol, sortDir, filterPools, filterEraMin, filterEraMax])
 
   // Notify parent of filtered rows (for chart + summary)
-  useEffect(() => { onFilter?.(filtered) }, [filtered]) // eslint-disable-line
+  // onFilter is RewardHistoryViewer's setFilteredRows — a useState setter, so
+  // it is referentially stable and including it cannot cause extra re-runs.
+  useEffect(() => { onFilter?.(filtered) }, [filtered, onFilter])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const safePage   = Math.min(page, totalPages)
@@ -1194,7 +1196,7 @@ const RH_SIMPLE_STEPS = [
 ]
 
 export default function RewardHistoryViewer({ onScanStateChange, simpleMode = false }) {
-  const { status, results, logs, progress, csvCount, errorMsg, run, stop, reset, log } = useRewardHistory()
+  const { status, results, logs, progress, errorMsg, run, stop, reset, log } = useRewardHistory()
 
   const [tab,       setTab]      = useState('compute')  // 'compute' | 'import'
   const [address,   setAddress]  = useState('')
@@ -1309,11 +1311,6 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
     : 0
   const allDone     = phases.length > 0 && phases.every(p => p.status === 'completed')
   const completedPhaseCount = phases.filter(p => p.status === 'completed').length
-  const progressTitle = allDone
-    ? 'Reward history ready'
-    : isStopped
-      ? 'Reward computation stopped'
-      : (activePhase?.label ?? 'Computing rewards')
   const progressMeta = activePhase && activePhase.total > 0
     ? `${activePhase.completed ?? 0} / ${activePhase.total} (${phasePct}%)`
     : `${completedPhaseCount} / ${phases.length} phases complete`
@@ -1334,10 +1331,8 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
     { key: 'rewards',   label: 'Fetch Reinvested Amounts',     status: 'pending', total: 0, completed: 0 },
   ], [includeHistory])
   const displayPhases   = phases.length > 0 ? phases : previewPhases
-  const displayTitle    = phases.length > 0 ? progressTitle   : 'Ready to compute'
   const displaySummary  = phases.length > 0 ? progressSummary : null
   const displayMeta     = phases.length > 0 ? progressMeta    : null
-  const rangeModeLabel = rangeMode === 'era' ? 'Era Range' : 'Date Range'
   const liveChainSnapshot = (
     <div className="grid grid-cols-2 gap-2 sm:gap-3">
       <div className="metric-card metric-card-left-cyan py-2.5">
@@ -1372,7 +1367,6 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
         // date era lookup failed — user will see dateValidErr
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, rangeMode, startEra, endEra, startDate, endDate, run, includeHistory])
 
   function applyDatePreset(days, label) {
@@ -1575,15 +1569,15 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-3">
-                    <label className="input-label w-28 flex-shrink-0">Start Era</label>
-                    <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
+                    <label htmlFor="reward-start-era" className="input-label w-28 flex-shrink-0">Start Era</label>
+                    <input id="reward-start-era" type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
                       onChange={e => setStartEra(e.target.value)}
                       placeholder="e.g. 980" disabled={isLoading}
                       className="flex-1 input-field font-mono" />
                   </div>
                   <div className="flex items-center gap-3">
-                    <label className="input-label w-28 flex-shrink-0">End Era</label>
-                    <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
+                    <label htmlFor="reward-end-era" className="input-label w-28 flex-shrink-0">End Era</label>
+                    <input id="reward-end-era" type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
                       onChange={e => setEndEra(e.target.value)}
                       placeholder="e.g. 1000" disabled={isLoading}
                       className="flex-1 input-field font-mono" />
@@ -1622,15 +1616,15 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-3">
-                    <label className="input-label w-28 flex-shrink-0">Start Date</label>
-                    <input type="date" placeholder="2026-03-01" max={toDateInput(new Date())} value={startDate}
+                    <label htmlFor="reward-start-date" className="input-label w-28 flex-shrink-0">Start Date</label>
+                    <input id="reward-start-date" type="date" placeholder="2026-03-01" max={toDateInput(new Date())} value={startDate}
                       onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
                       className="flex-1 input-field font-mono [color-scheme:dark]" />
                   </div>
                   <div className="flex items-center gap-3">
-                    <label className="input-label w-28 flex-shrink-0">End Date</label>
-                    <input type="date" placeholder="2026-03-04" max={toDateInput(new Date())} value={endDate}
+                    <label htmlFor="reward-end-date" className="input-label w-28 flex-shrink-0">End Date</label>
+                    <input id="reward-end-date" type="date" placeholder="2026-03-04" max={toDateInput(new Date())} value={endDate}
                       onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
                       className="flex-1 input-field font-mono [color-scheme:dark]" />
@@ -1669,7 +1663,6 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
             {/* Col 3: Scan Progress */}
             <div className="hidden xl:block">
               <PhaseProgressCards
-                eyebrow=""
                 indexLabel="Phase"
                 title="Computation Progress"
                 summary={displaySummary}
@@ -1682,7 +1675,6 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
 
           <div className="xl:hidden mt-4">
             <PhaseProgressCards
-              eyebrow=""
               indexLabel="Phase"
               title="Computation Progress"
               summary={displaySummary}
@@ -1784,15 +1776,15 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
           {rangeMode === 'era' && (
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <label className="input-label w-28 flex-shrink-0">Start Era</label>
-                <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
+                <label htmlFor="reward-start-era" className="input-label w-28 flex-shrink-0">Start Era</label>
+                <input id="reward-start-era" type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
                   onChange={e => setStartEra(e.target.value)}
                   placeholder="e.g. 980"
                   className="flex-1 input-field font-mono" />
               </div>
               <div className="flex items-center gap-3">
-                <label className="input-label w-28 flex-shrink-0">End Era</label>
-                <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
+                <label htmlFor="reward-end-era" className="input-label w-28 flex-shrink-0">End Era</label>
+                <input id="reward-end-era" type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
                   onChange={e => setEndEra(e.target.value)}
                   placeholder="e.g. 1000"
                   className="flex-1 input-field font-mono" />
@@ -1824,14 +1816,14 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <label className="input-label w-28 flex-shrink-0">Start Date</label>
-                <input type="date" max={toDateInput(new Date())} value={startDate}
+                <label htmlFor="reward-start-date" className="input-label w-28 flex-shrink-0">Start Date</label>
+                <input id="reward-start-date" type="date" max={toDateInput(new Date())} value={startDate}
                   onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
                   className="flex-1 input-field font-mono [color-scheme:dark]" />
               </div>
               <div className="flex items-center gap-3">
-                <label className="input-label w-28 flex-shrink-0">End Date</label>
-                <input type="date" max={toDateInput(new Date())} value={endDate}
+                <label htmlFor="reward-end-date" className="input-label w-28 flex-shrink-0">End Date</label>
+                <input id="reward-end-date" type="date" max={toDateInput(new Date())} value={endDate}
                   onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
                   className="flex-1 input-field font-mono [color-scheme:dark]" />
               </div>

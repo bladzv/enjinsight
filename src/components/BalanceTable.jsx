@@ -24,12 +24,6 @@ const COLS = [
   { key: 'feeFrozen',  label: 'Fee Frozen (ENJ)',    align: 'right' },
 ]
 
-function colValue(d, col, isNewFormat) {
-  if (col === 'miscFrozen' && isNewFormat) return 'frozen'
-  if (col === 'feeFrozen'  && isNewFormat) return 'n/a'
-  return d[col]
-}
-
 function truncHash(h) { return `${h.slice(0, 10)}…${h.slice(-8)}` }
 
 export default function BalanceTable({ records, isLoading = false }) {

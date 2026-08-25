@@ -68,7 +68,7 @@ function normalizeTokenId(value) {
     ) {
       return tokenId
     }
-  } catch (error) {
+  } catch {
     // Plain token IDs are handled below.
   }
 
@@ -1477,7 +1477,6 @@ function TokenDetailsModal({ row, onClose }) {
       subtitle={row?.tokenId ? `Token ID ${formatTokenId(row.tokenId)}` : ''}
       onClose={onClose}
       widthClass="max-w-5xl"
-      eyebrow={null}
       actions={row?.tokenId ? (
         <a
           href={getEtherscanTokenUrl(row.tokenId)}

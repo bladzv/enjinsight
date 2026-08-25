@@ -262,7 +262,6 @@ export default function BalanceChart({ records }) {
 
   if (!records.length) return null
 
-  const pts = decimateForChart(records)
   const isDecimated = records.length > CHART_MAX_PTS
 
   const modeButtons = [

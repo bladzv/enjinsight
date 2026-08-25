@@ -183,7 +183,10 @@ export function decodeAccountInfo(hex) {
 
 /**
  * Strict WebSocket URL validation — prevents SSRF via non-WS protocols.
- * Only wss:// (and ws:// in dev) are accepted.
+ * Accepts both wss:// and ws:// unconditionally (there is no dev-only gate);
+ * a browser page served over https already refuses to open a ws:// (non-TLS)
+ * connection, and ws:// is needed for a user-supplied endpoint pointing at a
+ * local or LAN node during development.
  */
 export function validateWsEndpoint(ep) {
   let url

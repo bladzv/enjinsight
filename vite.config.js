@@ -193,7 +193,7 @@ function createEtherscanDevDetailsPlugin(apiKey, alchemyRpcUrl) {
     try {
       payload = JSON.parse(rawBody.toString('utf8'))
     } catch (error) {
-      throw new Error('Invalid JSON-RPC body.')
+      throw new Error('Invalid JSON-RPC body.', { cause: error })
     }
 
     if (payload?.method !== 'eth_call') throw new Error('Only eth_call is allowed.')
@@ -433,7 +433,7 @@ export default defineConfig(({ mode }) => {
               const decoded = decodeURIComponent(encoded)
               const u = new URL(decoded)
               return u.pathname + u.search
-            } catch (e) {
+            } catch {
               return path
             }
           },

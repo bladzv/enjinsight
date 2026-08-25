@@ -87,6 +87,7 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
       <div
         className="absolute inset-0 bg-ink/80 backdrop-blur-sm"
         onClick={isFirstVisit ? undefined : onClose}
+        aria-hidden="true"
       />
 
       <div

@@ -62,7 +62,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
       <>
         <button
           type="button"
-          onClick={copyAddress}
+          onClick={event => { event.stopPropagation(); copyAddress() }}
           className="btn-icon"
           aria-label={`Copy stash address of ${displayName}`}
         >
@@ -73,6 +73,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
           target="_blank"
           rel="noopener noreferrer"
           className="btn-icon"
+          onClick={event => event.stopPropagation()}
           aria-label={`Open ${displayName} on Subscan`}
         >
           <ExternalLink size={14} />
@@ -93,7 +94,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
 
   return (
     <>
-      <article
+      <div
         role="button"
         tabIndex={0}
         onClick={() => setOpen(true)}
@@ -117,7 +118,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
             <p className="mt-0.5 break-all font-mono text-[10px] text-muted sm:text-[11px]">{stashAddress}</p>
           </div>
 
-          <div className="flex shrink-0 items-center gap-0.5" onClick={event => event.stopPropagation()}>
+          <div className="flex shrink-0 items-center gap-0.5">
             {renderActions()}
           </div>
         </div>
@@ -141,7 +142,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
           </div>
           <span className="mini-chip text-primary">View →</span>
         </div>
-      </article>
+      </div>
 
       <DetailModal
         open={open}
@@ -249,7 +250,7 @@ function TabButton({ active, onClick, icon, label, badge, badgeVariant }) {
         active ? 'bg-primary/15 text-primary-glow' : 'text-text-secondary hover:bg-surface-high'
       }`}
       style={active ? { boxShadow: 'inset 0 0 0 1px rgba(124, 58, 237, 0.35)', fontFamily: 'JetBrains Mono, ui-monospace, monospace' } : { fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}
-      aria-selected={active}
+      aria-pressed={active}
     >
       {icon}
       <span className="truncate">{label}</span>
