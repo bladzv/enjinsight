@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { STAGGER_MAX_ROWS } from '../constants.js'
 
 export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra }) {
   const [page, setPage] = useState(0)
@@ -27,6 +28,18 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
 
   const pages = Math.ceil(rows.length / pageSize)
   const pageItems = rows.slice(page * pageSize, (page + 1) * pageSize)
+
+  // Entrance animation is keyed on *data identity*, not on render: remounting
+  // via this key is what replays the CSS animation, and it changes only when
+  // the visible slice actually changes. Tying it to renders instead would
+  // restart every row on each unrelated state change.
+  const sliceKey = `${page}-${pageSize}`
+  // Past STAGGER_MAX_ROWS the per-row sequence stops being a reveal and starts
+  // being a wait, so fade the whole body as one element instead.
+  const stagger = pageItems.length <= STAGGER_MAX_ROWS
+  const rowClass = stagger ? 'row-stagger' : ''
+  const groupClass = stagger ? '' : 'rows-fade'
+  const rowStyle = i => (stagger ? { '--i': i } : undefined)
 
   return (
     <div>
@@ -66,16 +79,16 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
       </div>
 
       {/* Mobile: stacked cards */}
-      <div className="space-y-1.5 sm:hidden">
-        {pageItems.map(({ era, data, missed }) => missed ? (
-          <div key={`miss-${era}`} className="rounded-sm border border-danger/30 bg-danger/10 px-3 py-2">
+      <div key={sliceKey} className={`space-y-1.5 sm:hidden ${groupClass}`}>
+        {pageItems.map(({ era, data, missed }, i) => missed ? (
+          <div key={`miss-${era}`} style={rowStyle(i)} className={`rounded-sm border border-danger/30 bg-danger/10 px-3 py-2 ${rowClass}`}>
             <div className="flex items-center justify-between">
               <span className="font-mono text-sm font-bold text-danger">Era {era}</span>
               <span className="text-[11px] font-semibold uppercase tracking-wider text-danger">No data</span>
             </div>
           </div>
         ) : (
-          <div key={`era-${era}`} className="rounded-sm border border-[var(--hairline)] bg-card px-3 py-2">
+          <div key={`era-${era}`} style={rowStyle(i)} className={`rounded-sm border border-[var(--hairline)] bg-card px-3 py-2 ${rowClass}`}>
             <div className="flex items-center justify-between">
               <span className="font-mono text-sm font-bold text-text">Era {era}</span>
               <span className="font-mono text-[11px] text-text-secondary">RP {data?.rewardPoint?.toLocaleString() ?? '—'}</span>
@@ -101,17 +114,17 @@ export default function EraStatTable({ eraStat, missedEras, eraCount, latestEra 
               <th scope="col" className="sticky top-0 bg-surface-high text-right px-3 py-2.5 text-[10px] uppercase text-muted font-bold">Blocks Produced</th>
             </tr>
           </thead>
-          <tbody>
-            {pageItems.map(({ era, data, missed }) =>
+          <tbody key={sliceKey} className={groupClass}>
+            {pageItems.map(({ era, data, missed }, i) =>
               missed ? (
-                <tr key={`miss-${era}`} className="data-table-row-danger">
+                <tr key={`miss-${era}`} style={rowStyle(i)} className={`data-table-row-danger ${rowClass}`}>
                   <td className="px-3 py-2.5 font-mono text-danger font-semibold">{era}</td>
                   <td className="px-3 py-2.5 text-right text-danger" colSpan={4}>
                     <span>— No era stat recorded —</span>
                   </td>
                 </tr>
               ) : (
-                <tr key={`era-${era}`} className="data-table-row">
+                <tr key={`era-${era}`} style={rowStyle(i)} className={`data-table-row ${rowClass}`}>
                   <td className="px-3 py-2.5 font-mono text-text-secondary">{era}</td>
                   <td className="px-3 py-2.5 font-mono text-text-secondary text-right">
                     {data?.startBlock?.toLocaleString() ?? '—'}
