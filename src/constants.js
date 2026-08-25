@@ -116,6 +116,11 @@ export const BALANCE_FIELDS = [
   { key: 'feeFrozen',  label: 'Fee Frozen',  color: '#ff2d78', colorBg: 'rgba(255,45,120,.65)' },
 ]
 
+// ── Motion tuning (durations/easings live as --m-* tokens in index.css) ────
+// Only the thresholds JS has to decide on are here; everything else is CSS.
+export const STAGGER_MAX_ROWS = 25   // above this, fade a <tbody> as one element instead of per-row
+export const BULK_FLUSH_MAX   = 5    // log lines appended at once before the stream-in is skipped
+
 // ── Typical chain sizes (used for scan-time estimates in ControlPanel) ──────
 // Approximate counts for Enjin Relaychain at time of writing. Used only for
 // pre-scan time estimates; actual counts are determined during the scan itself.

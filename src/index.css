@@ -650,6 +650,44 @@
     animation: bulk-result-row-in var(--m-base) ease-out both;
   }
 
+  /* ── Table row stagger entrance ───────────────────────────────────────
+     Opacity only, no translate. A transform on a <tr> inside a
+     border-collapse table renders inconsistently across browsers and makes
+     the row a containing block, which would break the sticky <th> above it.
+     The fade alone still reads as a stagger, and it costs no layout.
+
+     Delay is capped in CSS at --m-stagger-cap steps (8 x 45ms = 360ms), so
+     the whole sequence lands inside ~580ms no matter how many rows are on
+     the page. Above STAGGER_MAX_ROWS the caller stops emitting per-row --i
+     entirely and fades the <tbody> as one element instead — see
+     EraStatTable.jsx. */
+  @keyframes row-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  .row-stagger {
+    animation: row-fade-in var(--m-base) var(--m-ease-out) both;
+    animation-delay: calc(min(var(--i, 0), var(--m-stagger-cap)) * var(--m-stagger));
+  }
+
+  .rows-fade {
+    animation: row-fade-in var(--m-base) var(--m-ease-out) both;
+  }
+
+  /* ── Terminal log — stream-in on the newest line ──────────────────────
+     Applied to a single row at a time (see TerminalLog.jsx), never to a
+     bulk flush. These are divs in a flex column, so unlike table rows they
+     can safely translate. */
+  @keyframes log-row-in {
+    from { opacity: 0; transform: translateY(var(--m-rise-sm)); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .log-row-in {
+    animation: log-row-in var(--m-fast) var(--m-ease-out) both;
+  }
+
   .data-toolbar {
     @apply mb-3 flex flex-wrap items-center justify-between gap-3 text-xs text-text-secondary;
     min-width: 0;
@@ -999,6 +1037,7 @@
 
   .toast-card {
     animation: toast-enter var(--m-base) var(--m-overshoot) both;
+    will-change: transform, opacity;
   }
 
   /* ── Landing tool card: hover lift + border glow ─────────────────────
@@ -1027,8 +1066,15 @@
     to   { opacity: 1; transform: scale(1); }
   }
 
+  /* will-change here and on .toast-card only. Both are mounted just for the
+     few hundred ms / few seconds they are actually on screen, so the promoted
+     layer is released on unmount. Deliberately NOT on table rows or metric
+     cards: promoting a 100-row page to 100 layers costs more GPU memory than
+     the animation saves, and BalanceTable already shares the page with a
+     Chart.js canvas. */
   .modal-panel {
     animation: modal-bloom var(--m-base) var(--m-overshoot) both;
+    will-change: transform, opacity;
   }
 
   /* ── Step/phase progress fill — transform instead of width ───────────
