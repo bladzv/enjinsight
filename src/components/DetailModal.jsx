@@ -47,7 +47,7 @@ export default function DetailModal({
       <div
         ref={panelRef}
         tabIndex={-1}
-        className={`relative z-10 flex max-h-[100dvh] w-full min-w-0 flex-col overflow-hidden rounded-sm bg-card shadow-[0_32px_80px_rgba(0,0,0,0.45)] sm:max-h-[calc(100dvh-3rem)] ${widthClass}`}
+        className={`modal-panel relative z-10 flex max-h-[100dvh] w-full min-w-0 flex-col overflow-hidden rounded-sm bg-card shadow-[0_32px_80px_rgba(0,0,0,0.45)] sm:max-h-[calc(100dvh-3rem)] ${widthClass}`}
         style={{ border: '1px solid var(--hairline)' }}
       >
         <div className="sticky top-0 z-10 flex min-w-0 items-start gap-3 border-b border-[var(--hairline)] bg-[var(--surface)] px-3 py-3 sm:px-6 sm:py-4">

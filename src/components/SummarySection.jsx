@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronUp, ExternalL
 import { ValidatorDetailsModal } from './ValidatorCard.jsx'
 import { findConsecutiveGroups, getSeverity } from '../utils/eraAnalysis.js'
 import { truncateAddress, validatorExplorerUrl } from '../utils/format.js'
+import { useCountUp } from '../hooks/useCountUp.js'
 
 export default function SummarySection({ validators, eraCount, latestEra, onRetry }) {
   const [showClean, setShowClean] = useState(false)
@@ -351,10 +352,17 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
 }
 
 function StatChip({ value, label, colour }) {
+  // Ticks up as more validators resolve mid-scan rather than jumping straight
+  // to the running total. aria-hidden + a stable sr-only sibling so a screen
+  // reader gets one final read, never the animated frames.
+  const animatedValue = useCountUp(value)
   return (
     <div className="metric-card">
       <span className="metric-label">{label}</span>
-      <div className={`metric-value ${colour}`}>{value}</div>
+      <div className={`metric-value ${colour}`}>
+        <span className="sr-only">{value}</span>
+        <span aria-hidden="true">{animatedValue}</span>
+      </div>
     </div>
   )
 }

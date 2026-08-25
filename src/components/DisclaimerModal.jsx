@@ -100,7 +100,7 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="relative z-10 flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl animate-fade-in flex-col overflow-hidden rounded-sm bg-surface shadow-float sm:max-h-[calc(100dvh-2rem)] sm:rounded-sm"
+        className="modal-panel relative z-10 flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-hidden rounded-sm bg-surface shadow-float sm:max-h-[calc(100dvh-2rem)] sm:rounded-sm"
         style={{ border: '1px solid rgba(70,71,82,0.14)' }}
       >
         {!isFirstVisit && (

@@ -2,11 +2,10 @@ import { useState } from 'react'
 import {
   Users,
   BarChart3,
-  Copy,
   ExternalLink,
-  CheckCircle2,
 } from 'lucide-react'
 import DetailModal from './DetailModal.jsx'
+import CopyButton from './CopyButton.jsx'
 import PoolValidatorsTable from './PoolValidatorsTable.jsx'
 import PoolRewardTable from './PoolRewardTable.jsx'
 import { formatENJ, poolExplorerUrl, poolLabel } from '../utils/format.js'
@@ -14,7 +13,6 @@ import { formatENJ, poolExplorerUrl, poolLabel } from '../utils/format.js'
 export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: controlledOpen, onOpenChange }) {
   const [internalOpen, setInternalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('rewards')
-  const [copied, setCopied] = useState(false)
 
   const {
     poolId, state: poolState, stashAddress,
@@ -47,27 +45,14 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
     else setInternalOpen(next)
   }
 
-  async function copyAddress() {
-    try {
-      await navigator.clipboard.writeText(stashAddress)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Clipboard access denied.
-    }
-  }
-
   function renderActions() {
     return (
       <>
-        <button
-          type="button"
-          onClick={event => { event.stopPropagation(); copyAddress() }}
-          className="btn-icon"
-          aria-label={`Copy stash address of ${displayName}`}
-        >
-          {copied ? <CheckCircle2 size={14} className="text-success" /> : <Copy size={14} />}
-        </button>
+        <CopyButton
+          value={stashAddress}
+          label={`Copy stash address of ${displayName}`}
+          onClick={event => event.stopPropagation()}
+        />
         <a
           href={poolExplorerUrl(poolId)}
           target="_blank"

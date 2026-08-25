@@ -31,7 +31,10 @@ export function useFocusTrap(containerRef, active) {
     const initial = focusables()[0] ?? container
     // Deferred one tick so the panel's own mount/paint has already happened —
     // focusing during the same synchronous pass can be a no-op in some browsers.
-    const raf = requestAnimationFrame(() => initial.focus())
+    // preventScroll matters once the panel has an entrance transform (see
+    // .modal-panel): focusing mid-animation would otherwise scroll the page
+    // to wherever the element's still-animating, not-yet-final rect sits.
+    const raf = requestAnimationFrame(() => initial.focus({ preventScroll: true }))
 
     function onKeyDown(event) {
       if (event.key !== 'Tab') return

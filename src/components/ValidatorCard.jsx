@@ -4,19 +4,17 @@ import {
   Clock,
   Users,
   BarChart3,
-  Copy,
   ExternalLink,
-  CheckCircle2,
   RefreshCw,
 } from 'lucide-react'
 import DetailModal from './DetailModal.jsx'
+import CopyButton from './CopyButton.jsx'
 import NominatorsTable from './NominatorsTable.jsx'
 import EraStatTable from './EraStatTable.jsx'
 import { formatENJ, truncateAddress, validatorExplorerUrl } from '../utils/format.js'
 
 export default function ValidatorCard({ validator, eraCount, latestEra, onRetry }) {
   const [open, setOpen] = useState(false)
-  const [copied, setCopied] = useState(false)
 
   const {
     address, display, commission, bondedTotal,
@@ -37,16 +35,6 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
         ? `${missedEras.length} missed era${missedEras.length !== 1 ? 's' : ''}`
         : 'No missed eras'
 
-  async function copyAddress() {
-    try {
-      await navigator.clipboard.writeText(address)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Clipboard access denied.
-    }
-  }
-
   function renderActions() {
     return (
       <>
@@ -60,14 +48,11 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
             <RefreshCw size={14} className="text-danger" />
           </button>
         )}
-        <button
-          type="button"
-          onClick={event => { event.stopPropagation(); copyAddress() }}
-          className="btn-icon"
-          aria-label={`Copy address of ${displayName}`}
-        >
-          {copied ? <CheckCircle2 size={14} className="text-success" /> : <Copy size={14} />}
-        </button>
+        <CopyButton
+          value={address}
+          label={`Copy address of ${displayName}`}
+          onClick={event => event.stopPropagation()}
+        />
         <a
           href={validatorExplorerUrl(address)}
           target="_blank"
@@ -159,7 +144,6 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
 
 export function ValidatorDetailsModal({ open, onClose, validator, eraCount, latestEra, onRetry }) {
   const [activeTab, setActiveTab] = useState('era')
-  const [copied, setCopied] = useState(false)
 
   if (!validator) return null
 
@@ -182,16 +166,6 @@ export function ValidatorDetailsModal({ open, onClose, validator, eraCount, late
         ? `${missedEras.length} missed era${missedEras.length !== 1 ? 's' : ''}`
         : 'No missed eras detected'
 
-  async function copyAddress() {
-    try {
-      await navigator.clipboard.writeText(address)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Clipboard access denied.
-    }
-  }
-
   function renderActions() {
     return (
       <>
@@ -205,14 +179,7 @@ export function ValidatorDetailsModal({ open, onClose, validator, eraCount, late
             <RefreshCw size={14} className="text-danger" />
           </button>
         )}
-        <button
-          type="button"
-          onClick={copyAddress}
-          className="btn-icon"
-          aria-label={`Copy address of ${displayName}`}
-        >
-          {copied ? <CheckCircle2 size={14} className="text-success" /> : <Copy size={14} />}
-        </button>
+        <CopyButton value={address} label={`Copy address of ${displayName}`} />
         <a
           href={validatorExplorerUrl(address)}
           target="_blank"

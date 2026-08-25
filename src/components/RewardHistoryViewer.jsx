@@ -1506,10 +1506,12 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                 <input type="text" value={address}
                   onChange={e => setAddress(e.target.value)}
                   placeholder="en…" disabled={isLoading}
-                  className={`mt-3 w-full input-field font-mono ${addrErr ? 'ring-1 ring-danger/60' : ''}`}
+                  className={`mt-3 w-full input-field font-mono ${addrErr ? 'error-shake ring-1 ring-danger/60' : ''}`}
+                  aria-invalid={!!addrErr}
+                  aria-describedby={addrErr ? 'rh-address-error' : undefined}
                   maxLength={60} />
                 {addrErr && (
-                  <p className="mt-2 flex items-center gap-1.5 text-xs leading-5 text-danger">
+                  <p id="rh-address-error" className="mt-2 flex items-center gap-1.5 text-xs leading-5 text-danger">
                     <AlertTriangle size={12} className="flex-shrink-0" />{addrErr}
                   </p>
                 )}
@@ -1719,10 +1721,12 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
               onChange={e => setAddress(e.target.value)}
               placeholder="en…"
               maxLength={60}
-              className={`mt-2 w-full input-field font-mono ${addrErr ? 'ring-1 ring-danger/60' : ''}`}
+              className={`mt-2 w-full input-field font-mono ${addrErr ? 'error-shake ring-1 ring-danger/60' : ''}`}
+              aria-invalid={!!addrErr}
+              aria-describedby={addrErr ? 'rh-address-error' : undefined}
             />
             {addrErr && (
-              <p className="mt-2 flex items-center gap-1.5 text-xs text-danger">
+              <p id="rh-address-error" className="mt-2 flex items-center gap-1.5 text-xs text-danger">
                 <AlertTriangle size={12} className="flex-shrink-0" />{addrErr}
               </p>
             )}

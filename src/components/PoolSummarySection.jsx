@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { findConsecutiveGroups, getSeverity } from '../utils/eraAnalysis.js'
 import { poolExplorerUrl, poolLabel } from '../utils/format.js'
+import { useCountUp } from '../hooks/useCountUp.js'
 
 const GAP_PAGE_SIZES = [5, 10, 20]
 export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
@@ -360,10 +361,14 @@ function hasNoNominatedValidators(pool) {
 }
 
 function StatChip({ value, label, colour }) {
+  const animatedValue = useCountUp(value)
   return (
     <div className="metric-card">
       <span className="metric-label">{label}</span>
-      <div className={`metric-value ${colour}`}>{value}</div>
+      <div className={`metric-value ${colour}`}>
+        <span className="sr-only">{value}</span>
+        <span aria-hidden="true">{animatedValue}</span>
+      </div>
     </div>
   )
 }

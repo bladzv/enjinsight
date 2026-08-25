@@ -1,4 +1,5 @@
-import { Check } from 'lucide-react'
+import SuccessCheck from './SuccessCheck.jsx'
+import { useCountUp } from '../hooks/useCountUp.js'
 
 function clampPercent(value) {
   return Math.max(0, Math.min(100, Math.round(value)))
@@ -47,6 +48,10 @@ function PhaseRing({ percent, phaseStatus }) {
   const circumference = 2 * Math.PI * radius
   const dashOffset = circumference - ((phaseStatus === 'completed' ? 100 : percent) / 100) * circumference
   const meta = getStatusMeta(phaseStatus)
+  // Animated for display only — aria-hidden, so it never gets announced
+  // frame-by-frame by the section's aria-live="polite". The sr-only sibling
+  // below carries the one, final, stable value a screen reader picks up.
+  const animatedPercent = useCountUp(percent)
 
   return (
     <div className="relative h-11 w-11 flex-shrink-0">
@@ -76,9 +81,14 @@ function PhaseRing({ percent, phaseStatus }) {
 
       <div className="absolute inset-0 flex items-center justify-center">
         {phaseStatus === 'completed' ? (
-          <Check size={14} className="text-success" />
+          <SuccessCheck size={14} className="text-success" />
         ) : phaseStatus === 'in_progress' ? (
-          <span className="font-mono text-[10px] font-semibold text-text">{percent}%</span>
+          <>
+            <span className="sr-only">{percent}%</span>
+            <span aria-hidden="true" className="font-mono text-[10px] font-semibold text-text">
+              {animatedPercent}%
+            </span>
+          </>
         ) : (
           <span className="text-xs leading-none text-text-secondary">…</span>
         )}
