@@ -363,14 +363,28 @@ export function useRewardHistory() {
   // Mirrors staking-rewards-rpc.py find_reinvested() via direct RPC event reads.
   async function findReinvestedViaRpc(eventApi, poolId, era, eventStart, eventEnd, signal) {
     let total = 0n
+    // A bare `catch { continue }` here hid systemic failures: if reading events
+    // broke for every block, the scan reported "no reward events found" and a
+    // total of 0 ENJ with no error anywhere. Track failures so a window that
+    // fails outright is raised instead of being reported as an empty result.
+    let attempted = 0
+    let failed = 0
+    let firstError = null
+
     for (let blk = eventStart; blk <= eventEnd; blk++) {
       if (signal?.aborted) throw new Error('Aborted')
 
       let events
+      attempted++
       try {
         const blockHash = await eventApi.rpc.chain.getBlockHash(blk)
-        events = await eventApi.query.system.events.at(blockHash)
-      } catch {
+        // `api.query.system.events.at(hash)` is the removed legacy form; the
+        // supported equivalent is a decorated API at that block.
+        const atBlock = await eventApi.at(blockHash)
+        events = await atBlock.query.system.events()
+      } catch (e) {
+        failed++
+        if (!firstError) firstError = e
         continue
       }
 
@@ -401,6 +415,14 @@ export function useRewardHistory() {
         }
       }
     }
+
+    // Every block in the window failed to read — that is an error, not a result.
+    if (attempted > 0 && failed === attempted) {
+      throw new Error(
+        `Could not read events for blocks ${eventStart}-${eventEnd} (${failed}/${attempted} failed): ${firstError?.message || 'unknown error'}`,
+      )
+    }
+
     return total
   }
 
@@ -915,6 +937,9 @@ export function useRewardHistory() {
       logPhase('rewards', 'INFO', `for ${eraPoolData.length} era+pool pair(s)`)
       const results = []
       const accumulatedByPool = {}
+      // Counts era+pool pairs whose reward events could not be read at all, so a
+      // partial scan cannot be mistaken for a complete one at the end.
+      let rewardFetchFailures = 0
 
       for (let i = 0; i < eraPoolData.length; i++) {
         if (signal.aborted) { dispatch({ type: 'STOP' }); return }
@@ -928,17 +953,27 @@ export function useRewardHistory() {
         // in the ~40 blocks after the era boundary. Checks EraRewardsProcessed first,
         // falls back to summing RewardPaid net of commission across all validators.
         let reinvested = 0n
+        let rewardFetchFailed = false
         try {
           reinvested = await findReinvestedViaRpc(
             eventApiHandle.api, pool.poolId, era, eventStart, eventEnd, signal,
           )
         } catch (e) {
           if (signal.aborted) { dispatch({ type: 'STOP' }); return }
+          rewardFetchFailed = true
+          rewardFetchFailures++
           logFn('WARN', `Era ${era} Pool #${pool.poolId}: reward fetch failed — ${e.message}`)
         }
 
         if (reinvested === 0n) {
-          logFn('INFO', `Era ${era} Pool #${pool.poolId}: no reward events found in blocks ${eventStart}-${eventEnd}.`)
+          // Distinguish "the chain reported no rewards" from "we could not read
+          // the chain". Both used to print the same reassuring message.
+          logFn(
+            rewardFetchFailed ? 'WARN' : 'INFO',
+            rewardFetchFailed
+              ? `Era ${era} Pool #${pool.poolId}: reward data unavailable for blocks ${eventStart}-${eventEnd} — this row is omitted, not zero.`
+              : `Era ${era} Pool #${pool.poolId}: no reward events found in blocks ${eventStart}-${eventEnd}.`,
+          )
           patchPhase('rewards', { completed: i + 1 })
           syncProgress()
           continue
@@ -1122,6 +1157,12 @@ export function useRewardHistory() {
 
       const total = results.reduce((s, r) => s + r.reward, 0n)
       logFn('OK', `─── Done. ${results.length} era+pool record(s). Grand total: ${fmtEnj(total)} ENJ ───`)
+      if (rewardFetchFailures > 0) {
+        logFn(
+          'WARN',
+          `${rewardFetchFailures} era+pool pair(s) could not be read and are missing from this total — it is a lower bound, not a complete figure.`,
+        )
+      }
       logFn('INFO', `${readSubscanRequestCount()} Subscan requests used this run.`)
       dispatch({ type: 'DONE', results })
 

@@ -23,10 +23,22 @@ export const toHex = b =>
     .map(x => x.toString(16).padStart(2, '0'))
     .join('')
 
-/** Convert a hex string (with or without 0x prefix) to a Uint8Array. */
+/**
+ * Convert a hex string (with or without 0x prefix) to a Uint8Array.
+ *
+ * Validates strictly. The previous version ran parseInt over arbitrary text, so
+ * `fromHex('zz')` produced NaN and stored it as 0, and an odd-length string
+ * silently dropped its trailing nibble — corrupt input became plausible-looking
+ * zero balances rather than an error.
+ */
 export const fromHex = h => {
-  const s = h.startsWith('0x') ? h.slice(2) : h
-  return new Uint8Array((s.match(/.{2}/g) || []).map(x => parseInt(x, 16)))
+  if (typeof h !== 'string') throw new Error('Hex value must be a string.')
+  const s = h.startsWith('0x') || h.startsWith('0X') ? h.slice(2) : h
+  if (s.length % 2 !== 0) throw new Error('Hex string has an odd number of digits.')
+  if (s.length && !/^[0-9a-fA-F]+$/.test(s)) throw new Error('Hex string contains non-hex characters.')
+  const out = new Uint8Array(s.length / 2)
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(s.substr(i * 2, 2), 16)
+  return out
 }
 
 /**
@@ -50,27 +62,69 @@ export function base58Decode(str) {
   return out
 }
 
+// SS58 checksum domain separator, per the Substrate address specification.
+const SS58_PREFIX_BYTES = new TextEncoder().encode('SS58PRE')
+
+/**
+ * Decode the network prefix from the leading SS58 bytes.
+ * Returns { prefix, length } where length is 1 or 2 bytes.
+ */
+function decodeSs58Prefix(d) {
+  if (d[0] < 64) return { prefix: d[0], length: 1 }
+  if (d[0] < 128) {
+    // Two-byte prefix: 6 low bits of byte0 and 2 high bits of byte1 form the
+    // lower byte; the remaining 6 bits of byte1 form the upper byte.
+    const lower = ((d[0] & 0b0011_1111) << 2) | (d[1] >> 6)
+    const upper = d[1] & 0b0011_1111
+    return { prefix: lower | (upper << 8), length: 2 }
+  }
+  throw new Error('Invalid SS58 address (unsupported network prefix).')
+}
+
 /**
  * Decode an SS58-encoded address to its raw 32-byte public key.
- * Validates address length and public key length. Throws on invalid input.
+ *
+ * Verifies the two-byte blake2b checksum. Without it, a single mistyped
+ * character usually still decoded to a structurally valid but *different*
+ * public key, so the app queried the wrong account and confidently reported a
+ * zero balance instead of rejecting the address.
+ *
+ * @param {string} addr              SS58 address
+ * @param {number|null} [expectedPrefix]  Network prefix to enforce, when known.
+ * @returns {Uint8Array} 32-byte public key
  */
-export function ss58Decode(addr) {
-  if (!addr || addr.length < 25 || addr.length > 50)
+export function ss58Decode(addr, expectedPrefix = null) {
+  if (!addr || typeof addr !== 'string' || addr.length < 25 || addr.length > 50)
     throw new Error('Address length out of range (expected 25–50 characters).')
+
   const d = base58Decode(addr)
-  const pfxLen = (d[0] & 0x40) !== 0 ? 2 : 1
-  const pub = d.slice(pfxLen, pfxLen + 32)
-  if (pub.length !== 32)
-    throw new Error('Invalid SS58 address (wrong public key length).')
-  return pub
+  const { prefix, length: pfxLen } = decodeSs58Prefix(d)
+
+  // Layout: prefix bytes | 32-byte public key | 2-byte checksum
+  if (d.length !== pfxLen + 32 + 2)
+    throw new Error('Invalid SS58 address (unexpected length).')
+
+  const body     = d.slice(0, pfxLen + 32)
+  const checksum = d.slice(pfxLen + 32)
+  const expected = blake2b(
+    new Uint8Array([...SS58_PREFIX_BYTES, ...body]),
+    { dkLen: 64 },
+  )
+  if (checksum[0] !== expected[0] || checksum[1] !== expected[1])
+    throw new Error('Invalid SS58 address (checksum mismatch — check for typos).')
+
+  if (expectedPrefix != null && prefix !== expectedPrefix)
+    throw new Error(`Address belongs to network prefix ${prefix}, but ${expectedPrefix} is selected.`)
+
+  return d.slice(pfxLen, pfxLen + 32)
 }
 
 /**
  * Build the full System.Account storage key for a given SS58 address.
  * Layout: SYS_ACCT_PREFIX + blake2b_128(pubkey) + pubkey (transparent hash)
  */
-export function buildStorageKey(addr) {
-  const pub = ss58Decode(addr)
+export function buildStorageKey(addr, expectedPrefix = null) {
+  const pub = ss58Decode(addr, expectedPrefix)
   const h16 = blake2b(pub, { dkLen: 16 })
   return '0x' + SYS_ACCT_PREFIX + toHex(h16) + toHex(pub)
 }
@@ -88,27 +142,38 @@ export function decodeAccountInfo(hex) {
   }
   const b = fromHex(hex)
   let o = 0
+  // Readers bounds-check before consuming. Without this a truncated storage
+  // value threw a raw `TypeError: Cannot convert undefined to a BigInt`, which
+  // callers reported as a generic network error — masking a decoder problem as
+  // a connectivity one.
+  const need = (n, what) => {
+    if (o + n > b.length) {
+      throw new Error(`Malformed AccountInfo: need ${n} bytes for ${what} at offset ${o}, have ${b.length - o}.`)
+    }
+  }
   // Little-endian u32 reader
-  const u32 = () => {
+  const u32 = (what = 'u32') => {
+    need(4, what)
     const v = (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0
     o += 4
     return v
   }
   // Little-endian u128 reader
-  const u128 = () => {
+  const u128 = (what = 'u128') => {
+    need(16, what)
     let v = 0n
     for (let i = 15; i >= 0; i--) v = (v << 8n) | BigInt(b[o + i])
     o += 16
     return v
   }
-  const nonce = u32()
-  u32() // consumers
-  u32() // sufficients
-  if (b.length >= 80) u32() // providers (new format has an extra u32)
-  const free     = u128()
-  const reserved = u128()
-  const field3   = u128()
-  const field4   = u128()
+  const nonce = u32('nonce')
+  u32('consumers')
+  u32('sufficients')
+  if (b.length >= 80) u32('providers') // new format has an extra u32
+  const free     = u128('free')
+  const reserved = u128('reserved')
+  const field3   = u128('field3')
+  const field4   = u128('field4')
   // The new format flags the field4 high bit to signal that field4 is NOT feeFrozen
   const newFormat = (field4 & IS_NEW_LOGIC_BIT) !== 0n
   return newFormat
@@ -337,12 +402,18 @@ export function decodeCompactFirst(hex) {
   const b = fromHex(hex)
   if (!b.length) return 0n
   const mode = b[0] & 0b11
+  // Each mode declares how many bytes follow; a truncated value must be an
+  // explicit error rather than a TypeError from reading past the end.
+  const need = n => {
+    if (b.length < n) throw new Error(`Malformed compact integer: mode ${mode} needs ${n} bytes, have ${b.length}.`)
+  }
   switch (mode) {
     case 0: return BigInt(b[0] >> 2)
-    case 1: return BigInt(((b[0] | (b[1] << 8)) >>> 0) >> 2)
-    case 2: return BigInt(((b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24)) >>> 0) >>> 2)
+    case 1: need(2); return BigInt(((b[0] | (b[1] << 8)) >>> 0) >> 2)
+    case 2: need(4); return BigInt(((b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24)) >>> 0) >>> 2)
     default: {  // big integer: header = (n-4)<<2|3, n bytes LE follow
       const n = (b[0] >> 2) + 4
+      need(n + 1)
       let v = 0n
       for (let i = n; i >= 1; i--) v = (v << 8n) | BigInt(b[i])
       return v
@@ -356,13 +427,22 @@ export function decodeCompactFirst(hex) {
  * Used to parse variable-offset fields such as StakingLedger.active.
  */
 export function decodeCompactAt(bytes, offset) {
+  if (offset < 0 || offset >= bytes.length) {
+    throw new Error(`Malformed compact integer: offset ${offset} is outside a ${bytes.length}-byte value.`)
+  }
   const mode = bytes[offset] & 0b11
+  const need = n => {
+    if (offset + n > bytes.length) {
+      throw new Error(`Malformed compact integer: mode ${mode} needs ${n} bytes at offset ${offset}, have ${bytes.length - offset}.`)
+    }
+  }
   switch (mode) {
     case 0: return { value: BigInt(bytes[offset] >> 2), nextOffset: offset + 1 }
-    case 1: return { value: BigInt(((bytes[offset] | (bytes[offset + 1] << 8)) >>> 0) >> 2), nextOffset: offset + 2 }
-    case 2: return { value: BigInt(((bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0) >>> 2), nextOffset: offset + 4 }
+    case 1: need(2); return { value: BigInt(((bytes[offset] | (bytes[offset + 1] << 8)) >>> 0) >> 2), nextOffset: offset + 2 }
+    case 2: need(4); return { value: BigInt(((bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0) >>> 2), nextOffset: offset + 4 }
     default: {  // big integer
       const n = (bytes[offset] >> 2) + 4
+      need(n + 1)
       let v = 0n
       for (let i = n; i >= 1; i--) v = (v << 8n) | BigInt(bytes[offset + i])
       return { value: v, nextOffset: offset + 1 + n }
@@ -402,9 +482,12 @@ export function buildStakingLedgerKey(accountIdHex) {
  */
 export function decodeStakingLedgerActive(hex) {
   if (!hex || hex === '0x' || hex === null) return 0n
-  const bytes = fromHex(hex)
-  if (bytes.length < 34) return 0n
   try {
+    // fromHex is inside the try so this function keeps its documented
+    // never-throws contract now that malformed hex is rejected rather than
+    // silently coerced to zero bytes.
+    const bytes = fromHex(hex)
+    if (bytes.length < 34) return 0n
     const { nextOffset } = decodeCompactAt(bytes, 32)  // skip stash (32), decode total
     const { value }      = decodeCompactAt(bytes, nextOffset)  // decode active
     return value

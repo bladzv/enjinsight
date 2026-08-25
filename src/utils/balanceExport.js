@@ -4,7 +4,8 @@
  * Security:
  * - Export filenames are sanitised (safeFilename) before use in download links.
  * - All import paths validate and sanitise field values before consuming them.
- * - AES-256-GCM with PBKDF2-SHA-256 (100,000 iterations) is used for encryption.
+ * - AES-256-GCM with PBKDF2-SHA-256 (600,000 iterations) is used for encryption.
+ *   Older files recording 100,000 iterations remain readable.
  * - No innerHTML — XML serialisation uses manual entity escaping.
  * - Blob URLs are revoked after 60 s to avoid memory leaks.
  */
@@ -38,13 +39,27 @@ export function fmtENJ(v) {
   return f.toLocaleString('en', { minimumFractionDigits: 4, maximumFractionDigits: 8 })
 }
 
-/** Safely parse a numeric-ish string into a BigInt. Returns 0n on failure. */
-export function parseBigInt(v) {
-  try {
-    return BigInt(String(v || 0).replace(/[^0-9]/g, '') || '0')
-  } catch {
-    return 0n
+/**
+ * Parse a non-negative integer string into a BigInt.
+ *
+ * Strict by design. The previous implementation stripped every non-digit, which
+ * silently changed the value rather than rejecting it: '-5' became 5n and
+ * '1.234' became 1234n, so importing a hand-edited or third-party file could
+ * inflate a decimal ENJ figure by a factor of 10^k with no warning.
+ *
+ * @param {*} v
+ * @param {{ field?: string }} [opts]  Field name, used in the error message.
+ * @returns {bigint}
+ * @throws {Error} when the value is not a non-negative integer.
+ */
+export function parseBigInt(v, { field = 'value' } = {}) {
+  if (v === null || v === undefined || v === '') return 0n
+  const s = String(v).trim()
+  if (s === '') return 0n
+  if (!/^\+?\d+$/.test(s)) {
+    throw new Error(`Invalid ${field}: "${s}" is not a non-negative integer (Planck units).`)
   }
+  return BigInt(s)
 }
 
 // ── Row normalisation ──────────────────────────────────────────────────────
@@ -119,15 +134,43 @@ export function toXML(data, rpcMeta) {
 
 // ── Import parsers ─────────────────────────────────────────────────────────
 
+/**
+ * Split a single CSV row into fields, honouring double-quoted values.
+ *
+ * The previous parser stripped every quote and *then* split on commas, so any
+ * quoted field containing a comma silently corrupted the whole row.
+ */
+function splitCsvRow(row) {
+  const out = []
+  let field = ''
+  let inQuotes = false
+  for (let i = 0; i < row.length; i++) {
+    const ch = row[i]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (row[i + 1] === '"') { field += '"'; i++ }   // escaped quote
+        else inQuotes = false
+      } else field += ch
+    } else if (ch === '"') {
+      inQuotes = true
+    } else if (ch === ',') {
+      out.push(field.trim())
+      field = ''
+    } else field += ch
+  }
+  out.push(field.trim())
+  return out
+}
+
 /** Normalise a raw data object from any import format into a typed record. */
 function normaliseRecord(d) {
   return {
     block:      Number(d.block),
     blockHash:  isValidBlockHash(String(d.blockHash || '')) ? String(d.blockHash) : '',
-    free:       parseBigInt(d.free),
-    reserved:   parseBigInt(d.reserved),
-    miscFrozen: parseBigInt(d.miscFrozen ?? d.misc_frozen ?? 0),
-    feeFrozen:  parseBigInt(d.feeFrozen ?? d.fee_frozen ?? 0),
+    free:       parseBigInt(d.free,       { field: 'free' }),
+    reserved:   parseBigInt(d.reserved,   { field: 'reserved' }),
+    miscFrozen: parseBigInt(d.miscFrozen ?? d.misc_frozen ?? 0, { field: 'miscFrozen' }),
+    feeFrozen:  parseBigInt(d.feeFrozen  ?? d.fee_frozen  ?? 0, { field: 'feeFrozen' }),
     nonce:      Number(d.nonce || 0),
     newFormat:  !!(d.newFormat),
   }
@@ -167,20 +210,45 @@ export function parseImport(text, ext) {
       if (adM) address  = adM[1].trim()
     })
 
-    const headers = dataLines[0].replace(/"/g, '').split(',')
+    const headers = splitCsvRow(dataLines[0])
     const idx = k => headers.indexOf(k)
-    const records = dataLines.slice(1).map(row => {
-      const c = row.replace(/"/g, '').split(',')
-      return normaliseRecord({
-        block:      c[idx('block')],
-        blockHash:  c[idx('blockHash')],
-        free:       c[idx('free')],
-        reserved:   c[idx('reserved')],
-        miscFrozen: c[idx('miscFrozen')] ?? c[idx('misc_frozen')],
-        feeFrozen:  c[idx('feeFrozen')]  ?? c[idx('fee_frozen')],
-        nonce:      c[idx('nonce')],
-        newFormat:  false,
-      })
+
+    // A missing column used to yield index -1, then undefined, then 0n — so a
+    // header mismatch produced N records of all-zero balances instead of an
+    // error. Require the columns we actually read.
+    const required = ['block', 'free', 'reserved']
+    const missing = required.filter(k => idx(k) === -1)
+    if (missing.length) {
+      throw new Error(
+        `CSV is missing required column(s): ${missing.join(', ')}. Found: ${headers.join(', ') || '(none)'}.`,
+      )
+    }
+
+    const pick = (c, ...keys) => {
+      for (const k of keys) {
+        const i = idx(k)
+        if (i !== -1 && c[i] !== undefined) return c[i]
+      }
+      return undefined
+    }
+
+    const records = dataLines.slice(1).map((row, i) => {
+      const c = splitCsvRow(row)
+      try {
+        return normaliseRecord({
+          block:      pick(c, 'block'),
+          blockHash:  pick(c, 'blockHash'),
+          free:       pick(c, 'free'),
+          reserved:   pick(c, 'reserved'),
+          miscFrozen: pick(c, 'miscFrozen', 'misc_frozen'),
+          feeFrozen:  pick(c, 'feeFrozen', 'fee_frozen'),
+          nonce:      pick(c, 'nonce'),
+          newFormat:  false,
+        })
+      } catch (e) {
+        // +2: one for the header row, one for 1-based line numbering.
+        throw new Error(`CSV row ${i + 2}: ${e.message}`)
+      }
     })
     return { records, rpcConfig: (endpoint || address) ? { endpoint, address } : null }
   }
@@ -227,48 +295,108 @@ export function downloadFile(content, filename, mime) {
 
 // ── AES-256-GCM encryption / decryption ───────────────────────────────────
 
+// OWASP's current floor for PBKDF2-HMAC-SHA256. Files written before this
+// change recorded their own count in the `kdf` field and are still readable.
+const PBKDF2_ITERATIONS = 600_000
+const LEGACY_PBKDF2_ITERATIONS = 100_000
+// Format version. v2 authenticates the header via AES-GCM additional data;
+// v1 (absent) did not, which left the `kdf` field decorative.
+const ENCRYPTED_FORMAT_VERSION = 2
+
 /**
- * Encrypt a UTF-8 string with AES-256-GCM (PBKDF2-SHA-256, 100k iterations).
- * Returns a JSON string containing the encrypted payload encoded as base64.
+ * Base64-encode bytes in chunks.
+ *
+ * `btoa(String.fromCharCode(...bytes))` throws RangeError once the spread
+ * exceeds the argument limit (~100k elements), so encryption used to fail on
+ * exactly the large exports that most warrant it — a 2,000-block export is
+ * roughly 500 KB.
  */
-export async function aesEncrypt(plain, password) {
-  const enc  = new TextEncoder()
-  const salt = crypto.getRandomValues(new Uint8Array(16))
-  const iv   = crypto.getRandomValues(new Uint8Array(12))
-  const km   = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey'])
-  const key  = await crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' },
+function bytesToBase64(bytes) {
+  const CHUNK = 0x8000
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK))
+  }
+  return btoa(binary)
+}
+
+function base64ToBytes(b64) {
+  const binary = atob(b64)
+  const out = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i)
+  return out
+}
+
+async function deriveAesKey(password, salt, iterations, usage) {
+  const km = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey'],
+  )
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
     km,
     { name: 'AES-GCM', length: 256 },
     false,
-    ['encrypt'],
+    [usage],
   )
-  const buf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plain))
+}
+
+/** Canonical additional-authenticated-data for a v2 payload header. */
+function headerAad(algorithm, kdf) {
+  return new TextEncoder().encode(`${algorithm}|${kdf}`)
+}
+
+/**
+ * Encrypt a UTF-8 string with AES-256-GCM (PBKDF2-SHA-256).
+ * Returns a JSON string containing the encrypted payload encoded as base64.
+ */
+export async function aesEncrypt(plain, password) {
+  if (!password) throw new Error('A password is required to encrypt.')
+  const salt = crypto.getRandomValues(new Uint8Array(16))
+  const iv   = crypto.getRandomValues(new Uint8Array(12))
+  const algorithm = 'AES-256-GCM'
+  const kdf = `PBKDF2-SHA256-${PBKDF2_ITERATIONS}`
+
+  const key = await deriveAesKey(password, salt, PBKDF2_ITERATIONS, 'encrypt')
+  const buf = await crypto.subtle.encrypt(
+    // Binding the header as AAD makes the recorded algorithm/kdf tamper-evident
+    // instead of decorative metadata.
+    { name: 'AES-GCM', iv, additionalData: headerAad(algorithm, kdf) },
+    key,
+    new TextEncoder().encode(plain),
+  )
+
   const out = new Uint8Array(salt.length + iv.length + buf.byteLength)
   out.set(salt, 0); out.set(iv, 16); out.set(new Uint8Array(buf), 28)
   return JSON.stringify({
-    encrypted: true, algorithm: 'AES-256-GCM', kdf: 'PBKDF2-SHA256-100000',
-    data: btoa(String.fromCharCode(...out)),
+    encrypted: true, v: ENCRYPTED_FORMAT_VERSION, algorithm, kdf,
+    data: bytesToBase64(out),
   }, null, 2)
 }
 
 /**
  * Decrypt an AES-256-GCM-encrypted JSON string.
+ * Reads v1 files (100k iterations, no AAD) as well as current v2 files.
  * Throws on wrong password or malformed payload.
  */
 export async function aesDecrypt(encJson, password) {
-  const obj = JSON.parse(encJson)
-  if (!obj.encrypted || !obj.data) throw new Error('Not a valid encrypted file.')
-  const raw  = Uint8Array.from(atob(obj.data), c => c.charCodeAt(0))
+  let obj
+  try { obj = JSON.parse(encJson) } catch { throw new Error('Not a valid encrypted file.') }
+  if (!obj?.encrypted || !obj?.data) throw new Error('Not a valid encrypted file.')
+
+  const raw = base64ToBytes(obj.data)
+  if (raw.length <= 28) throw new Error('Encrypted payload is truncated.')
   const salt = raw.slice(0, 16), iv = raw.slice(16, 28), ct = raw.slice(28)
-  const enc  = new TextEncoder()
-  const km   = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey'])
-  const key  = await crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' },
-    km,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['decrypt'],
-  )
-  return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct))
+
+  // Trust the file's own recorded iteration count so older exports still open.
+  const declared = /PBKDF2-SHA256-(\d+)/.exec(String(obj.kdf || ''))
+  const iterations = declared ? Number(declared[1]) : LEGACY_PBKDF2_ITERATIONS
+
+  const key = await deriveAesKey(password, salt, iterations, 'decrypt')
+  const params = { name: 'AES-GCM', iv }
+  // v1 payloads were encrypted without additional data.
+  if (Number(obj.v) >= 2) {
+    params.additionalData = headerAad(obj.algorithm || 'AES-256-GCM', obj.kdf || '')
+  }
+
+  return new TextDecoder().decode(await crypto.subtle.decrypt(params, key, ct))
 }
