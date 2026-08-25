@@ -65,6 +65,51 @@
     --theme-transition-ms: 620ms;
     --rail-w: 240px;
     --status-h: 44px;
+
+    /* ── Motion tokens ──────────────────────────────────────────────────
+       Every new motion rule reads one of these rather than a literal ms,
+       px, or cubic-bezier value. That is what lets the single reduced-
+       motion block below zero everything out in one place instead of
+       hunting down every animation individually. Theme-independent, so no
+       duplication needed under [data-theme='light']. */
+
+    /* durations — general scale for future motion work */
+    --m-instant: 90ms;
+    --m-fast: 160ms;
+    --m-base: 220ms;
+    --m-slow: 420ms;
+    --m-slower: 640ms;
+    --m-count: 1100ms;      /* rAF-driven count-up duration, read from JS */
+
+    /* durations — today's existing decorative animations, calibrated to
+       their current real values so introducing tokens changes nothing */
+    --m-shimmer-dur: 1.4s;   /* skeleton loading shimmer */
+    --m-heartbeat-dur: 2s;   /* era-explorer heartbeat pulse (one-shot) */
+    --m-glow-dur: 1.6s;      /* staking button hover glow (loop) */
+
+    /* easings */
+    --m-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --m-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --m-standard: cubic-bezier(0.2, 0, 0, 1);   /* today's rail-slide curve */
+
+    /* travel distances / magnitudes for future motion work */
+    --m-rise: 14px;
+    --m-rise-sm: 6px;
+    --m-slide: 24px;
+    --m-lift: -3px;
+    --m-scale-in: 0.96;
+    --m-scale-press: 0.97;
+    --m-shake: 6px;
+    --m-blur: 6px;
+
+    /* stagger — per-index delay unit, capped so a long list never takes
+       more than --m-stagger-cap steps to finish */
+    --m-stagger: 45ms;
+    --m-stagger-cap: 8;
+
+    /* generic loop control for future indeterminate-progress-style work */
+    --m-loop-iter: infinite;
+    --m-loop-dur: 1600ms;
   }
 
   :root[data-theme='light'] {
@@ -233,33 +278,6 @@
       box-shadow var(--theme-transition-ms) ease;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    body,
-    .app-shell,
-    .rail,
-    .rail-mobile-drawer,
-    .status-bar,
-    .card,
-    .observatory-panel,
-    .glass-panel,
-    .data-panel,
-    .inset-panel,
-    .page-hero,
-    .metric-card,
-    .data-table-wrap,
-    .chart-frame,
-    .range-params-card,
-    .btn-secondary,
-    .btn-ghost,
-    .btn-icon,
-    .input-field,
-    .select-field,
-    .select-compact,
-    .rail-item,
-    .rail-item-active {
-      transition: none;
-    }
-  }
 }
 
 @layer components {
@@ -308,7 +326,7 @@
     background: var(--surface);
     border-right: 1px solid var(--hairline);
     overflow-y: auto;
-    animation: slideInRail 220ms cubic-bezier(0.2, 0, 0, 1);
+    animation: slideInRail var(--m-base) var(--m-standard);
   }
 
   .terminal-sticky {
@@ -629,7 +647,7 @@
   }
 
   .bulk-result-row {
-    animation: bulk-result-row-in 220ms ease-out both;
+    animation: bulk-result-row-in var(--m-base) ease-out both;
   }
 
   .data-toolbar {
@@ -730,7 +748,7 @@
     inset: 0;
     transform: translateX(-100%);
     background: linear-gradient(90deg, transparent 0%, rgba(var(--skeleton-highlight-rgb), 0.28) 45%, transparent 100%);
-    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+    animation: skeleton-shimmer var(--m-shimmer-dur) ease-in-out infinite;
   }
 
   .skeleton-line {
@@ -751,13 +769,6 @@
 
   @keyframes skeleton-shimmer {
     to { transform: translateX(100%); }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .skeleton::after {
-      animation: none;
-      transform: translateX(0);
-    }
   }
 
   /* ── Heartbeat (Era Explorer EKG) ─────────────────────────────────── */
@@ -793,7 +804,7 @@
     opacity: 0;
     stroke-dasharray: 1000;
     stroke-dashoffset: 1000;
-    animation: heartbeat-burst 2s linear 1 both;
+    animation: heartbeat-burst var(--m-heartbeat-dur) linear 1 both;
     filter: drop-shadow(0 0 8px rgba(124, 58, 237, 0.40));
   }
 
@@ -856,7 +867,7 @@
   }
 
   .staking-scan-button:hover:not(:disabled) {
-    animation: staking-scan-hover-glow 1.6s ease-in-out infinite alternate;
+    animation: staking-scan-hover-glow var(--m-glow-dur) ease-in-out infinite alternate;
   }
 
   .btn-stop,
@@ -975,5 +986,64 @@
 
   .hairline {
     border: 1px solid var(--hairline);
+  }
+}
+
+/* =============================================================================
+   Reduced motion — single source of truth
+   Placed outside @layer so it wins on source order without needing
+   !important on the token half. Zeroing every --m-* token handles anything
+   built against them; the *,::before,::after backstop catches everything
+   else, including Tailwind's animate-* utilities, whose durations live in
+   tailwind.config.js and are otherwise unreachable from a media query here.
+   ============================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --m-instant: 0.01ms;
+    --m-fast: 0.01ms;
+    --m-base: 0.01ms;
+    --m-slow: 0.01ms;
+    --m-slower: 0.01ms;
+    --m-count: 0ms;
+    --m-shimmer-dur: 0.01ms;
+    --m-heartbeat-dur: 0.01ms;
+    --m-glow-dur: 0.01ms;
+    --m-ease-out: linear;
+    --m-overshoot: linear;
+    --m-standard: linear;
+    --m-rise: 0px;
+    --m-rise-sm: 0px;
+    --m-slide: 0px;
+    --m-lift: 0px;
+    --m-scale-in: 1;
+    --m-scale-press: 1;
+    --m-shake: 0px;
+    --m-blur: 0px;
+    --m-stagger: 0ms;
+    --m-stagger-cap: 0;
+    --m-loop-iter: 1;
+    --m-loop-dur: 0.01ms;
+  }
+
+  /* Backstop for anything not (yet) built on the tokens above: Tailwind's
+     animate-* utilities, third-party CSS, inline styles. 0.01ms rather than
+     a hard "none" so animationend/transitionend listeners still fire —
+     "none" would silently deadlock any exit-transition code waiting on one. */
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Escape hatch for a genuine "work is happening" indicator that must keep
+     moving even under reduced motion — slow and non-oscillating, and only
+     ever paired with a visible text label so the state isn't motion-only.
+     Not applied anywhere yet; available for deliberate future use. */
+  .motion-essential {
+    animation-duration: 2400ms !important;
+    animation-iteration-count: infinite !important;
   }
 }
