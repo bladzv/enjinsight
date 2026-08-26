@@ -5,6 +5,7 @@ import PhaseProgressCards from './PhaseProgressCards.jsx'
 import StepProgress from './StepProgress.jsx'
 import TerminalLog from './TerminalLog.jsx'
 import ToolInfoSection from './ToolInfoSection.jsx'
+import { derivePhases } from '../utils/infusionPhases.js'
 
 const CONTRACT_ADDRESS = '0xfaafdc07907ff5120a76b34b731b278c38d6043c'
 const ETHERSCAN_NFT_HOLDINGS_URL = import.meta.env.DEV
@@ -27,19 +28,6 @@ const BULK_SORT_LABELS = {
   amount: 'ENJ Infusion',
   raw: 'Raw ENJ Infusion',
 }
-const SINGLE_PROGRESS_PHASES = [
-  { key: 'input', label: 'Validate Token', total: 1, completed: 0, status: 'pending' },
-  { key: 'rpc', label: 'Read Contract', total: 1, completed: 0, status: 'pending' },
-  { key: 'decode', label: 'Decode Infusion', total: 1, completed: 0, status: 'pending' },
-]
-const BULK_PROGRESS_PHASES = [
-  { key: 'wallet', label: 'Step 0: Fetch Wallet Tokens', total: 1, completed: 0, status: 'pending' },
-  { key: 'infusions', label: 'Step 1: Read Infusion', total: 1, completed: 0, status: 'pending' },
-  { key: 'metadata', label: 'Step 2: Fetch Token Metadata', total: 1, completed: 0, status: 'pending' },
-  { key: 'review', label: 'Step 3: Review', total: 1, completed: 0, status: 'pending' },
-  { key: 'retries', label: 'Auto Retry Failed Reads', total: 0, completed: 0, status: 'pending' },
-]
-
 const RPC_ENDPOINTS = [
   ['Alchemy/Etherscan', ALCHEMY_ETH_CALL_URL],
   ['PublicNode', 'https://ethereum-rpc.publicnode.com'],
@@ -314,6 +302,10 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
   const [bulkTotal, setBulkTotal] = useState('-')
   const [rows, setRows] = useState([])
   const [bulkStarted, setBulkStarted] = useState(false)
+  // How the last run ended: { kind: 'empty'|'error'|'canceled'|'done', stage, message, mode }.
+  // Recorded explicitly because zero rows alone cannot distinguish "wallet holds
+  // nothing" from "the scan died before reading anything".
+  const [scanOutcome, setScanOutcome] = useState(null)
   const [bulkExpectedTotal, setBulkExpectedTotal] = useState(0)
   const [metadataProgress, setMetadataProgress] = useState({ total: 0, completed: 0 })
   const [retryProgress, setRetryProgress] = useState({ total: 0, completed: 0, active: false })
@@ -359,92 +351,27 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
   const resultAmount = mode === 'single' ? amount : bulkTotal
   const resultLabel = mode === 'single' ? 'Token Infusion' : 'Total Wallet Infusion'
   const singleStarted = mode === 'single' && (isLoading || amount !== '-' || rawValue !== 'Raw infusion value will appear here.')
-  const progressPhases = useMemo(() => {
-    if (mode === 'single') {
-      if (!singleStarted) return SINGLE_PROGRESS_PHASES
-      if (isLoading) {
-        return [
-          { ...SINGLE_PROGRESS_PHASES[0], completed: 1, status: 'completed' },
-          { ...SINGLE_PROGRESS_PHASES[1], completed: 0, status: 'in_progress' },
-          SINGLE_PROGRESS_PHASES[2],
-        ]
-      }
-      const succeeded = amount !== '-'
-      return [
-        { ...SINGLE_PROGRESS_PHASES[0], completed: 1, status: 'completed' },
-        { ...SINGLE_PROGRESS_PHASES[1], completed: succeeded ? 1 : 0, status: succeeded ? 'completed' : 'pending' },
-        { ...SINGLE_PROGRESS_PHASES[2], completed: succeeded ? 1 : 0, status: succeeded ? 'completed' : 'pending' },
-      ]
-    }
-
-    if (!bulkStarted) return BULK_PROGRESS_PHASES
-    const checked = rows.length
-    const total = Math.max(1, bulkExpectedTotal)
-    const metadataTotal = Math.max(1, metadataProgress.total || bulkExpectedTotal || 1)
-    const metadataDone = Math.min(metadataProgress.completed, metadataTotal)
-    const finished = bulkExpectedTotal > 0 && checked >= bulkExpectedTotal
-    const reviewDone = !isLoading && (rows.length > 0 || bulkExpectedTotal === 0)
-
-    const walletStatus = bulkExpectedTotal > 0
-      ? 'completed'
-      : isLoading
-        ? 'in_progress'
-        : 'pending'
-
-    const infusionStatus = finished
-      ? 'completed'
-      : checked > 0 || isLoading
-        ? 'in_progress'
-        : 'pending'
-
-    const metadataStatus = metadataDone >= metadataTotal && metadataProgress.total > 0
-      ? 'completed'
-      : metadataDone > 0
-        ? 'in_progress'
-        : 'pending'
-
-    const retryTotal = Math.max(0, retryProgress.total)
-    const retryDone = Math.min(retryProgress.completed, retryTotal)
-    const retryStatus = retryProgress.active
-      ? 'in_progress'
-      : retryTotal > 0 && retryDone >= retryTotal
-        ? 'completed'
-        : 'pending'
-
-    return [
-      { ...BULK_PROGRESS_PHASES[0], completed: bulkExpectedTotal > 0 ? 1 : 0, status: walletStatus },
-      {
-        ...BULK_PROGRESS_PHASES[1],
-        total,
-        completed: Math.min(checked, total),
-        status: infusionStatus,
-      },
-      {
-        ...BULK_PROGRESS_PHASES[2],
-        total: metadataTotal,
-        completed: metadataDone,
-        status: metadataStatus,
-      },
-      { ...BULK_PROGRESS_PHASES[3], completed: reviewDone ? 1 : 0, status: reviewDone ? 'completed' : 'pending' },
-      ...(retryTotal > 0 ? [{
-        ...BULK_PROGRESS_PHASES[4],
-        total: retryTotal,
-        completed: retryDone,
-        status: retryStatus,
-      }] : []),
-    ]
-  }, [
+  const progressPhases = useMemo(() => derivePhases({
+    mode,
+    outcome: scanOutcome,
+    isLoading,
+    singleStarted,
+    singleSucceeded: amount !== '-',
+    bulkStarted,
+    bulkExpectedTotal,
+    rowCount: rows.length,
+    metadataProgress,
+    retryProgress,
+  }), [
     amount,
     bulkExpectedTotal,
     bulkStarted,
     isLoading,
-    metadataProgress.completed,
-    metadataProgress.total,
+    metadataProgress,
     mode,
-    retryProgress.active,
-    retryProgress.completed,
-    retryProgress.total,
+    retryProgress,
     rows.length,
+    scanOutcome,
     singleStarted,
   ])
   const progressTitle = 'Scan Progress'
@@ -490,6 +417,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
     setRows([])
     setBulkStarted(false)
     setBulkExpectedTotal(0)
+    setScanOutcome(null)
     setMetadataProgress({ total: 0, completed: 0 })
     setRetryProgress({ total: 0, completed: 0, active: false })
     setInfusionPage(1)
@@ -588,9 +516,13 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
     event.preventDefault()
     const controller = createScanController()
     setInfusionSimpleRunning(true)
+    // Tracks which phase card owns a thrown error. Advanced as each stage clears.
+    let stage = 'input'
 
     try {
+      setScanOutcome(null)
       const parsedTokenId = validateTokenId(normalizeTokenId(tokenId))
+      stage = 'rpc'
       setIsLoading(true)
       setAmount('-')
       setRawValue('Waiting for contract response.')
@@ -603,18 +535,22 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
         if (event.phase === 'error') log('warn', `${event.label}: ${event.error}`)
       }, controller.signal)
 
+      stage = 'decode'
       setAmount(formatEnj(raw))
       setRawValue(`Raw fourth value: ${raw.toString()}`)
+      setScanOutcome({ kind: 'done', stage: 'decode', mode: 'single' })
       log('ok', `Infusion: ${formatEnj(raw)} (raw=${raw.toString()})`)
     } catch (error) {
       if (isAbortError(error)) {
         setAmount('-')
         setRawValue('Scan canceled by user.')
+        setScanOutcome({ kind: 'canceled', stage, mode: 'single' })
         log('warn', 'Single check canceled by user.')
         return
       }
       setAmount('-')
       setRawValue(error.message)
+      setScanOutcome({ kind: 'error', stage, message: error.message, mode: 'single' })
       log('err', `Single check failed: ${error.message}`)
     } finally {
       clearScanController(controller)
@@ -846,8 +782,11 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
     event.preventDefault()
     const controller = createScanController()
     setInfusionSimpleRunning(true)
+    // Tracks which phase card owns a thrown error. Advanced as each stage clears.
+    let stage = 'wallet'
 
     try {
+      setScanOutcome(null)
       const address = validateAddress(normalizeAddress(walletAddress))
       setIsLoading(true)
       setAmount('-')
@@ -876,12 +815,15 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
       }, controller.signal)
 
       if (!tokens.length) {
+        setBulkTotal(formatEnj(0n))
         setRawValue('No matching token IDs found.')
         setBulkStatus('No matching token IDs found.')
+        setScanOutcome({ kind: 'empty', stage: 'wallet', mode: 'wallet' })
         log('warn', 'No matching token IDs found.')
         return
       }
 
+      stage = 'infusions'
       setBulkExpectedTotal(tokens.length)
       setMetadataProgress({ total: tokens.length, completed: 0 })
       setRawValue(`Found ${tokens.length} token IDs. Reading infusion values.`)
@@ -894,6 +836,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
       setBulkStatus(`Read infusion values for ${tokens.length} token IDs. Fetching token metadata.`)
       log('info', `Read infusion values for ${tokens.length} token IDs. Fetching token metadata.`)
 
+      stage = 'metadata'
       await fetchBulkMetadata(tokens, controller.signal)
 
       setBulkStatus(
@@ -915,6 +858,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
             : `${failed} token read${failed === 1 ? '' : 's'} failed. See terminal log for provider details.`,
         )
       }
+      setScanOutcome({ kind: 'done', stage: 'review', mode: 'wallet' })
       const doneMsg = failed === 0
         ? `Done — total ${formatEnj(total)} across ${tokens.length} tokens.`
         : `Done — total ${formatEnj(total)} across ${tokens.length} tokens (${failed} failed).`
@@ -924,6 +868,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
         setAmount('-')
         setRawValue('Scan canceled by user.')
         setBulkStatus('Scan canceled by user.')
+        setScanOutcome({ kind: 'canceled', stage, mode: 'wallet' })
         log('warn', 'Bulk check canceled by user.')
         return
       }
@@ -931,8 +876,8 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
       setRawValue(error.message)
       setBulkTotal('-')
       setRows([])
-      setBulkExpectedTotal(0)
       setBulkStatus(error.message)
+      setScanOutcome({ kind: 'error', stage, message: error.message, mode: 'wallet' })
       setBulkFailureMessage('Bulk scan failed. See terminal log for details.')
       log('err', `Bulk check failed: ${error.message}`)
     } finally {
@@ -1333,7 +1278,15 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
                   <td colSpan={6} className="px-3 py-6 text-center text-sm text-text-secondary">
                     {rows.length > 0 && bulkSearch.trim()
                       ? 'No completed token reads match your search.'
-                      : isLoading ? 'Completed token reads will appear here.' : 'No wallet scan has been run.'}
+                      : isLoading
+                        ? 'Completed token reads will appear here.'
+                        : scanOutcome?.mode === 'wallet' && scanOutcome.kind === 'empty'
+                          ? 'This wallet holds no tokens from the infused ENJ contract.'
+                          : scanOutcome?.mode === 'wallet' && scanOutcome.kind === 'error'
+                            ? 'Scan failed. See terminal log for provider details.'
+                            : scanOutcome?.mode === 'wallet' && scanOutcome.kind === 'canceled'
+                              ? 'Scan canceled before any token reads completed.'
+                              : 'Completed token reads will appear here.'}
                   </td>
                 </tr>
               )}
