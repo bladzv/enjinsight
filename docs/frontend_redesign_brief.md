@@ -224,10 +224,10 @@ Scan all active validators **or** all nomination pools for missing reward payout
      - **Validators** (`Shield` icon) — "Scan active validators, nominators, and era reward gaps."
      - **Nomination Pools** (`Users` icon) — "Scan pool payouts, validator participation, and missed eras."
      - The active card has primary border + primary glow, plus a small "Selected" chip.
-   - **Cadence Controls** (`<ControlPanel>`):
-     - Title: "Cadence Controls", helper "Set how many recent eras to check."
-     - Helpful meta: "Range: 1–100 eras", "Approximate Length: 1 era ≈ 24h".
-     - A single **giant numeric input** (Space Grotesk 4xl) labelled "Scan Range (Eras)". Default `2`. Validation: integer 1–100. If > 30, show amber warning "Longer range selected. Expect a slower scan."
+   - **Scan Range** (`<ControlPanel>`):
+     - Title: "Scan Range", helper "Set how many recent eras to check."
+     - Helpful meta: "Range: 1–7", "~ 1 era ≈ 24h".
+     - A **stepper** (`<Stepper>`): −/+ buttons flanking a still-typeable numeric input (Space Grotesk 4xl, centered), no visible field label (the label is screen-reader-only). Default `2`. Validation: integer 1–7.
      - One large **action button** that morphs by status:
        - `idle` / `loading=false`: **Run Scan** (primary, glowing border, "staking-scan-button" hover animation).
        - `loading`: **Stop Scan** (danger, square icon).
@@ -907,7 +907,7 @@ A redesign is "complete" only when **all** of the following hold:
 - [ ] First-visit disclaimer fires on first load and cannot be dismissed before the 5-second countdown.
 - [ ] Era Explorer connects to live + archive nodes, shows all six metric cards, an EKG that pulses on every block, an era progress bar, a debug panel, and a Past Era Lookup with UTC/Local toggle.
 - [ ] Past-era lookup resolves via CSV → live RPC → binary search, in that order.
-- [ ] Staking page lets the user toggle Validators ↔ Pools, set a 1–100 era window, and run / stop / reset a scan whose 4–5 phases are all visualized in the Phase Progress card.
+- [ ] Staking page lets the user toggle Validators ↔ Pools, set a 1–7 era window, and run / stop / reset a scan whose 4–5 phases are all visualized in the Phase Progress card.
 - [ ] Validator and Pool grids paginate at 10 per page, each card opens a modal with two tabs and the right tables.
 - [ ] Severity badges follow the §8.8 thresholds; `≥ 3` consecutive misses raise a Critical Alert section.
 - [ ] Balance Viewer supports all five preset networks (with SS58 prefix validation), three range modes (Block / Era / Date — Date and Era only on relay & canary-relay), six date presets, decimated chart with five modes, sortable + paginated table, and JSON / CSV / XML export with optional AES-256-GCM encryption.
