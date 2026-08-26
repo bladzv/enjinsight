@@ -23,7 +23,7 @@ import PhaseProgressCards from './PhaseProgressCards.jsx'
 import StepProgress from './StepProgress.jsx'
 import TerminalLog from './TerminalLog.jsx'
 import ToolInfoSection from './ToolInfoSection.jsx'
-import { PLANCK_PER_ENJ, SUBSCAN_HISTORY_DAYS } from '../constants.js'
+import { PLANCK_PER_ENJ, SUBSCAN_HISTORY_DAYS, MAX_SCAN_DAYS, MAX_REWARD_ERA_SPAN } from '../constants.js'
 import { aesEncrypt, aesDecrypt, downloadFile, safeFilename } from '../utils/balanceExport.js'
 import { MAX_IMPORT_MB } from '../constants.js'
 
@@ -86,13 +86,15 @@ function findErasForDateRange(eraData, startDateStr, endDateStr) {
 
 function toDateInput(d) { return d.toISOString().slice(0, 10) }
 
-// Subscan's free-plan history window is the past 3 months, so presets beyond
-// that (6 months, 1 year) are dropped — they would return truncated or empty
-// results for the portion of the range Subscan no longer indexes.
+// Two separate ceilings applied here. Subscan's free-plan history window is the
+// past 3 months, which already ruled out 6-month/1-year presets. The binding
+// limit now is MAX_SCAN_DAYS: the reward sweep is (eras × pools) archive reads,
+// so a month-long range is minutes of querying. Presets that always error are
+// worse than no preset, so the list is capped rather than left to be rejected.
 const DATE_PRESETS = [
-  { label: '1 week',   days: 7   },
-  { label: '1 month',  days: 30  },
-  { label: '3 months', days: 90  },
+  { label: '1 day',  days: 1 },
+  { label: '3 days', days: 3 },
+  { label: '1 week', days: 7 },
 ]
 
 function estimateRewardEraSpan(rangeMode, startEra, endEra, startDate, endDate) {
@@ -1284,6 +1286,8 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
     if (startEra && cur && !isNaN(s) && s > cur) return `Era ${s} is in the future (current era: ${cur}).`
     if (endEra   && cur && !isNaN(e) && e > cur) return `Era ${e} is in the future (current era: ${cur}).`
     if (startEra && endEra && !isNaN(s) && !isNaN(e) && s > e) return 'Start era must be ≤ end era.'
+    if (startEra && endEra && !isNaN(s) && !isNaN(e) && (e - s + 1) > MAX_REWARD_ERA_SPAN)
+      return `Era span is limited to ${MAX_REWARD_ERA_SPAN} eras (requested ${e - s + 1}). Narrow the range and run again.`
     return ''
   })()
 
@@ -1293,6 +1297,11 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
     if (startDate && startDate > today) return 'Start date cannot be in the future.'
     if (endDate   && endDate   > today) return 'End date cannot be in the future.'
     if (startDate && endDate && startDate > endDate) return 'Start date must be ≤ end date.'
+    if (startDate && endDate) {
+      const spanDays = Math.round((new Date(endDate) - new Date(startDate)) / 86_400_000) + 1
+      if (spanDays > MAX_SCAN_DAYS)
+        return `Date range is limited to ${MAX_SCAN_DAYS} days (requested ${spanDays}). Narrow the range and run again.`
+    }
     return ''
   })()
   const estimatedEraSpan = estimateRewardEraSpan(rangeMode, startEra, endEra, startDate, endDate)
@@ -1621,7 +1630,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                 <div>
                   <span className="input-label">Quick Range</span>
                   <p className="mt-0.5 text-xs text-text-secondary">
-                    Subscan's free tier only indexes the past {SUBSCAN_HISTORY_DAYS} days.
+                    Scans are limited to {MAX_SCAN_DAYS} days per run. Subscan's free tier also only indexes the past {SUBSCAN_HISTORY_DAYS} days.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {DATE_PRESETS.map(({ label, days }) => (
@@ -1827,7 +1836,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
               <div>
                 <span className="input-label">Quick Range</span>
                 <p className="mt-0.5 text-xs text-text-secondary">
-                  Subscan's free tier only indexes the past {SUBSCAN_HISTORY_DAYS} days.
+                  Scans are limited to {MAX_SCAN_DAYS} days per run. Subscan's free tier also only indexes the past {SUBSCAN_HISTORY_DAYS} days.
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {DATE_PRESETS.map(({ label, days }) => (

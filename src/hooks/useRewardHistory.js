@@ -18,6 +18,8 @@ import {
   WS_CONNECT_TIMEOUT_MS,
   PLANCK_PER_ENJ,
   API_DELAY_MS,
+  MAX_REWARD_ERA_SPAN,
+  MAX_REWARD_RPC_CALLS,
 } from '../constants.js'
 import { WsProvider, ApiPromise } from '@polkadot/api'
 import { validateWsEndpoint, buildTokenAccountKey, buildTokenKey, decodeCompactFirst, buildBondedPoolsPrefix, poolIdFromBondedPoolsKey, computePoolBondedAccountId, buildStakingLedgerKey, decodeStakingLedgerActive } from '../utils/substrate.js'
@@ -504,6 +506,23 @@ export function useRewardHistory() {
     let endEra = endEraInput
     let eraRange = endEra - startEra + 1
 
+    // Hard span ceiling, enforced here as well as in the UI — the component's
+    // validation is advisory to any programmatic caller, and this tool had no
+    // cost ceiling of its own before. Refuse rather than silently truncate: a
+    // quietly shortened range would report rewards for eras the user did not
+    // ask about and omit ones they did.
+    if (!Number.isFinite(eraRange) || eraRange < 1) {
+      dispatch({ type: 'ERROR', msg: 'Start era must be ≤ end era.' })
+      return
+    }
+    if (eraRange > MAX_REWARD_ERA_SPAN) {
+      dispatch({
+        type: 'ERROR',
+        msg: `Era span is limited to ${MAX_REWARD_ERA_SPAN} eras (requested ${eraRange}). Narrow the range and run again.`,
+      })
+      return
+    }
+
     // Mutable phases array — avoids the functional-update anti-pattern with useReducer
     const phasesArr = [
       { key: 'csv',       label: 'Load Era Reference',       status: 'in_progress', total: 1, completed: 0 },
@@ -802,6 +821,22 @@ export function useRewardHistory() {
           patchPhase('history', { status: 'completed', completed: 1 })
         }
         syncProgress()
+      }
+
+      // ── Cost ceiling ──────────────────────────────────────────────────
+      // Pool membership is only known now, so this is the first point the real
+      // size of the sweep can be checked. Each era × pool costs two archive
+      // reads (member balance + pool supply) and can add an event scan on top,
+      // so the era-span cap alone does not bound it — a wallet in many pools
+      // multiplies out. Mirrors useBalanceExplorer's MAX_RPC_CALLS pre-flight.
+      const estimatedCalls = eraRange * memberPools.length * 2
+      if (estimatedCalls > MAX_REWARD_RPC_CALLS) {
+        logFn('ERR', `Estimated ${estimatedCalls.toLocaleString('en')} archive calls for ${eraRange} era(s) × ${memberPools.length} pool(s).`)
+        dispatch({
+          type: 'ERROR',
+          msg: `Query would need about ${estimatedCalls.toLocaleString('en')} archive calls (max ${MAX_REWARD_RPC_CALLS.toLocaleString('en')}) for ${eraRange} era(s) across ${memberPools.length} pool(s). Narrow the era range and run again.`,
+        })
+        return
       }
 
       patchPhase('balances', { status: 'in_progress', total: eraRange * memberPools.length })

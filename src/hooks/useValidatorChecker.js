@@ -5,7 +5,8 @@ import {
 } from '../utils/api.js'
 import { computeMissedEras, resolveLatestEra } from '../utils/eraAnalysis.js'
 import { nowHHMMSS, safeInt, parseCommission } from '../utils/format.js'
-import { API_DELAY_MS, MAX_RETRY_ATTEMPTS, DEFAULT_ERA_COUNT, VALIDATOR_ENDPOINTS_TO_PROBE, ENDPOINTS } from '../constants.js'
+import { API_DELAY_MS, MAX_RETRY_ATTEMPTS, DEFAULT_ERA_COUNT, MIN_ERA_COUNT, MAX_ERA_COUNT, VALIDATOR_ENDPOINTS_TO_PROBE, ENDPOINTS } from '../constants.js'
+import { clampInt } from '../utils/substrate.js'
 import { truncateAddress } from '../utils/format.js'
 import { enqueueRequest } from '../utils/api.js'
 
@@ -134,7 +135,12 @@ export function useValidatorChecker() {
     return false
   }, [])
 
-  const runCheck = useCallback(async (eraCount) => {
+  const runCheck = useCallback(async (requestedEraCount) => {
+    // Re-clamp here, not just in ControlPanel: the UI bound is advisory to any
+    // programmatic caller, and an unbounded eraCount walks Subscan pages until
+    // the request quota is gone.
+    // `|| DEFAULT_ERA_COUNT` keeps clampInt from throwing on a missing/NaN arg.
+    const eraCount = clampInt(Number(requestedEraCount) || DEFAULT_ERA_COUNT, MIN_ERA_COUNT, MAX_ERA_COUNT)
     // create a fresh controller for this run
     abortControllerRef.current = new AbortController()
     dispatch({ type: 'START' })
