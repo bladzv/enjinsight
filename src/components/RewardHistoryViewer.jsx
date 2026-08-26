@@ -1308,6 +1308,8 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
   const rhSimpleStep = (isLoading && rhSimpleRunning) ? 4
     : ((isDone || isStopped || isError) && rhSimpleRunning) ? 5
     : rhPage
+  // isStopped/isError also land on step 5 above, so only isDone earns the check.
+  const rhSimpleComplete = rhSimpleStep === RH_SIMPLE_STEPS.length && isDone
 
   useEffect(() => {
     onScanStateChange?.(isLoading)
@@ -1429,6 +1431,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
         <StepProgress
           steps={RH_SIMPLE_STEPS}
           currentStep={rhSimpleStep}
+          complete={rhSimpleComplete}
           onReset={rhSimpleStep > 1 ? () => { reset(); setImportedResults(null); setImportedAddress(''); setRhPage(1); setRhSimpleRunning(false); setSimpleInfoOpen(false) } : undefined}
           infoOpen={simpleInfoOpen}
           onInfoOpenChange={setSimpleInfoOpen}

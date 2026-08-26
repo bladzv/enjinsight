@@ -387,6 +387,8 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
   const balanceSimpleStep = (isLoading && balanceSimpleRunning) ? 3
     : ((status === STATUS.DONE || status === STATUS.CANCELLED || status === STATUS.ERROR) && balanceSimpleRunning) ? 4
     : balancePage
+  // CANCELLED/ERROR also land on step 4 above, so only DONE earns the check.
+  const balanceSimpleComplete = balanceSimpleStep === BALANCE_SIMPLE_STEPS.length && status === STATUS.DONE
   useEffect(() => {
     onScanStateChange?.(isLoading)
   }, [isLoading, onScanStateChange])
@@ -627,6 +629,7 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
         <StepProgress
           steps={BALANCE_SIMPLE_STEPS}
           currentStep={balanceSimpleStep}
+          complete={balanceSimpleComplete}
           onReset={balanceSimpleStep > 1 ? () => { reset(); setQueriedAddress(''); setBalancePage(1); setBalanceSimpleRunning(false); setSimpleInfoOpen(false) } : undefined}
           infoOpen={simpleInfoOpen}
           onInfoOpenChange={setSimpleInfoOpen}

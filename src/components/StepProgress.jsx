@@ -3,11 +3,35 @@ import { Info, RotateCcw } from 'lucide-react'
 import SuccessCheck from './SuccessCheck.jsx'
 
 /**
+ * Per-circle state for one step.
+ *
+ * `complete` is what distinguishes "finished the run" from "sitting on the
+ * last step": currentStep is clamped to steps.length by every caller, so
+ * `stepNum < currentStep` alone can never mark the final step done and a
+ * settled scan rendered its Results circle as a still-active number.
+ *
+ * Only a *successful* terminal state may set `complete` — a canceled or
+ * errored run must keep the final circle un-checked, the same honesty rule
+ * the phase cards follow (see utils/infusionPhases.js).
+ */
+export function getStepState({ index, currentStep, total, complete = false }) {
+  const stepNum = index + 1
+  const isLast = stepNum === total
+  return {
+    stepNum,
+    isDone: stepNum < currentStep || (complete && isLast),
+    isActive: stepNum === currentStep && !(complete && isLast),
+  }
+}
+
+/**
  * Horizontal step-progress bar.
  *
  * Props:
  *   steps       – [{key, label}]  numbered steps
  *   currentStep – 1-indexed active step number
+ *   complete    – true once the run has *successfully* finished; checks the
+ *                 final step instead of leaving it rendered as active
  *   onReset     – optional callback; renders a Reset button when provided
  *   infoContent – optional ReactNode; when provided renders a cyan (i) circle
  *                 as the zeroth item. Clicking it toggles an info panel below.
@@ -16,6 +40,7 @@ import SuccessCheck from './SuccessCheck.jsx'
 export default function StepProgress({
   steps,
   currentStep,
+  complete = false,
   onReset,
   infoContent,
   infoOpen: infoOpenProp,
@@ -38,9 +63,11 @@ export default function StepProgress({
   // Fill fraction:
   //   • Without info circle: (currentStep-1) / (total-1)   — 0 at step 1, 1 at last step
   //   • With    info circle: currentStep / total             — fills to each step's column
-  const progress = hasInfo
-    ? total > 0 ? Math.max(0, Math.min(1, currentStep / total)) : 1
-    : total > 1 ? Math.max(0, Math.min(1, (currentStep - 1) / (total - 1))) : 1
+  const progress = complete
+    ? 1
+    : hasInfo
+      ? total > 0 ? Math.max(0, Math.min(1, currentStep / total)) : 1
+      : total > 1 ? Math.max(0, Math.min(1, (currentStep - 1) / (total - 1))) : 1
 
   return (
     <div className={`space-y-3 ${className}`}>
@@ -86,9 +113,7 @@ export default function StepProgress({
 
             {/* ── Numbered steps ── */}
             {steps.map((step, index) => {
-              const stepNum  = index + 1
-              const isDone   = stepNum < currentStep
-              const isActive = stepNum === currentStep
+              const { stepNum, isDone, isActive } = getStepState({ index, currentStep, total, complete })
 
               return (
                 <div key={step.key} className="flex flex-col items-center gap-1.5">

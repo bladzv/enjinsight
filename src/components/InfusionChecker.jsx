@@ -406,6 +406,14 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
   const infusionSimpleStep = (isLoading && infusionSimpleRunning) ? 3
     : ((singleStarted || bulkStarted) && infusionSimpleRunning) ? 4
     : infusionPage
+  // 'empty' ran to the end and honestly reported nothing infused, so it counts
+  // as finished; 'canceled' and 'error' must leave Results un-checked. The
+  // mode guard mirrors derivePhases — a settled single-mode run must not mark
+  // the wallet stepper complete after a tab switch.
+  const infusionScanSucceeded = !!scanOutcome && scanOutcome.mode === mode
+    && (scanOutcome.kind === 'done' || scanOutcome.kind === 'empty')
+  const infusionSimpleComplete = infusionSimpleStep === INFUSION_SIMPLE_STEPS.length
+    && infusionSimpleRunning && !isLoading && infusionScanSucceeded
 
   function handleSimpleReset() {
     scanAbortRef.current?.abort()
@@ -912,6 +920,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
         <StepProgress
           steps={INFUSION_SIMPLE_STEPS}
           currentStep={infusionSimpleStep}
+          complete={infusionSimpleComplete}
           onReset={infusionSimpleStep > 1 ? handleSimpleReset : undefined}
           infoOpen={simpleInfoOpen}
           onInfoOpenChange={setSimpleInfoOpen}
