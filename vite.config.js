@@ -440,5 +440,24 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    test: {
+      // `indexer/*` are separate pnpm sub-projects with their own test runner
+      // (`node --test` + ts-node + tsconfig-paths). Their specs import via a `~/`
+      // alias that only tsconfig-paths resolves, so running them here fails every
+      // file with "Cannot find module '~/pallet/...'" — noise that buries real
+      // failures. Run them from their own package with `pnpm test` instead.
+      //
+      // Excluding (rather than restricting `include` to src/) deliberately keeps
+      // api/proxy-allowlist.test.js in the run — it is app code, just not under src/.
+      //
+      // The first two entries are vitest's own defaults, restated because setting
+      // `exclude` replaces them rather than appending.
+      exclude: [
+        '**/node_modules/**',
+        '**/.git/**',
+        '**/dist/**',
+        '**/indexer/**',
+      ],
+    },
   }
 })
