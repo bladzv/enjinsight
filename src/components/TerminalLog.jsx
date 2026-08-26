@@ -143,7 +143,7 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
         aria-controls="terminal-body"
         aria-label={expanded ? 'Collapse logs drawer' : 'Expand logs drawer'}
       >
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="flex h-7 w-7 items-center justify-center rounded-sm border border-border/40 bg-card text-primary">
             <Terminal size={13} />
           </div>
@@ -154,8 +154,8 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
             <span className={`h-1 w-1 rounded-full ${logs.length ? 'bg-success animate-pulse' : 'bg-muted'}`} />
           </div>
 
-          <div className="hidden min-w-0 items-center gap-2 lg:flex">
-            <span className="font-mono text-[11px] leading-4 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis max-w-[60ch]">
+          <div className="hidden min-w-0 flex-1 items-center gap-2 lg:flex">
+            <span className="min-w-0 flex-1 font-mono text-[11px] leading-4 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis">
               {lastLog
                 ? (
                   <>

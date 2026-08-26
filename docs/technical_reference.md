@@ -950,13 +950,14 @@ Set `SUBSCAN_API_KEY=<key>` in `.env` for Subscan API access.
 
 ### Vercel deployment
 
-**Required env vars:**
+**Proxy env vars:**
 
 | Variable | Purpose |
 |----------|---------|
 | `SUBSCAN_API_KEY` | Subscan API key (server-side only) |
 | `PROXY_ALLOWLIST` | Allowed proxy hostnames (default: `enjin.api.subscan.io`) |
-| `PROXY_SECRET` | Optional: validates `x-proxy-secret` header |
+| `ALLOWED_ORIGINS` | Optional, only for a custom domain: extra origins allowed to call the proxy cross-origin. Vercel URLs and localhost (outside production) are added automatically. An unlisted origin gets a hard 403 on every route. |
+| `PROXY_SECRET` | Optional, leave unset: if set, validates `x-proxy-secret` on every route, not just Subscan. No in-repo client sends this header, so setting it breaks the app. |
 
 **Serverless function:** `api/[...proxy].js` catches all `/api/*` requests.
 
