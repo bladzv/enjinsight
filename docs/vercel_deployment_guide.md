@@ -40,8 +40,8 @@ Set these in Vercel Project Settings -> Environment Variables:
   - Required for ENJ Infusion wallet/token detail discovery
 - `ALCHEMY_ETH_RPC_URL` (recommended)
   - Used for Ethereum RPC reads and wallet discovery fallback
-- `OPENSEA_API_KEY` (recommended)
-  - Used server-side for metadata fallback when token URI metadata is unavailable
+- `OPENSEA_API_KEY` (required for full token detail display)
+  - Primary server-side source for image/description/traits, and a fallback name source; on-chain `typeData` still resolves name/quantity without it, but images and descriptions stay blank
 
 ## OpenSea API Key
 

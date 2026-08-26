@@ -236,7 +236,7 @@ Do not prefix these values with `VITE_`; they must not be embedded into the brow
 | `SUBSCAN_API_KEY` | Staking cadence, reward-history Subscan calls | Injected server-side into Subscan requests. |
 | `ETHERSCAN_API_KEY` | ENJ Infusion wallet scan, token details, Etherscan RPC fallback | Used server-side for Etherscan V2 API calls. |
 | `ALCHEMY_ETH_RPC_URL` | Optional ENJ Infusion preferred RPC and wallet-scan fallback | Full HTTPS Alchemy Mainnet RPC URL, for example `https://eth-mainnet.g.alchemy.com/v2/<key>`. |
-| `OPENSEA_API_KEY` | ENJ Infusion metadata fallback when on-chain URI is empty/unreachable | Server-side OpenSea API key used only by `api/[...proxy].js`. |
+| `OPENSEA_API_KEY` | ENJ Infusion token details (name, image, description, traits) | Server-side OpenSea API key. OpenSea is the primary source for image/description/traits and a fallback name source (on-chain `typeData` is primary for name); used by both `api/[...proxy].js` (production) and the `npm run dev` middleware in `vite.config.js`. Without it, `npm run dev` still resolves names and quantities on-chain, but images/descriptions stay blank. |
 | `PROXY_ALLOWLIST` | Optional proxy hardening | Comma-separated allowed upstream hostnames for encoded Subscan proxy targets. Defaults to `enjin.api.subscan.io`. |
 | `ALLOWED_ORIGINS` | Optional, only for a custom domain | Comma-separated extra origins allowed to call the proxy cross-origin. The deployment's own Vercel URLs and localhost (outside production) are added automatically. An unlisted origin gets a hard 403 on every route. |
 | `PROXY_SECRET` | Optional proxy hardening | If set, every proxy request requires a matching `x-proxy-secret` header. Must be left unset for the browser app — it gates every route and no in-repo client sends the header. |
@@ -396,7 +396,7 @@ The app is deployed on Vercel as a static Vite build plus one serverless catch-a
 | `SUBSCAN_API_KEY` | Yes for staking and reward-history Subscan calls | Set in Vercel project environment variables |
 | `ETHERSCAN_API_KEY` | Yes for ENJ Infusion wallet scan/details and Etherscan RPC fallback | Set in Vercel project environment variables |
 | `ALCHEMY_ETH_RPC_URL` | Recommended for ENJ Infusion reliability and wallet fallback coverage | Full HTTPS Ethereum Mainnet Alchemy RPC URL |
-| `OPENSEA_API_KEY` | Recommended for ENJ Infusion metadata enrichment | Server-side only; used for metadata fallback when URI metadata is empty/unreachable |
+| `OPENSEA_API_KEY` | Required for ENJ Infusion image/description/traits | Server-side only; OpenSea is the primary source for those fields (name/quantity resolve on-chain regardless) |
 | `PROXY_ALLOWLIST` | Optional | Defaults to `enjin.api.subscan.io` |
 | `ALLOWED_ORIGINS` | Optional, only for a custom domain | Vercel URLs are added automatically; an unlisted origin gets a hard 403 |
 | `PROXY_SECRET` | Optional | Leave unset — gates every route, no in-repo client sends the header |

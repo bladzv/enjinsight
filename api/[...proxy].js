@@ -159,6 +159,11 @@ const ETHERSCAN_DETAIL_TTL_MS = 5 * 60 * 1000
 const ETHERSCAN_CONTRACT_TTL_MS = 24 * 60 * 60 * 1000
 const URI_SELECTOR = '0x0e89341c'
 const BALANCE_OF_SELECTOR = '0x00fdd58e'
+// typeData(uint256) — legacy Enjin ERC-1155 accessor. Its first return value is a
+// dynamic `string` (the type/token name) at the same head-word-0 offset layout as a
+// bare `uri()` return, so decodeAbiString() decodes it unchanged. Word[3] carries the
+// infusion value in wei; the client already reads that — this proxy only needs the name.
+const TYPE_DATA_SELECTOR = '0x4341963e'
 const ALCHEMY_TRANSFER_SELECTOR = 'alchemy_getAssetTransfers'
 
 // Etherscan and Alchemy are capped at 3 calls/sec per warm function instance.
@@ -321,6 +326,36 @@ function decodeUint256(hex) {
   return BigInt(hex).toString()
 }
 
+// ── Multi-source field merge ────────────────────────────────────────────────
+// Token details are assembled from up to four upstreams (on-chain eth_call,
+// on-chain typeData, Etherscan contract lookup, OpenSea) and none of them is
+// authoritative for every field. isEmptyValue/firstNonEmpty implement
+// "first non-empty value wins, walking sources in per-field priority order" —
+// an empty string/array/null/undefined is skipped rather than allowed to
+// overwrite a higher-priority source that already resolved the field.
+function isEmptyValue(value) {
+  if (value === null || value === undefined) return true
+  if (Array.isArray(value)) return value.length === 0
+  if (typeof value === 'string') return value === ''
+  return false
+}
+
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    if (!isEmptyValue(value)) return value
+  }
+  return values.length ? values[values.length - 1] : ''
+}
+
+// Like firstNonEmpty, but also reports which labeled source supplied the
+// winning value (or '' if every source was empty). Entries are [value, label].
+function pickSourced(...entries) {
+  for (const [value, source] of entries) {
+    if (!isEmptyValue(value)) return { value, source }
+  }
+  return { value: '', source: '' }
+}
+
 function normalizeMetadataUrl(uri, tokenId) {
   if (!uri) return ''
   const tokenHex = tokenId && /^\d+$/.test(String(tokenId))
@@ -422,14 +457,20 @@ async function fetchEtherscanApi(params, options = {}) {
   throw new Error('Etherscan API retries exhausted.')
 }
 
-function toTokenMetadata(owner, tokenId, tokenName, tokenSymbol, quantity, creator = '', source = 'etherscan-api-token1155tx') {
-  const label = tokenName || tokenSymbol
-
+// `tokenName`/`tokenSymbol` here are the ERC-1155 *contract's* name/symbol as
+// reported by Etherscan's token1155tx endpoint (e.g. "Enjin"), not per-token
+// metadata — Etherscan returns the same value for every token on this contract.
+// Synthesizing a per-token display name from them (the old
+// `"${label} #${tokenId}"` / `"Token ${id}"` behaviour) fabricated a string that
+// looked like real token metadata but wasn't. This is only the initial wallet-scan
+// row; proxyEnjTokenDetails fills in the real name (typeData/OpenSea) right after.
+export function toTokenMetadata(owner, tokenId, tokenName, tokenSymbol, quantity, creator = '', source = 'etherscan-api-token1155tx') {
   return {
     tokenId,
     metadata: {
       tokenId,
-      name: label ? `${label} #${tokenId}` : `Token ${tokenId.length > 12 ? `${tokenId.slice(0, 5)}...${tokenId.slice(-5)}` : tokenId}`,
+      name: '',
+      nameSource: '',
       previewImage: '',
       imageUrl: '',
       owner,
@@ -872,6 +913,83 @@ async function getContractCreator() {
   return _contractCreatorPromise
 }
 
+// ── Token-details merge ─────────────────────────────────────────────────────
+// Per-field authority, not per-vendor priority: each field is resolved by
+// whichever upstream actually owns it, walking sources in priority order and
+// skipping empty results (see isEmptyValue/firstNonEmpty above).
+//
+//   name          on-chain typeData -> OpenSea               (on-chain: deterministic,
+//                                                               never rate-limited, and
+//                                                               typeData is already
+//                                                               fetched for the infusion
+//                                                               value)
+//   quantity      on-chain balanceOf -> OpenSea owners[]      (on-chain: authoritative
+//                                                               balance; OpenSea's is an
+//                                                               indexer snapshot that can
+//                                                               lag a recent transfer)
+//   tokenStandard pinned 'ERC-1155'                           (OpenSea returns unhyphenated
+//                                                               'erc1155')
+//   previewImage/imageUrl/description/properties  OpenSea -> tokenURI JSON
+//                                                              (OpenSea-only fields; the
+//                                                               tokenURI JSON is a fallback
+//                                                               for contracts where uri()
+//                                                               is non-empty)
+//   tokenUri      on-chain uri() -> OpenSea metadata_url
+//   creator       Etherscan getcontractcreation -> OpenSea    (OpenSea returns '' for
+//                                                               creator on this contract in
+//                                                               practice)
+//
+// When typeData and OpenSea both resolve a name and disagree, that is reported via
+// `nameConflict` rather than silently resolved — a silent pick would hide a real
+// data-quality signal from anyone inspecting the response.
+export function mergeTokenDetails({
+  tokenId,
+  owner,
+  typeDataName = '',
+  onChainUri = '',
+  uriMetadata = {},
+  openSeaMetadata = {},
+  onChainQuantity = '',
+  contractCreator = '',
+}) {
+  const namePick = pickSourced([typeDataName, 'typedata'], [openSeaMetadata.name, 'opensea'])
+  const nameConflict = typeDataName && openSeaMetadata.name
+    && String(typeDataName).trim() !== String(openSeaMetadata.name).trim()
+    ? { typeData: typeDataName, openSea: openSeaMetadata.name }
+    : null
+
+  const previewImage = firstNonEmpty(openSeaMetadata.previewImage, uriMetadata.previewImage, '')
+  const imageUrl = firstNonEmpty(openSeaMetadata.imageUrl, uriMetadata.imageUrl, '')
+  const description = firstNonEmpty(openSeaMetadata.description, uriMetadata.description, '')
+  const properties = firstNonEmpty(openSeaMetadata.properties, uriMetadata.properties, [])
+  const quantity = firstNonEmpty(onChainQuantity, openSeaMetadata.quantity, '')
+  const creator = firstNonEmpty(contractCreator, openSeaMetadata.creator, '')
+  const tokenUri = firstNonEmpty(onChainUri, openSeaMetadata.tokenUri, '')
+
+  const metadataError = !namePick.value && !previewImage
+    ? (openSeaMetadata.metadataError || uriMetadata.metadataError || null)
+    : null
+
+  return {
+    tokenId,
+    owner,
+    contractAddress: ENJIN_CRYPTOITEMS_CONTRACT,
+    creator,
+    tokenStandard: 'ERC-1155',
+    quantity,
+    tokenUri,
+    name: namePick.value,
+    nameSource: namePick.source,
+    nameConflict,
+    previewImage,
+    imageUrl,
+    description,
+    properties,
+    source: openSeaMetadata.source || (onChainUri ? 'etherscan-api-eth-call' : 'etherscan-api-typedata'),
+    metadataError,
+  }
+}
+
 async function proxyEnjTokenDetails(req, res) {
   if (req.method !== 'GET') {
     res.statusCode = 405
@@ -905,43 +1023,31 @@ async function proxyEnjTokenDetails(req, res) {
 
   try {
     const encodedTokenId = encodeUint256(tokenId)
-    const [creatorResult, uriHex, quantityHex] = await Promise.all([
+    const [creatorResult, uriHex, quantityHex, typeDataHex] = await Promise.all([
       getContractCreator().catch(error => ({ creator: '', error: error.message })),
       etherscanEthCall(`${URI_SELECTOR}${encodedTokenId}`).catch(() => ''),
       etherscanEthCall(`${BALANCE_OF_SELECTOR}${encodeAddress(owner)}${encodedTokenId}`).catch(() => ''),
+      etherscanEthCall(`${TYPE_DATA_SELECTOR}${encodedTokenId}`).catch(() => ''),
     ])
     const uri = decodeAbiString(uriHex)
+    const typeDataName = decodeAbiString(typeDataHex)
     const uriMetadata = await fetchJsonMetadata(uri, tokenId).catch(error => ({ metadataError: error.message }))
-    const shouldTryOpenSea = !uri || !uriMetadata.name || uriMetadata.metadataError
-    const openSeaMetadata = shouldTryOpenSea
-      ? await fetchOpenSeaTokenMetadata(tokenId, owner).catch(error => ({ metadataError: error.message }))
-      : {}
+    // OpenSea is the sole source of image/description/traits and a fallback name
+    // source, so it is always queried. (The old `!uri || !uriMetadata.name || …`
+    // gate was already unconditionally true for this contract, since uri() always
+    // returns empty here — this just makes that explicit instead of accidental.)
+    const openSeaMetadata = await fetchOpenSeaTokenMetadata(tokenId, owner).catch(error => ({ metadataError: error.message }))
 
-    const metadata = {
-      ...uriMetadata,
-      ...openSeaMetadata,
-      name: openSeaMetadata.name || uriMetadata.name || '',
-      previewImage: openSeaMetadata.previewImage || uriMetadata.previewImage || '',
-      imageUrl: openSeaMetadata.imageUrl || uriMetadata.imageUrl || '',
-      description: openSeaMetadata.description || uriMetadata.description || '',
-      properties: openSeaMetadata.properties?.length ? openSeaMetadata.properties : (uriMetadata.properties || []),
-    }
-
-    const metadataError = !metadata.name && !metadata.previewImage
-      ? (openSeaMetadata.metadataError || uriMetadata.metadataError || null)
-      : null
-    const result = {
+    const result = mergeTokenDetails({
       tokenId,
       owner,
-      contractAddress: ENJIN_CRYPTOITEMS_CONTRACT,
-      creator: creatorResult.creator || openSeaMetadata.creator || '',
-      tokenStandard: openSeaMetadata.tokenStandard || 'ERC-1155',
-      quantity: decodeUint256(quantityHex) || openSeaMetadata.quantity || '',
-      tokenUri: openSeaMetadata.tokenUri || uri,
-      source: openSeaMetadata.source || 'etherscan-api-eth-call',
-      ...metadata,
-      metadataError,
-    }
+      typeDataName,
+      onChainUri: uri,
+      uriMetadata,
+      openSeaMetadata,
+      onChainQuantity: decodeUint256(quantityHex),
+      contractCreator: creatorResult.creator,
+    })
     const body = JSON.stringify(result)
 
     cacheSet(cacheKey, { body, status: 200, contentType: 'application/json; charset=utf-8' })
