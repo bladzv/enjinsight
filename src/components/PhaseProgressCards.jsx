@@ -135,15 +135,13 @@ function PhaseCard({ phase, index, indexLabel }) {
           <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-muted" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
             {indexLabel} {index}
           </p>
-          <h4 className="mt-0.5 line-clamp-2 text-xs font-semibold text-text sm:text-[13px]" title={phase?.label ?? 'Untitled Phase'}>{phase?.label ?? 'Untitled Phase'}</h4>
-          {detail && (
-            <span
-              className={`mt-1 line-clamp-2 block text-[10px] ${detailClass}`}
-              title={phase?.reason ? detail : undefined}
-            >
-              {detail}
-            </span>
-          )}
+          <h4 className="mt-0.5 line-clamp-2 min-h-[2lh] text-xs font-semibold text-text sm:text-[13px]" title={phase?.label ?? 'Untitled Phase'}>{phase?.label ?? 'Untitled Phase'}</h4>
+          <span
+            className={`mt-1 line-clamp-2 block min-h-[2lh] text-[10px] ${detail ? detailClass : ''}`}
+            title={phase?.reason ? detail : undefined}
+          >
+            {detail}
+          </span>
         </div>
       </div>
     </article>
@@ -153,6 +151,7 @@ function PhaseCard({ phase, index, indexLabel }) {
 export default function PhaseProgressCards({
   title,
   summary,
+  meta,
   phases = [],
   indexLabel = 'Phase',
   ariaLabel = 'Progress',
@@ -166,7 +165,12 @@ export default function PhaseProgressCards({
       aria-live="polite"
       aria-label={ariaLabel}
     >
-      <h3 className="font-headline text-lg font-bold text-text sm:text-xl">{title}</h3>
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="font-headline text-lg font-bold text-text sm:text-xl">{title}</h3>
+        {meta && (
+          <span className="mt-1 shrink-0 font-mono text-[11px] text-text-secondary">{meta}</span>
+        )}
+      </div>
       {summary && (
         <p className="mt-1 text-xs leading-snug text-text-secondary sm:text-sm">{summary}</p>
       )}
