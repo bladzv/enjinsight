@@ -866,9 +866,9 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
       log('info', `Bulk check: wallet=${address}`)
       log('info', `Filtered contract: ${CONTRACT_ADDRESS}`)
 
-      const openSeaQuery = new URL(ETHERSCAN_NFT_HOLDINGS_URL, window.location.origin)
-      openSeaQuery.searchParams.set('address', address)
-      log('info', `OpenSea query: ${openSeaQuery.pathname}?${openSeaQuery.searchParams.toString()}`)
+      const walletTokensQuery = new URL(ETHERSCAN_NFT_HOLDINGS_URL, window.location.origin)
+      walletTokensQuery.searchParams.set('address', address)
+      log('info', `Wallet tokens query: ${walletTokensQuery.pathname}?${walletTokensQuery.searchParams.toString()}`)
 
       const tokens = await fetchWalletTokens(address, status => {
         setBulkStatus(status)
