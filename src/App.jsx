@@ -311,6 +311,10 @@ export default function App() {
   const stakingSimpleStep = (status === 'loading' && stakingSimpleRunning) ? 3
     : ((status === 'done' || status === 'error' || status === 'stopped') && stakingSimpleRunning) ? 4
     : stakingPage
+  // The step above lands on 4 for 'error' and 'stopped' too, so completion has
+  // to be re-derived from the success status alone — a stopped scan sits on
+  // Results without having earned its check.
+  const stakingSimpleComplete = stakingSimpleStep === STAKING_SIMPLE_STEPS.length && status === 'done'
 
   // safeValidatorPage/safePoolPage already clamp on every render (see their
   // definitions above) — this used to also write the clamped value back into
@@ -427,6 +431,7 @@ export default function App() {
           <StepProgress
             steps={STAKING_SIMPLE_STEPS}
             currentStep={stakingSimpleStep}
+            complete={stakingSimpleComplete}
             onReset={stakingSimpleStep > 1 ? handleReset : undefined}
           />
         )}
