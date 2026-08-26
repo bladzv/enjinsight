@@ -25,6 +25,8 @@ The app is a static Vite frontend with a serverless proxy function at `api/[...p
 
 Set these in Vercel Project Settings -> Environment Variables:
 
+- `SUBSCAN_API_KEY`
+  - Required for staking cadence and reward-history Subscan calls
 - `PROXY_ALLOWLIST`
   - Comma-separated hostnames allowed through proxy
   - Recommended value: `enjin.api.subscan.io`
@@ -36,24 +38,12 @@ Set these in Vercel Project Settings -> Environment Variables:
   - Used for Ethereum RPC reads and wallet discovery fallback
 - `OPENSEA_API_KEY` (recommended)
   - Used server-side for metadata fallback when token URI metadata is unavailable
-- `OPENSEA_API_KEY_EXPIRES_AT` (optional)
-  - ISO-8601 timestamp for operations visibility
 
-## OpenSea Key Rotation (Every ~20 Days)
+## OpenSea API Key
 
-This repository includes a scheduled workflow at `.github/workflows/rotate-opensea-key.yml`.
-
-What it does:
-
-1. Calls OpenSea instant-key API (`POST /api/v2/auth/keys`)
-2. Parses `api_key` and `expires_at`
-3. Replaces `OPENSEA_API_KEY` and `OPENSEA_API_KEY_EXPIRES_AT` in Vercel production env
-
-GitHub Secrets required by the workflow:
-
-- `VERCEL_TOKEN`
-- `VERCEL_PROJECT_ID`
-- `VERCEL_TEAM_ID` (set when project is under a team)
+`OPENSEA_API_KEY` is a manually-issued key from OpenSea Settings -> Developer (email verification,
+an application form, and a reCAPTCHA are required). It does not expire and needs no rotation --
+set it once in Vercel Production and redeploy.
 
 Security note:
 

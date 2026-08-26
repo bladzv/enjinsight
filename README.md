@@ -237,7 +237,6 @@ Do not prefix these values with `VITE_`; they must not be embedded into the brow
 | `ETHERSCAN_API_KEY` | ENJ Infusion wallet scan, token details, Etherscan RPC fallback | Used server-side for Etherscan V2 API calls. |
 | `ALCHEMY_ETH_RPC_URL` | Optional ENJ Infusion preferred RPC and wallet-scan fallback | Full HTTPS Alchemy Mainnet RPC URL, for example `https://eth-mainnet.g.alchemy.com/v2/<key>`. |
 | `OPENSEA_API_KEY` | ENJ Infusion metadata fallback when on-chain URI is empty/unreachable | Server-side OpenSea API key used only by `api/[...proxy].js`. |
-| `OPENSEA_API_KEY_EXPIRES_AT` | Optional operations metadata | ISO-8601 timestamp used for ops visibility and rotation checks. |
 | `PROXY_ALLOWLIST` | Optional proxy hardening | Comma-separated allowed upstream hostnames for encoded Subscan proxy targets. Defaults to `enjin.api.subscan.io`. |
 | `PROXY_SECRET` | Optional proxy hardening | If set, encoded-target proxy calls require matching `x-proxy-secret`. Browser app flows generally leave this unset. |
 
@@ -397,7 +396,6 @@ The app is deployed on Vercel as a static Vite build plus one serverless catch-a
 | `ETHERSCAN_API_KEY` | Yes for ENJ Infusion wallet scan/details and Etherscan RPC fallback | Set in Vercel project environment variables |
 | `ALCHEMY_ETH_RPC_URL` | Recommended for ENJ Infusion reliability and wallet fallback coverage | Full HTTPS Ethereum Mainnet Alchemy RPC URL |
 | `OPENSEA_API_KEY` | Recommended for ENJ Infusion metadata enrichment | Server-side only; used for metadata fallback when URI metadata is empty/unreachable |
-| `OPENSEA_API_KEY_EXPIRES_AT` | Optional but recommended | Track key expiry for operations and scheduled rotation visibility |
 | `PROXY_ALLOWLIST` | Optional | Defaults to `enjin.api.subscan.io` |
 | `PROXY_SECRET` | Optional | Usually unset for the browser app |
 
