@@ -1,18 +1,16 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react'
 import { ChevronDown, ChevronUp, Square } from 'lucide-react'
 import { DEFAULT_ERA_COUNT } from './constants.js'
 import { useValidatorChecker } from './hooks/useValidatorChecker.js'
 import { usePoolChecker }      from './hooks/usePoolChecker.js'
 import { resolveLatestEra }    from './utils/eraAnalysis.js'
+import { useToast } from './hooks/useToast.jsx'
 
 import AppHeader           from './components/AppHeader.jsx'
 import StepProgress        from './components/StepProgress.jsx'
 import DisclaimerModal, { useFirstVisitDisclaimer } from './components/DisclaimerModal.jsx'
 import LandingPage         from './components/LandingPage.jsx'
-import BalanceExplorer     from './components/BalanceExplorer.jsx'
-import RewardHistoryViewer from './components/RewardHistoryViewer.jsx'
-import EraBlockExplorer    from './components/EraBlockExplorer.jsx'
-import InfusionChecker     from './components/InfusionChecker.jsx'
+import ErrorBoundary       from './components/ErrorBoundary.jsx'
 import ModeSelector        from './components/ModeSelector.jsx'
 import ControlPanel        from './components/ControlPanel.jsx'
 import ValidatorCard       from './components/ValidatorCard.jsx'
@@ -21,6 +19,20 @@ import TerminalLog         from './components/TerminalLog.jsx'
 import SummarySection      from './components/SummarySection.jsx'
 import PoolSummarySection  from './components/PoolSummarySection.jsx'
 import PhaseProgressCards  from './components/PhaseProgressCards.jsx'
+
+const BalanceExplorer     = lazy(() => import('./components/BalanceExplorer.jsx'))
+const RewardHistoryViewer = lazy(() => import('./components/RewardHistoryViewer.jsx'))
+const EraBlockExplorer    = lazy(() => import('./components/EraBlockExplorer.jsx'))
+const InfusionChecker     = lazy(() => import('./components/InfusionChecker.jsx'))
+
+/** Suspense fallback for a lazy-loaded tool view — mirrors the spinner used elsewhere. */
+function ViewLoadingFallback() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center">
+      <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+    </div>
+  )
+}
 
 const VALIDATOR_PREVIEW_PHASES = [
   { key: 'probe', label: 'Check API Endpoints', total: 1, completed: 0, status: 'pending' },
@@ -72,18 +84,39 @@ export default function App() {
   const [balanceScanActive, setBalanceScanActive] = useState(false)
   const [rewardScanActive, setRewardScanActive] = useState(false)
   const [infusionScanActive, setInfusionScanActive] = useState(false)
-  const [scanToastVisible, setScanToastVisible] = useState(false)
-  const scanToastTimerRef = useRef(null)
   const previousNavigationLockRef = useRef(false)
   const previousStakingStatusRef = useRef(null)
   const { show: showFirstVisit, accept: acceptFirstVisit } = useFirstVisitDisclaimer()
+  const toast = useToast()
 
-  // Sync URL hash when view changes
+  const showScanLockToast = useCallback(() => {
+    toast.push('Scan in progress.', {
+      detail: 'If you want to open another tool or page, stop the current scan first.',
+      key: 'scan-lock',
+    })
+  }, [toast])
+
+  // Sync URL hash when view changes. The very first sync (mount) uses
+  // replaceState so it doesn't stack an extra entry on top of whatever
+  // history entry actually loaded the page; every navigation after that uses
+  // pushState so Back/Forward move between tools. The previous code always
+  // used replaceState, so the history stack never grew at all — Back never
+  // moved between tools and instead left the site entirely on the first press.
+  const isFirstHashSyncRef = useRef(true)
+  const isPopStateRef = useRef(false)
   useEffect(() => {
-    window.history.replaceState(
-      null, '',
-      view === 'home' ? window.location.pathname : `#${view}`
-    )
+    const url = view === 'home' ? window.location.pathname : `#${view}`
+    if (isPopStateRef.current) {
+      // Already reflects a browser-driven Back/Forward; the browser moved the
+      // history pointer itself, so pushing again here would create a
+      // duplicate, incorrect entry.
+      isPopStateRef.current = false
+    } else if (isFirstHashSyncRef.current) {
+      isFirstHashSyncRef.current = false
+      window.history.replaceState({ view }, '', url)
+    } else {
+      window.history.pushState({ view }, '', url)
+    }
   }, [view])
 
   useEffect(() => {
@@ -98,7 +131,6 @@ export default function App() {
   // Validator hook
   const {
     status: vStatus, validators, logs: vLogs,
-    proxyUrl: vProxyUrl, setProxy: vSetProxy,
     runCheck: vRunCheck, stop: vStop, reset: vReset, retryValidator: vRetryValidator,
     progress: vProgress,
   } = useValidatorChecker()
@@ -106,7 +138,6 @@ export default function App() {
   // Pool hook
   const {
     status: pStatus, pools, logs: pLogs,
-    proxyUrl: pProxyUrl, setProxy: pSetProxy,
     runCheck: pRunCheck, stop: pStop, reset: pReset, retryPoolValidator: pRetryPoolValidator,
     latestEra: poolLatestEra,
     progress: pProgress,
@@ -116,7 +147,6 @@ export default function App() {
   const isValidatorMode = mode === 'validators'
   const status    = isValidatorMode ? vStatus   : pStatus
   const logs      = isValidatorMode ? vLogs     : pLogs
-  const proxyUrl  = isValidatorMode ? vProxyUrl : pProxyUrl
   const isLoading = status === 'loading'
   const isDone    = status === 'done'
   const activeProgress = isValidatorMode ? vProgress : pProgress
@@ -130,11 +160,6 @@ export default function App() {
 
   const allCompleted = phases.length > 0 && phases.every(p => p.status === 'completed')
   const completedPhaseCount = phases.filter(p => p.status === 'completed').length
-  const topLabel = allCompleted
-    ? 'Scan successful!'
-    : (status === 'stopped'
-      ? 'Scan stopped'
-      : (activePhase ? `Step ${phases.findIndex(p => p.key === activePhase.key) + 1}: ${activePhase.label}` : 'Scanning'))
   const progressMeta = activePhase && activePhase.total > 0
     ? `${activePhase.completed ?? 0} / ${activePhase.total} (${activePhasePct}%)`
     : `${completedPhaseCount} / ${phases.length} steps complete`
@@ -151,6 +176,43 @@ export default function App() {
 
   const validatorLatestEra = resolveLatestEra(validators)
   const isNavigationLocked = isLoading || balanceScanActive || rewardScanActive || infusionScanActive
+
+  // Browser Back/Forward. If a scan is in progress, cancel the navigation by
+  // re-pushing the current entry (there is no way to preventDefault a
+  // popstate) and show the same lock toast a blocked click gets.
+  useEffect(() => {
+    function onPopState() {
+      if (isNavigationLocked) {
+        showScanLockToast()
+        isPopStateRef.current = true
+        window.history.pushState(
+          { view },
+          '',
+          view === 'home' ? window.location.pathname : `#${view}`,
+        )
+        return
+      }
+      const hash = window.location.hash.slice(1)
+      const nextView = ['home', 'staking', 'balance', 'era', 'reward-history', 'infusion'].includes(hash) ? hash : 'home'
+      if (nextView === view) return
+      if (view === 'staking' && nextView !== 'staking') {
+        // Inlined rather than calling handleReset() directly: that function is
+        // redefined every render, which would force this effect to re-attach
+        // the popstate listener on every render too. vReset/pReset are already
+        // stable (useCallback inside their hooks), so depending on those plus
+        // the primitive isValidatorMode keeps this effect's identity stable.
+        if (isValidatorMode) vReset()
+        else pReset()
+        setStakingPage(1)
+        setStakingSimpleRunning(false)
+      }
+      isPopStateRef.current = true
+      setView(nextView)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [view, isNavigationLocked, isValidatorMode, vReset, pReset, showScanLockToast])
+
   const headerStatus = isNavigationLocked ? 'loading' : status
   const activeRecords = isValidatorMode ? validators : pools
   const validatorPages = Math.max(1, Math.ceil(validators.length / STAKING_RESULTS_PAGE_SIZE))
@@ -166,42 +228,12 @@ export default function App() {
     safePoolPage * STAKING_RESULTS_PAGE_SIZE,
   )
 
-  function showScanLockToast() {
-    window.clearTimeout(scanToastTimerRef.current)
-    setScanToastVisible(true)
-    scanToastTimerRef.current = window.setTimeout(() => {
-      setScanToastVisible(false)
-    }, 4200)
-  }
-
   useEffect(() => {
     if (isNavigationLocked && !previousNavigationLockRef.current) {
       showScanLockToast()
     }
     previousNavigationLockRef.current = isNavigationLocked
-  }, [isNavigationLocked])
-
-  useEffect(() => {
-    return () => {
-      window.clearTimeout(scanToastTimerRef.current)
-    }
-  }, [])
-
-  // Dynamically load Vercel Analytics React component if the package is installed.
-  const [AnalyticsComponent, setAnalyticsComponent] = useState(null)
-  useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      try {
-        const path = '@vercel/analytics/react'
-        const mod = await import(/* @vite-ignore */ path)
-        if (mounted && mod && mod.Analytics) setAnalyticsComponent(() => mod.Analytics)
-      } catch (err) {
-        // Package not installed or failed to load — skip analytics silently.
-      }
-    })()
-    return () => { mounted = false }
-  }, [])
+  }, [isNavigationLocked, showScanLockToast])
 
   async function handleRun(eraCount) {
     setLastEraCount(eraCount)
@@ -280,13 +312,11 @@ export default function App() {
     : ((status === 'done' || status === 'error' || status === 'stopped') && stakingSimpleRunning) ? 4
     : stakingPage
 
-  useEffect(() => {
-    if (safeValidatorPage !== validatorPage) setValidatorPage(safeValidatorPage)
-  }, [safeValidatorPage, validatorPage])
-
-  useEffect(() => {
-    if (safePoolPage !== poolPage) setPoolPage(safePoolPage)
-  }, [safePoolPage, poolPage])
+  // safeValidatorPage/safePoolPage already clamp on every render (see their
+  // definitions above) — this used to also write the clamped value back into
+  // validatorPage/poolPage state, which forced an extra render pass to do
+  // nothing render-visible; the clamp-on-read is sufficient on its own, the
+  // same pattern BalanceTable.jsx uses for its own page state.
 
   useEffect(() => {
     setSelectedPoolId(null)
@@ -307,6 +337,12 @@ export default function App() {
 
   return (
     <div className="app-shell relative min-h-dvh">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[200] focus:rounded-sm focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white focus:outline-none focus:ring-2 focus:ring-white/70"
+      >
+        Skip to main content
+      </a>
       <AppHeader
         status={headerStatus}
         view={view}
@@ -323,39 +359,57 @@ export default function App() {
       <div className="relative flex min-w-0 flex-col">
 
       {/* ── Era Block Explorer ────────────────────────────────────── */}
-      {view === 'era' && <EraBlockExplorer />}
+      {view === 'era' && (
+        <ErrorBoundary label="Era Explorer">
+          <Suspense fallback={<ViewLoadingFallback />}>
+            <EraBlockExplorer />
+          </Suspense>
+        </ErrorBoundary>
+      )}
 
       {/* ── Balance Viewer ──────────────────────────────────────────── */}
       {view === 'balance' && (
-        <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
-          <BalanceExplorer onScanStateChange={setBalanceScanActive} simpleMode={simpleMode} />
+        <main id="main-content" className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
+          <ErrorBoundary label="Balance Viewer">
+            <Suspense fallback={<ViewLoadingFallback />}>
+              <BalanceExplorer onScanStateChange={setBalanceScanActive} simpleMode={simpleMode} />
+            </Suspense>
+          </ErrorBoundary>
         </main>
       )}
 
       {/* ── Reward History Viewer ─────────────────────────────────────────── */}
       {view === 'reward-history' && (
-        <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
-          <RewardHistoryViewer onScanStateChange={setRewardScanActive} simpleMode={simpleMode} />
+        <main id="main-content" className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
+          <ErrorBoundary label="Reward History">
+            <Suspense fallback={<ViewLoadingFallback />}>
+              <RewardHistoryViewer onScanStateChange={setRewardScanActive} simpleMode={simpleMode} />
+            </Suspense>
+          </ErrorBoundary>
         </main>
       )}
 
       {/* ── ENJ Infusion Checker ─────────────────────────────────────────── */}
       {view === 'infusion' && (
-        <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
-          <InfusionChecker onScanStateChange={setInfusionScanActive} simpleMode={simpleMode} />
+        <main id="main-content" className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-5 sm:px-6 sm:py-6 pb-24 sm:pb-28">
+          <ErrorBoundary label="ENJ Infusion Checker">
+            <Suspense fallback={<ViewLoadingFallback />}>
+              <InfusionChecker onScanStateChange={setInfusionScanActive} simpleMode={simpleMode} />
+            </Suspense>
+          </ErrorBoundary>
         </main>
       )}
 
       {/* ── Home / Landing ──────────────────────────────────────────── */}
       {view === 'home' && (
-        <main className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-6 sm:px-6 sm:py-8 pb-16 sm:pb-20">
+        <main id="main-content" className="relative z-10 mx-auto w-full max-w-[100rem] px-4 py-6 sm:px-6 sm:py-8 pb-16 sm:pb-20">
           <LandingPage onNavigate={handleNavigate} />
         </main>
       )}
 
       {/* ── Staking view ────────────────────────────────────────────── */}
       {view === 'staking' && (
-      <main className="relative z-10 mx-auto w-full max-w-[100rem] space-y-4 px-3 py-4 pb-32 sm:px-6 sm:py-6 sm:space-y-5">
+      <main id="main-content" className="relative z-10 mx-auto w-full max-w-[100rem] space-y-4 px-3 py-4 pb-32 sm:px-6 sm:py-6 sm:space-y-5">
 
         <section className="page-hero">
           <div className="relative z-10 flex flex-col gap-2">
@@ -382,7 +436,6 @@ export default function App() {
           <div className="grid gap-3 sm:gap-4 xl:grid-cols-3 xl:items-stretch">
             <ModeSelector mode={mode} onModeChange={handleModeChange} disabled={isLoading} />
             <ControlPanel
-              mode={mode}
               status={status}
               onRun={handleRun}
               onStop={handleStop}
@@ -417,7 +470,6 @@ export default function App() {
         {simpleMode && stakingSimpleStep === 2 && (
           <div className="mx-auto w-full max-w-[360px] space-y-3">
             <ControlPanel
-              mode={mode}
               status={status}
               onRun={handleRun}
               onStop={handleStop}
@@ -591,15 +643,7 @@ export default function App() {
         <DisclaimerModal mode="about" onClose={() => setShowAbout(false)} />
       )}
 
-      {scanToastVisible && (
-        <div className="pointer-events-none fixed top-6 left-1/2 z-[120] w-[min(92vw,44rem)] -translate-x-1/2 rounded-sm border border-warning/40 bg-card/95 px-4 py-3 shadow-ambient backdrop-blur-sm">
-          <p className="text-sm font-medium text-warning">Scan in progress.</p>
-          <p className="text-xs text-text-secondary">If you want to open another tool or page, stop the current scan first.</p>
-        </div>
-      )}
 
-      {/* Vercel Analytics (lazy-loaded if dependency installed) */}
-      {AnalyticsComponent && <AnalyticsComponent />}
     </div>
   )
 }

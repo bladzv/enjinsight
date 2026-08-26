@@ -114,13 +114,19 @@ Reward events fire in the blocks *immediately after* the era boundary (i.e., aft
 
 Two event types are handled:
 
-**`NominationPools.EraRewardsProcessed`** (newer eras)  
+**`NominationPools.EraRewardsProcessed`** (pre-v1060 eras only — removed in v1060)  
 A single event per pool per era. Fields: `pool_id`, `era`, `reinvested`.  
-If present, `reinvested` is used directly.
+If present, `reinvested` is used directly — the chain already computed it net of commission.
 
-**`NominationPools.RewardPaid`** (legacy eras, including era 999–1001)  
+**`NominationPools.RewardPaid`** (v1060+ eras — the current and only path for recent history)  
 Fires once per nominated validator. Fields: `pool_id`, `era`, `validator_stash`, `reward`, `commission: { beneficiary, amount }`.  
-The tool sums `reward + commission.amount` across all matching events.
+The tool sums `max(reward − commission.amount, 0)` across all matching events.
+
+> `reward` is the **GROSS** amount, before commission is deducted. On chain the commission is
+> transferred out and only the remainder is bonded via `bond_extra`, so only `reward − commission`
+> compounds. This tool previously summed `reward + commission.amount`, overstating every figure by
+> `2 × commission` (~+15% at a 7% rate) — see
+> [`nomination_pool_reward_accounting_fix.md`](./nomination_pool_reward_accounting_fix.md).
 
 > **Important:** The `era` field in both event types equals the *actual* era number (no offset needed).
 
@@ -130,7 +136,8 @@ The tool sums `reward + commission.amount` across all matching events.
 reward = (member_points × reinvested) / total_pool_points
 ```
 
-This gives the member's proportional share of the ENJ that was reinvested into the pool during the era.
+This gives the member's proportional share of the ENJ that was reinvested into the pool during the
+era. `reinvested` must be net of commission for this to be correct.
 
 ### APY Estimate
 
@@ -164,6 +171,10 @@ Tested with eras 999–1001 on the Enjin Relaychain archive node:
 - Address is in 6 pools: **[14, 17, 18, 21, 23, 26]**
 - Pool 14 / Era 999: ~0.005908 ENJ (~75.83% APY)
 - Pool 14 / Era 1000: ~0.005580 ENJ (~70.42% APY)
+
+> ⚠️ **These figures predate the commission fix and are overstated.** They were produced when the
+> tool summed `reward + commission`. Current output for the same eras is lower by a factor of
+> `(1 + c) / (1 − c)` for each pool's commission rate `c`.
 
 ---
 

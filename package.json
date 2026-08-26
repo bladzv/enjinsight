@@ -12,27 +12,36 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest --passWithNoTests",
-    "lint": "echo 'no lint configured'"
+    "lint": "eslint . --max-warnings=0"
   },
   "dependencies": {
     "@noble/hashes": "^1.8.0",
     "@polkadot/api": "^16.5.6",
     "@polkadot/util-crypto": "^14.0.2",
     "chart.js": "^4.5.1",
-    "lucide-react": "^0.263.1",
+    "lucide-react": "^0.577.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.20",
     "eslint": "^10.0.1",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.11.0",
     "jsdom": "^28.1.0",
     "postcss": "^8.5.14",
     "tailwindcss": "^3.4.14",
     "vite": "^8.0.16",
     "vitest": "^4.1.0"
+  },
+  "overrides": {
+    "eslint-plugin-jsx-a11y": {
+      "eslint": "$eslint"
+    }
   }
 }

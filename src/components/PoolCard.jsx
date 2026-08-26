@@ -2,11 +2,10 @@ import { useState } from 'react'
 import {
   Users,
   BarChart3,
-  Copy,
   ExternalLink,
-  CheckCircle2,
 } from 'lucide-react'
 import DetailModal from './DetailModal.jsx'
+import CopyButton from './CopyButton.jsx'
 import PoolValidatorsTable from './PoolValidatorsTable.jsx'
 import PoolRewardTable from './PoolRewardTable.jsx'
 import { formatENJ, poolExplorerUrl, poolLabel } from '../utils/format.js'
@@ -14,7 +13,6 @@ import { formatENJ, poolExplorerUrl, poolLabel } from '../utils/format.js'
 export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: controlledOpen, onOpenChange }) {
   const [internalOpen, setInternalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('rewards')
-  const [copied, setCopied] = useState(false)
 
   const {
     poolId, state: poolState, stashAddress,
@@ -47,32 +45,20 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
     else setInternalOpen(next)
   }
 
-  async function copyAddress() {
-    try {
-      await navigator.clipboard.writeText(stashAddress)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Clipboard access denied.
-    }
-  }
-
   function renderActions() {
     return (
       <>
-        <button
-          type="button"
-          onClick={copyAddress}
-          className="btn-icon"
-          aria-label={`Copy stash address of ${displayName}`}
-        >
-          {copied ? <CheckCircle2 size={14} className="text-success" /> : <Copy size={14} />}
-        </button>
+        <CopyButton
+          value={stashAddress}
+          label={`Copy stash address of ${displayName}`}
+          onClick={event => event.stopPropagation()}
+        />
         <a
           href={poolExplorerUrl(poolId)}
           target="_blank"
           rel="noopener noreferrer"
           className="btn-icon"
+          onClick={event => event.stopPropagation()}
           aria-label={`Open ${displayName} on Subscan`}
         >
           <ExternalLink size={14} />
@@ -93,7 +79,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
 
   return (
     <>
-      <article
+      <div
         role="button"
         tabIndex={0}
         onClick={() => setOpen(true)}
@@ -117,7 +103,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
             <p className="mt-0.5 break-all font-mono text-[10px] text-muted sm:text-[11px]">{stashAddress}</p>
           </div>
 
-          <div className="flex shrink-0 items-center gap-0.5" onClick={event => event.stopPropagation()}>
+          <div className="flex shrink-0 items-center gap-0.5">
             {renderActions()}
           </div>
         </div>
@@ -141,7 +127,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
           </div>
           <span className="mini-chip text-primary">View →</span>
         </div>
-      </article>
+      </div>
 
       <DetailModal
         open={open}
@@ -249,7 +235,7 @@ function TabButton({ active, onClick, icon, label, badge, badgeVariant }) {
         active ? 'bg-primary/15 text-primary-glow' : 'text-text-secondary hover:bg-surface-high'
       }`}
       style={active ? { boxShadow: 'inset 0 0 0 1px rgba(124, 58, 237, 0.35)', fontFamily: 'JetBrains Mono, ui-monospace, monospace' } : { fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}
-      aria-selected={active}
+      aria-pressed={active}
     >
       {icon}
       <span className="truncate">{label}</span>

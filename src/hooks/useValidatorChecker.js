@@ -1,6 +1,7 @@
-import { useReducer, useCallback, useRef } from 'react'
+import { useReducer, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   fetchValidators, fetchNominators, fetchEraStat, probeEndpoint, delay,
+  resetSubscanRequestCount, readSubscanRequestCount,
 } from '../utils/api.js'
 import { computeMissedEras, resolveLatestEra } from '../utils/eraAnalysis.js'
 import { nowHHMMSS, safeInt, parseCommission } from '../utils/format.js'
@@ -111,6 +112,13 @@ export function useValidatorChecker() {
   // Hold an AbortController to cancel in-flight requests when user resets
   const abortControllerRef = useRef(null)
 
+  // Abort any in-flight scan on unmount. Without this, navigating away mid-scan
+  // left the request chain running and dispatching into a dead reducer.
+  useEffect(() => () => {
+    try { abortControllerRef.current?.abort() } catch { /* noop */ }
+    abortControllerRef.current = null
+  }, [])
+
   const log = useCallback((level, message) => {
     dispatch({ type: 'LOG', level, message })
   }, [])
@@ -130,6 +138,7 @@ export function useValidatorChecker() {
     // create a fresh controller for this run
     abortControllerRef.current = new AbortController()
     dispatch({ type: 'START' })
+    resetSubscanRequestCount()
     const proxy = state.proxyUrl
     const signal = abortControllerRef.current.signal
     const phases = [
@@ -176,7 +185,7 @@ export function useValidatorChecker() {
     let rawValidators
     try {
       rawValidators = await fetchValidators(proxy, signal)
-    } catch (err) {
+    } catch {
       if (signal.aborted) return
       // Generic user-facing error (avoid exposing upstream details)
       log('ERR', 'Failed to fetch validators — please check your network or proxy and retry.')
@@ -324,19 +333,19 @@ export function useValidatorChecker() {
 
     phases[3] = { ...phases[3], status: 'completed' }
     syncProgress()
-    log('DONE', 'All data loaded. Summary generated below.')
+    log('DONE', `All data loaded. Summary generated below. (${readSubscanRequestCount()} Subscan requests used this run.)`)
     dispatch({ type: 'DONE' })
   }, [state.proxyUrl, log])
 
   const reset = useCallback(() => {
     // cancel in-flight requests
-    try { abortControllerRef.current?.abort() } catch (e) { /* noop */ }
+    try { abortControllerRef.current?.abort() } catch { /* noop */ }
     abortControllerRef.current = null
     dispatch({ type: 'RESET' })
   }, [])
 
   const stop = useCallback(() => {
-    try { abortControllerRef.current?.abort() } catch (e) { /* noop */ }
+    try { abortControllerRef.current?.abort() } catch { /* noop */ }
     abortControllerRef.current = null
     dispatch({ type: 'STOP' })
     log('WARN', 'Scan stopped by user.')
@@ -395,10 +404,14 @@ export function useValidatorChecker() {
     }
   }, [state.proxyUrl, log])
 
-  // Derive latestEra and missedEras after loading
-  const enrichedValidators = state.status === 'done' || state.status === 'loading'
-    ? enrichValidators(state.validators)
-    : state.validators
+  // Derive latestEra and missedEras after loading. Previously recomputed on
+  // every render of this hook's consumer — including every appended log line —
+  // regardless of whether state.validators had actually changed.
+  const enrichedValidators = useMemo(() => (
+    state.status === 'done' || state.status === 'loading'
+      ? enrichValidators(state.validators)
+      : state.validators
+  ), [state.status, state.validators])
 
   return {
     ...state,
@@ -416,12 +429,14 @@ function enrichValidators(validators) {
   if (!validators.length) return validators
   const latestEra = resolveLatestEra(validators)
   if (!latestEra) return validators
+  // Hoisted out of the per-validator map below: this value does not depend on
+  // which validator is being enriched, so it was previously recomputed once
+  // per validator instead of once per call — O(n^2) for no reason.
+  const eraCount = Math.max(...validators
+    .filter(x => x.eraStat?.length)
+    .map(x => x.eraStat.length), 1)
   return validators.map(v => {
     if (!Array.isArray(v.eraStat) || !v.eraStat.length) return v
-    // Use the max era across all validators as the reference point
-    const eraCount = Math.max(...validators
-      .filter(x => x.eraStat?.length)
-      .map(x => x.eraStat.length), 1)
     const missedEras = computeMissedEras(v.eraStat, latestEra, eraCount)
     return { ...v, missedEras }
   })

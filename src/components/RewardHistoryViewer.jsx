@@ -14,8 +14,8 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   Play, Square, RotateCcw, Download, Upload,
-  ChevronDown, ChevronUp, Lock, Unlock, FolderOpen,
-  AlertTriangle, AlertCircle, Server, Info, XCircle, CheckCircle,
+  ChevronDown, Lock, Unlock, FolderOpen,
+  AlertTriangle, Server, Info, XCircle, CheckCircle,
 } from 'lucide-react'
 import { useRewardHistory, RH_STATUS } from '../hooks/useRewardHistory.js'
 import { fetchLiveChainInfo } from '../utils/chainInfo.js'
@@ -23,7 +23,7 @@ import PhaseProgressCards from './PhaseProgressCards.jsx'
 import StepProgress from './StepProgress.jsx'
 import TerminalLog from './TerminalLog.jsx'
 import ToolInfoSection from './ToolInfoSection.jsx'
-import { PLANCK_PER_ENJ } from '../constants.js'
+import { PLANCK_PER_ENJ, SUBSCAN_HISTORY_DAYS } from '../constants.js'
 import { aesEncrypt, aesDecrypt, downloadFile, safeFilename } from '../utils/balanceExport.js'
 import { MAX_IMPORT_MB } from '../constants.js'
 
@@ -86,12 +86,13 @@ function findErasForDateRange(eraData, startDateStr, endDateStr) {
 
 function toDateInput(d) { return d.toISOString().slice(0, 10) }
 
+// Subscan's free-plan history window is the past 3 months, so presets beyond
+// that (6 months, 1 year) are dropped — they would return truncated or empty
+// results for the portion of the range Subscan no longer indexes.
 const DATE_PRESETS = [
   { label: '1 week',   days: 7   },
   { label: '1 month',  days: 30  },
   { label: '3 months', days: 90  },
-  { label: '6 months', days: 180 },
-  { label: '1 year',   days: 365 },
 ]
 
 function estimateRewardEraSpan(rangeMode, startEra, endEra, startDate, endDate) {
@@ -378,7 +379,7 @@ function RewardChart({ data }) {
     })
 
     return () => { destroyed = true; chartRef.current?.destroy(); chartRef.current = null }
-  }, [data]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data])
 
   const uniqueEras = [...new Set(data.map(r => r.era))]
   if (!data.length || uniqueEras.length < 2) return null
@@ -643,13 +644,13 @@ const TABLE_COLS = [
   { key: 'memberBalance',label: 'Member sENJ',    align: 'right', sortable: true,
     tooltip: 'Your pool share tokens (sENJ) at the era\'s start block. sENJ represents your proportional ownership of the pool — more sENJ = larger share of rewards.' },
   { key: 'reinvested',   label: 'Reinvested ENJ', align: 'right', sortable: true,
-    tooltip: 'Total ENJ reward the entire pool earned this era, automatically compounded back into the pool\'s bonded stake. This is pool-wide — not wallet-specific.' },
+    tooltip: 'Total ENJ the entire pool reinvested this era, net of the pool operator\'s commission, automatically compounded back into the pool\'s bonded stake. This is pool-wide — not wallet-specific.' },
   { key: 'reward',       label: 'Reward ENJ',     align: 'right', sortable: true,
-    tooltip: 'Your wallet\'s share of the pool\'s reinvested reward: (your sENJ ÷ total pool sENJ) × Reinvested ENJ. The ENJ that accrued to your position this era.' },
+    tooltip: 'Your wallet\'s share of the pool\'s reinvested reward (net of operator commission): (your sENJ ÷ total pool sENJ) × Reinvested ENJ. The ENJ that accrued to your position this era.' },
   { key: 'accumulated',  label: 'Cumulative ENJ', align: 'right', sortable: true,
     tooltip: 'Running total of your Reward ENJ across all eras in the result set, per pool.' },
   { key: 'apy',          label: 'APY*',           align: 'right', sortable: true,
-    tooltip: 'Per-era annualised yield: ((bonded ENJ + reinvested) ÷ bonded ENJ)^365 − 1. An estimate — actual returns vary each era.' },
+    tooltip: 'Per-era annualised yield: ((bonded ENJ + reinvested) ÷ bonded ENJ)^365 − 1, where reinvested is net of operator commission. An estimate — actual returns vary each era.' },
   { key: 'rollingApy',   label: 'APY 15d*',       align: 'right', sortable: true,
     tooltip: 'Rolling 15-era APY: the same formula compounded over a sliding 15-era window and annualised. Smooths out single-era spikes.' },
 ]
@@ -679,7 +680,11 @@ function RewardTableV2({ results, onFilter }) {
   }
 
   const filtered = useMemo(() => {
-    let rows = results
+    // .filter() below always returns a fresh array, but when no filter is
+    // active `rows` stays the `results` reference straight through to .sort(),
+    // which mutates in place — silently reordering the hook's own state out
+    // from under any other consumer of it (e.g. the chart and summary).
+    let rows = results.slice()
     if (filterPools !== null) rows = rows.filter(r => filterPools.has(r.poolId))
     if (filterEraMin) rows = rows.filter(r => r.era >= parseInt(filterEraMin, 10))
     if (filterEraMax) rows = rows.filter(r => r.era <= parseInt(filterEraMax, 10))
@@ -704,7 +709,9 @@ function RewardTableV2({ results, onFilter }) {
   }, [results, sortCol, sortDir, filterPools, filterEraMin, filterEraMax])
 
   // Notify parent of filtered rows (for chart + summary)
-  useEffect(() => { onFilter?.(filtered) }, [filtered]) // eslint-disable-line
+  // onFilter is RewardHistoryViewer's setFilteredRows — a useState setter, so
+  // it is referentially stable and including it cannot cause extra re-runs.
+  useEffect(() => { onFilter?.(filtered) }, [filtered, onFilter])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const safePage   = Math.min(page, totalPages)
@@ -734,10 +741,12 @@ function RewardTableV2({ results, onFilter }) {
           <span className="text-[10px] font-bold tracking-widest uppercase text-text-secondary">Era:</span>
           <input type="number" placeholder="Min" value={filterEraMin}
             onChange={e => { setFilterEraMin(e.target.value); setPage(1) }}
+            aria-label="Minimum era"
             className="w-20 input-field font-mono !rounded-full" />
           <span className="text-text-secondary text-xs">–</span>
           <input type="number" placeholder="Max" value={filterEraMax}
             onChange={e => { setFilterEraMax(e.target.value); setPage(1) }}
+            aria-label="Maximum era"
             className="w-20 input-field font-mono !rounded-full" />
         </div>
         <div className="ml-auto flex items-center gap-1.5">
@@ -752,19 +761,34 @@ function RewardTableV2({ results, onFilter }) {
       {/* Table */}
       <div className="overflow-x-auto rounded-sm bg-card/70 p-1">
         <table className="border-collapse text-xs font-mono w-full min-w-max">
+          <caption className="sr-only">Per-era pool reward history</caption>
           <thead className="sticky top-0 z-10">
             <tr>
               {TABLE_COLS.map(col => {
                 const isSorted = sortCol === col.key
+                const directionLabel = isSorted
+                  ? `sorted ${sortDir === 1 ? 'ascending' : 'descending'}`
+                  : 'not sorted'
                 return (
-                  <th key={col.key} onClick={() => col.sortable && handleSort(col.key)}
+                  <th key={col.key}
+                    scope="col"
+                    aria-sort={col.sortable ? (isSorted ? (sortDir === 1 ? 'ascending' : 'descending') : 'none') : undefined}
                     className={`bg-surface-high px-3 py-3 font-bold tracking-widest
-                                uppercase select-none whitespace-nowrap transition-colors text-[10px]
+                                uppercase whitespace-nowrap text-[10px]
                                 relative group
-                                ${col.align === 'right' ? 'text-right' : 'text-left'}
-                                ${col.sortable ? 'cursor-pointer' : ''}
-                                ${isSorted ? 'text-cyan' : 'text-primary/70 hover:text-cyan'}`}>
-                    {col.label}{isSorted && (sortDir === 1 ? ' ↑' : ' ↓')}
+                                ${col.align === 'right' ? 'text-right' : 'text-left'}`}>
+                    {col.sortable ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSort(col.key)}
+                        className={`select-none transition-colors ${isSorted ? 'text-cyan' : 'text-primary/70 hover:text-cyan'}`}
+                        aria-label={`Sort by ${col.label} (${directionLabel})`}
+                      >
+                        {col.label}{isSorted && (sortDir === 1 ? ' ↑' : ' ↓')}
+                      </button>
+                    ) : (
+                      <span className="text-primary/70">{col.label}</span>
+                    )}
                     {col.tooltip && (
                       <div className={`pointer-events-none absolute z-50 top-full mt-1 w-56 p-2.5
                                        rounded-lg border border-rim bg-ink shadow-xl shadow-black/60
@@ -833,24 +857,41 @@ function RewardTableV2({ results, onFilter }) {
 
 // ── Summary section ──────────────────────────────────────────────────────────
 function RewardSummary({ results }) {
-  if (!results.length) return null
+  // All of this is a pure function of `results` alone. Previously recomputed
+  // on every render — two full sorts, three Set builds, and two spread
+  // Math.min/max calls that would also blow the argument limit on a large
+  // result set — regardless of whether `results` had actually changed.
+  const summary = useMemo(() => {
+    if (!results.length) return null
 
-  const totalReward  = results.reduce((s, r) => s + r.reward, 0n)
-  const avgApy       = results.reduce((s, r) => s + r.apy, 0) / results.length
-  const maxApyRow    = [...results].sort((a, b) => b.apy - a.apy)[0]
-  const maxRewardRow = [...results].sort((a, b) => (b.reward > a.reward ? 1 : -1))[0]
-  const poolCount    = new Set(results.map(r => r.poolId)).size
-  const eraCount     = new Set(results.map(r => r.era)).size
-  const eraMin       = Math.min(...results.map(r => r.era))
-  const eraMax       = Math.max(...results.map(r => r.era))
+    let eraMin = Infinity, eraMax = -Infinity
+    const poolIds = new Set()
+    const eraIds  = new Set()
+    const byPool  = new Map()
 
-  // Per-pool totals
-  const byPool = new Map()
-  for (const r of results) {
-    const cur = byPool.get(r.poolId) ?? { label: r.poolLabel, total: 0n, rows: 0 }
-    byPool.set(r.poolId, { label: cur.label, total: cur.total + r.reward, rows: cur.rows + 1 })
-  }
-  const bestPool = [...byPool.entries()].sort((a, b) => (b[1].total > a[1].total ? 1 : -1))[0]
+    for (const r of results) {
+      if (r.era < eraMin) eraMin = r.era
+      if (r.era > eraMax) eraMax = r.era
+      poolIds.add(r.poolId)
+      eraIds.add(r.era)
+      const cur = byPool.get(r.poolId) ?? { label: r.poolLabel, total: 0n, rows: 0 }
+      byPool.set(r.poolId, { label: cur.label, total: cur.total + r.reward, rows: cur.rows + 1 })
+    }
+
+    const totalReward  = results.reduce((s, r) => s + r.reward, 0n)
+    const avgApy       = results.reduce((s, r) => s + r.apy, 0) / results.length
+    const maxApyRow    = [...results].sort((a, b) => b.apy - a.apy)[0]
+    const maxRewardRow = [...results].sort((a, b) => (b.reward > a.reward ? 1 : -1))[0]
+    const bestPool      = [...byPool.entries()].sort((a, b) => (b[1].total > a[1].total ? 1 : -1))[0]
+
+    return {
+      totalReward, avgApy, maxApyRow, maxRewardRow, bestPool,
+      poolCount: poolIds.size, eraCount: eraIds.size, eraMin, eraMax,
+    }
+  }, [results])
+
+  if (!summary) return null
+  const { totalReward, avgApy, poolCount, eraCount, bestPool } = summary
 
   const stats = [
     { label: 'Total Rewards',    value: `${fmtEnj(totalReward)}`, unit: 'ENJ', accent: 'text-success',      border: 'metric-card-left-success' },
@@ -1172,7 +1213,7 @@ const RH_SIMPLE_STEPS = [
 ]
 
 export default function RewardHistoryViewer({ onScanStateChange, simpleMode = false }) {
-  const { status, results, logs, progress, csvCount, errorMsg, run, stop, reset, log } = useRewardHistory()
+  const { status, results, logs, progress, errorMsg, run, stop, reset, log } = useRewardHistory()
 
   const [tab,       setTab]      = useState('compute')  // 'compute' | 'import'
   const [address,   setAddress]  = useState('')
@@ -1287,11 +1328,6 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
     : 0
   const allDone     = phases.length > 0 && phases.every(p => p.status === 'completed')
   const completedPhaseCount = phases.filter(p => p.status === 'completed').length
-  const progressTitle = allDone
-    ? 'Reward history ready'
-    : isStopped
-      ? 'Reward computation stopped'
-      : (activePhase?.label ?? 'Computing rewards')
   const progressMeta = activePhase && activePhase.total > 0
     ? `${activePhase.completed ?? 0} / ${activePhase.total} (${phasePct}%)`
     : `${completedPhaseCount} / ${phases.length} phases complete`
@@ -1312,10 +1348,8 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
     { key: 'rewards',   label: 'Fetch Reinvested Amounts',     status: 'pending', total: 0, completed: 0 },
   ], [includeHistory])
   const displayPhases   = phases.length > 0 ? phases : previewPhases
-  const displayTitle    = phases.length > 0 ? progressTitle   : 'Ready to compute'
   const displaySummary  = phases.length > 0 ? progressSummary : null
   const displayMeta     = phases.length > 0 ? progressMeta    : null
-  const rangeModeLabel = rangeMode === 'era' ? 'Era Range' : 'Date Range'
   const liveChainSnapshot = (
     <div className="grid grid-cols-2 gap-2 sm:gap-3">
       <div className="metric-card metric-card-left-cyan py-2.5">
@@ -1350,7 +1384,6 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
         // date era lookup failed — user will see dateValidErr
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, rangeMode, startEra, endEra, startDate, endDate, run, includeHistory])
 
   function applyDatePreset(days, label) {
@@ -1456,6 +1489,8 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
             <p className="mt-1">Archive snapshots reconstruct pool-level rewards and member share over time, so the output is best used for investigation and planning.</p>
             <p className="mt-2"><span className="font-semibold text-text">Pool-level payouts.</span> The pool gets daily rewards, not the user, so these values are estimations rather than wallet-level settlement records.</p>
             <p className="mt-2"><span className="font-semibold text-text">Enjin Wallet may show different values.</span> The wallet derives reward figures from its own data pipeline and may reflect claimable balances or rounding differently from the era-by-era archive reconstruction used here.</p>
+            <p className="mt-2"><span className="font-semibold text-text">Historical figures corrected.</span> Reward, Cumulative, and APY figures shown before this fix were overstated for eras after the pool commission mechanism launched — the calculation mistakenly added the pool operator's commission instead of subtracting it. Figures shown now are net of commission and correct; if you saved or exported numbers earlier, they may be higher than the current values.</p>
+            <p className="mt-2"><span className="font-semibold text-text">APY is now ENJ-denominated.</span> APY previously divided by the pool's sENJ share supply because the pool's bonded-stake lookup was silently failing. It now divides by the actual bonded ENJ, which is the correct unit. Since 1 sENJ is worth well over 1 ENJ in mature pools, APY figures are roughly half what this tool showed before — the lower numbers are the accurate ones.</p>
             <p className="mt-2"><span className="font-semibold text-text">Tax note.</span> Tax treatment depends on your jurisdiction and activity history. Use this tool as a research aid, not tax advice.</p>
           </ToolInfoSection>
 
@@ -1471,10 +1506,12 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                 <input type="text" value={address}
                   onChange={e => setAddress(e.target.value)}
                   placeholder="en…" disabled={isLoading}
-                  className={`mt-3 w-full input-field font-mono ${addrErr ? 'ring-1 ring-danger/60' : ''}`}
+                  className={`mt-3 w-full input-field font-mono ${addrErr ? 'error-shake ring-1 ring-danger/60' : ''}`}
+                  aria-invalid={!!addrErr}
+                  aria-describedby={addrErr ? 'rh-address-error' : undefined}
                   maxLength={60} />
                 {addrErr && (
-                  <p className="mt-2 flex items-center gap-1.5 text-xs leading-5 text-danger">
+                  <p id="rh-address-error" className="mt-2 flex items-center gap-1.5 text-xs leading-5 text-danger">
                     <AlertTriangle size={12} className="flex-shrink-0" />{addrErr}
                   </p>
                 )}
@@ -1551,15 +1588,15 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-3">
-                    <label className="input-label w-28 flex-shrink-0">Start Era</label>
-                    <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
+                    <label htmlFor="reward-start-era" className="input-label w-28 flex-shrink-0">Start Era</label>
+                    <input id="reward-start-era" type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
                       onChange={e => setStartEra(e.target.value)}
                       placeholder="e.g. 980" disabled={isLoading}
                       className="flex-1 input-field font-mono" />
                   </div>
                   <div className="flex items-center gap-3">
-                    <label className="input-label w-28 flex-shrink-0">End Era</label>
-                    <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
+                    <label htmlFor="reward-end-era" className="input-label w-28 flex-shrink-0">End Era</label>
+                    <input id="reward-end-era" type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
                       onChange={e => setEndEra(e.target.value)}
                       placeholder="e.g. 1000" disabled={isLoading}
                       className="flex-1 input-field font-mono" />
@@ -1580,6 +1617,9 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                 {/* Quick presets */}
                 <div>
                   <span className="input-label">Quick Range</span>
+                  <p className="mt-0.5 text-xs text-text-secondary">
+                    Subscan's free tier only indexes the past {SUBSCAN_HISTORY_DAYS} days.
+                  </p>
                   <div className="flex flex-wrap gap-2">
                     {DATE_PRESETS.map(({ label, days }) => (
                       <button key={label} type="button"
@@ -1595,18 +1635,18 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-3">
-                    <label className="input-label w-28 flex-shrink-0">Start Date</label>
-                    <input type="date" placeholder="2026-03-01" max={toDateInput(new Date())} value={startDate}
+                    <label htmlFor="reward-start-date" className="input-label w-28 flex-shrink-0">Start Date</label>
+                    <input id="reward-start-date" type="date" placeholder="2026-03-01" max={toDateInput(new Date())} value={startDate}
                       onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
-                      className="flex-1 input-field font-mono [color-scheme:dark]" />
+                      className="flex-1 input-field font-mono" />
                   </div>
                   <div className="flex items-center gap-3">
-                    <label className="input-label w-28 flex-shrink-0">End Date</label>
-                    <input type="date" placeholder="2026-03-04" max={toDateInput(new Date())} value={endDate}
+                    <label htmlFor="reward-end-date" className="input-label w-28 flex-shrink-0">End Date</label>
+                    <input id="reward-end-date" type="date" placeholder="2026-03-04" max={toDateInput(new Date())} value={endDate}
                       onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
                       disabled={isLoading}
-                      className="flex-1 input-field font-mono [color-scheme:dark]" />
+                      className="flex-1 input-field font-mono" />
                   </div>
                 </div>
                 {dateValidErr && <p className="flex items-center gap-1 text-xs text-danger"><AlertTriangle size={11} className="flex-shrink-0"/>{dateValidErr}</p>}
@@ -1642,7 +1682,6 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
             {/* Col 3: Scan Progress */}
             <div className="hidden xl:block">
               <PhaseProgressCards
-                eyebrow=""
                 indexLabel="Phase"
                 title="Computation Progress"
                 summary={displaySummary}
@@ -1655,7 +1694,6 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
 
           <div className="xl:hidden mt-4">
             <PhaseProgressCards
-              eyebrow=""
               indexLabel="Phase"
               title="Computation Progress"
               summary={displaySummary}
@@ -1683,10 +1721,12 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
               onChange={e => setAddress(e.target.value)}
               placeholder="en…"
               maxLength={60}
-              className={`mt-2 w-full input-field font-mono ${addrErr ? 'ring-1 ring-danger/60' : ''}`}
+              className={`mt-2 w-full input-field font-mono ${addrErr ? 'error-shake ring-1 ring-danger/60' : ''}`}
+              aria-invalid={!!addrErr}
+              aria-describedby={addrErr ? 'rh-address-error' : undefined}
             />
             {addrErr && (
-              <p className="mt-2 flex items-center gap-1.5 text-xs text-danger">
+              <p id="rh-address-error" className="mt-2 flex items-center gap-1.5 text-xs text-danger">
                 <AlertTriangle size={12} className="flex-shrink-0" />{addrErr}
               </p>
             )}
@@ -1757,15 +1797,15 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
           {rangeMode === 'era' && (
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <label className="input-label w-28 flex-shrink-0">Start Era</label>
-                <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
+                <label htmlFor="reward-start-era" className="input-label w-28 flex-shrink-0">Start Era</label>
+                <input id="reward-start-era" type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
                   onChange={e => setStartEra(e.target.value)}
                   placeholder="e.g. 980"
                   className="flex-1 input-field font-mono" />
               </div>
               <div className="flex items-center gap-3">
-                <label className="input-label w-28 flex-shrink-0">End Era</label>
-                <input type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
+                <label htmlFor="reward-end-era" className="input-label w-28 flex-shrink-0">End Era</label>
+                <input id="reward-end-era" type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
                   onChange={e => setEndEra(e.target.value)}
                   placeholder="e.g. 1000"
                   className="flex-1 input-field font-mono" />
@@ -1783,6 +1823,9 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
             <div className="space-y-3">
               <div>
                 <span className="input-label">Quick Range</span>
+                <p className="mt-0.5 text-xs text-text-secondary">
+                  Subscan's free tier only indexes the past {SUBSCAN_HISTORY_DAYS} days.
+                </p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {DATE_PRESETS.map(({ label, days }) => (
                     <button key={label} type="button"
@@ -1794,16 +1837,16 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <label className="input-label w-28 flex-shrink-0">Start Date</label>
-                <input type="date" max={toDateInput(new Date())} value={startDate}
+                <label htmlFor="reward-start-date" className="input-label w-28 flex-shrink-0">Start Date</label>
+                <input id="reward-start-date" type="date" max={toDateInput(new Date())} value={startDate}
                   onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
-                  className="flex-1 input-field font-mono [color-scheme:dark]" />
+                  className="flex-1 input-field font-mono" />
               </div>
               <div className="flex items-center gap-3">
-                <label className="input-label w-28 flex-shrink-0">End Date</label>
-                <input type="date" max={toDateInput(new Date())} value={endDate}
+                <label htmlFor="reward-end-date" className="input-label w-28 flex-shrink-0">End Date</label>
+                <input id="reward-end-date" type="date" max={toDateInput(new Date())} value={endDate}
                   onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
-                  className="flex-1 input-field font-mono [color-scheme:dark]" />
+                  className="flex-1 input-field font-mono" />
               </div>
               {dateValidErr && (
                 <p className="flex items-center gap-1 text-xs text-danger">

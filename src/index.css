@@ -65,6 +65,51 @@
     --theme-transition-ms: 620ms;
     --rail-w: 240px;
     --status-h: 44px;
+
+    /* ── Motion tokens ──────────────────────────────────────────────────
+       Every new motion rule reads one of these rather than a literal ms,
+       px, or cubic-bezier value. That is what lets the single reduced-
+       motion block below zero everything out in one place instead of
+       hunting down every animation individually. Theme-independent, so no
+       duplication needed under [data-theme='light']. */
+
+    /* durations — general scale for future motion work */
+    --m-instant: 90ms;
+    --m-fast: 160ms;
+    --m-base: 220ms;
+    --m-slow: 420ms;
+    --m-slower: 640ms;
+    --m-count: 1100ms;      /* rAF-driven count-up duration, read from JS */
+
+    /* durations — today's existing decorative animations, calibrated to
+       their current real values so introducing tokens changes nothing */
+    --m-shimmer-dur: 1.4s;   /* skeleton loading shimmer */
+    --m-heartbeat-dur: 2s;   /* era-explorer heartbeat pulse (one-shot) */
+    --m-glow-dur: 1.6s;      /* staking button hover glow (loop) */
+
+    /* easings */
+    --m-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --m-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --m-standard: cubic-bezier(0.2, 0, 0, 1);   /* today's rail-slide curve */
+
+    /* travel distances / magnitudes for future motion work */
+    --m-rise: 14px;
+    --m-rise-sm: 6px;
+    --m-slide: 24px;
+    --m-lift: -3px;
+    --m-scale-in: 0.96;
+    --m-scale-press: 0.97;
+    --m-shake: 6px;
+    --m-blur: 6px;
+
+    /* stagger — per-index delay unit, capped so a long list never takes
+       more than --m-stagger-cap steps to finish */
+    --m-stagger: 45ms;
+    --m-stagger-cap: 8;
+
+    /* generic loop control for future indeterminate-progress-style work */
+    --m-loop-iter: infinite;
+    --m-loop-dur: 1600ms;
   }
 
   :root[data-theme='light'] {
@@ -233,33 +278,6 @@
       box-shadow var(--theme-transition-ms) ease;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    body,
-    .app-shell,
-    .rail,
-    .rail-mobile-drawer,
-    .status-bar,
-    .card,
-    .observatory-panel,
-    .glass-panel,
-    .data-panel,
-    .inset-panel,
-    .page-hero,
-    .metric-card,
-    .data-table-wrap,
-    .chart-frame,
-    .range-params-card,
-    .btn-secondary,
-    .btn-ghost,
-    .btn-icon,
-    .input-field,
-    .select-field,
-    .select-compact,
-    .rail-item,
-    .rail-item-active {
-      transition: none;
-    }
-  }
 }
 
 @layer components {
@@ -308,7 +326,7 @@
     background: var(--surface);
     border-right: 1px solid var(--hairline);
     overflow-y: auto;
-    animation: slideInRail 220ms cubic-bezier(0.2, 0, 0, 1);
+    animation: slideInRail var(--m-base) var(--m-standard);
   }
 
   .terminal-sticky {
@@ -629,7 +647,45 @@
   }
 
   .bulk-result-row {
-    animation: bulk-result-row-in 220ms ease-out both;
+    animation: bulk-result-row-in var(--m-base) ease-out both;
+  }
+
+  /* ── Table row stagger entrance ───────────────────────────────────────
+     Opacity only, no translate. A transform on a <tr> inside a
+     border-collapse table renders inconsistently across browsers and makes
+     the row a containing block, which would break the sticky <th> above it.
+     The fade alone still reads as a stagger, and it costs no layout.
+
+     Delay is capped in CSS at --m-stagger-cap steps (8 x 45ms = 360ms), so
+     the whole sequence lands inside ~580ms no matter how many rows are on
+     the page. Above STAGGER_MAX_ROWS the caller stops emitting per-row --i
+     entirely and fades the <tbody> as one element instead — see
+     EraStatTable.jsx. */
+  @keyframes row-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  .row-stagger {
+    animation: row-fade-in var(--m-base) var(--m-ease-out) both;
+    animation-delay: calc(min(var(--i, 0), var(--m-stagger-cap)) * var(--m-stagger));
+  }
+
+  .rows-fade {
+    animation: row-fade-in var(--m-base) var(--m-ease-out) both;
+  }
+
+  /* ── Terminal log — stream-in on the newest line ──────────────────────
+     Applied to a single row at a time (see TerminalLog.jsx), never to a
+     bulk flush. These are divs in a flex column, so unlike table rows they
+     can safely translate. */
+  @keyframes log-row-in {
+    from { opacity: 0; transform: translateY(var(--m-rise-sm)); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .log-row-in {
+    animation: log-row-in var(--m-fast) var(--m-ease-out) both;
   }
 
   .data-toolbar {
@@ -730,7 +786,7 @@
     inset: 0;
     transform: translateX(-100%);
     background: linear-gradient(90deg, transparent 0%, rgba(var(--skeleton-highlight-rgb), 0.28) 45%, transparent 100%);
-    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+    animation: skeleton-shimmer var(--m-shimmer-dur) ease-in-out infinite;
   }
 
   .skeleton-line {
@@ -751,13 +807,6 @@
 
   @keyframes skeleton-shimmer {
     to { transform: translateX(100%); }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .skeleton::after {
-      animation: none;
-      transform: translateX(0);
-    }
   }
 
   /* ── Heartbeat (Era Explorer EKG) ─────────────────────────────────── */
@@ -793,7 +842,7 @@
     opacity: 0;
     stroke-dasharray: 1000;
     stroke-dashoffset: 1000;
-    animation: heartbeat-burst 2s linear 1 both;
+    animation: heartbeat-burst var(--m-heartbeat-dur) linear 1 both;
     filter: drop-shadow(0 0 8px rgba(124, 58, 237, 0.40));
   }
 
@@ -821,9 +870,6 @@
     to   { opacity: 1; transform: translateY(0); }
   }
 
-  /* Pointer aura is suppressed in this design */
-  .pointer-aura { display: none !important; }
-
   .editorial-divider {
     width: 1px;
     align-self: stretch;
@@ -840,7 +886,7 @@
   /* ── Buttons — flat, sharp, single border ─────────────────────────── */
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-on-primary transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
+    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-on-primary transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
     background: theme('colors.primary');
     border: 1px solid theme('colors.primary-dim');
   }
@@ -852,6 +898,7 @@
 
   .btn-primary:active:not(:disabled) {
     background: theme('colors.primary-dim');
+    transform: scale(var(--m-scale-press));
   }
 
   .staking-scan-button {
@@ -859,12 +906,12 @@
   }
 
   .staking-scan-button:hover:not(:disabled) {
-    animation: staking-scan-hover-glow 1.6s ease-in-out infinite alternate;
+    animation: staking-scan-hover-glow var(--m-glow-dur) ease-in-out infinite alternate;
   }
 
   .btn-stop,
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-white transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-danger focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
+    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-white transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-danger focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
     background: theme('colors.danger');
     border: 1px solid theme('colors.danger-dim');
   }
@@ -874,8 +921,13 @@
     background: theme('colors.danger-dim');
   }
 
+  .btn-stop:active:not(:disabled),
+  .btn-danger:active:not(:disabled) {
+    transform: scale(var(--m-scale-press));
+  }
+
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-text transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
+    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-text transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
     background: var(--card);
     border: 1px solid var(--hairline);
   }
@@ -885,8 +937,12 @@
     background: var(--surface-high);
   }
 
+  .btn-secondary:active:not(:disabled) {
+    transform: scale(var(--m-scale-press));
+  }
+
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium text-text-secondary transition duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary;
   }
 
   .btn-ghost:hover {
@@ -894,13 +950,21 @@
     color: theme('colors.text');
   }
 
+  .btn-ghost:active {
+    transform: scale(var(--m-scale-press));
+  }
+
   .btn-icon {
-    @apply inline-flex min-h-[34px] min-w-[34px] items-center justify-center rounded-sm text-text-secondary transition-colors duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary;
+    @apply inline-flex min-h-[34px] min-w-[34px] items-center justify-center rounded-sm text-text-secondary transition duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary;
   }
 
   .btn-icon:hover {
     background: rgba(var(--hover-rgb), 0.07);
     color: theme('colors.text');
+  }
+
+  .btn-icon:active {
+    transform: scale(var(--m-scale-press));
   }
 
   /* ── Status badges ────────────────────────────────────────────────── */
@@ -947,6 +1011,161 @@
     @apply inline-flex items-center gap-1 rounded-sm border border-danger/35 bg-danger/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.10em] text-danger;
     font-family: theme('fontFamily.mono');
   }
+
+  /* ── Reveal (stagger-entrance on scroll into view) ───────────────────
+     Delay is computed in CSS from the --i custom property Reveal.jsx sets
+     inline, not as an inline style itself — that is what lets the reduced-
+     motion block zero --m-stagger/--m-stagger-cap and disable every
+     Reveal's delay in one place instead of hunting down each usage. */
+  .reveal {
+    opacity: 0;
+    transform: translateY(var(--m-rise));
+    transition: opacity var(--m-base) var(--m-ease-out), transform var(--m-base) var(--m-ease-out);
+    transition-delay: calc(min(var(--i, 0), var(--m-stagger-cap)) * var(--m-stagger));
+  }
+
+  .reveal-in {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ── Toast entrance ────────────────────────────────────────────────── */
+  @keyframes toast-enter {
+    from { opacity: 0; transform: translateY(calc(-1 * var(--m-slide))); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .toast-card {
+    animation: toast-enter var(--m-base) var(--m-overshoot) both;
+    will-change: transform, opacity;
+  }
+
+  /* ── Landing tool card: hover lift + border glow ─────────────────────
+     The glow reuses staking-scan-hover-glow's box-shadow technique rather
+     than a conic-gradient + mask "true" traveling beam — consistent with
+     the one glow effect already in the codebase, and box-shadow gated
+     strictly to :hover/:focus-within carries far less risk than a masked
+     pseudo-element. Never animates while idle. The smooth transform is
+     already covered by the "transition" Tailwind utility on the card
+     itself (its default property list includes transform) — no separate
+     transition declaration needed here. */
+  .tool-card:hover,
+  .tool-card:focus-within {
+    transform: translateY(var(--m-lift));
+    animation: staking-scan-hover-glow var(--m-glow-dur) ease-in-out infinite alternate;
+  }
+
+  /* ── Modal entrance ("Command Palette Bloom") ─────────────────────────
+     Runs automatically on mount via the keyframe itself — no JS class
+     toggle needed, so there is nothing to race against useFocusTrap's own
+     mount-time rAF. The trap calls focus({preventScroll:true}) specifically
+     because this rule's transform would otherwise make the browser's
+     default focus-scroll target a still-animating, not-yet-final rect. */
+  @keyframes modal-bloom {
+    from { opacity: 0; transform: scale(var(--m-scale-in)); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+
+  /* will-change here and on .toast-card only. Both are mounted just for the
+     few hundred ms / few seconds they are actually on screen, so the promoted
+     layer is released on unmount. Deliberately NOT on table rows or metric
+     cards: promoting a 100-row page to 100 layers costs more GPU memory than
+     the animation saves, and BalanceTable already shares the page with a
+     Chart.js canvas. */
+  .modal-panel {
+    animation: modal-bloom var(--m-base) var(--m-overshoot) both;
+    will-change: transform, opacity;
+  }
+
+  /* ── Step/phase progress fill — transform instead of width ───────────
+     Avoids a layout-triggering width transition; scaleX only ever touches
+     compositing. Always rendered (not gated on progress > 0) so it can
+     transition smoothly in both directions. */
+  .progress-fill {
+    transition: transform var(--m-slow) var(--m-standard);
+  }
+
+  /* ── Success check — stroke-draw ──────────────────────────────────────
+     pathLength="1" (set on the <path> in SuccessCheck.jsx) normalizes the
+     dash units, so this one rule works at any icon size with no
+     measurement. Decorative — the icon itself is aria-hidden. */
+  @keyframes success-check-draw {
+    from { stroke-dashoffset: 1; }
+    to   { stroke-dashoffset: 0; }
+  }
+
+  .success-check path {
+    stroke-dasharray: 1;
+    animation: success-check-draw var(--m-slow) var(--m-ease-out) both;
+  }
+
+  /* ── Accordion — grid-template-rows 0fr→1fr ───────────────────────────
+     No JS height measurement: a single-row grid's own intrinsic sizing
+     lets the browser interpolate between "collapsed" and "fits content"
+     smoothly. Content stays mounted so it animates closed as well as open
+     (the maxHeight-based version this replaces had no closing transition).
+     overflow:hidden lives on -inner, one level in, so a bordered child
+     clips cleanly at 0fr instead of leaving a border sliver. */
+  .accordion-rows {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--m-slow) var(--m-standard);
+  }
+
+  .accordion-rows-open {
+    grid-template-rows: 1fr;
+  }
+
+  .accordion-rows-inner {
+    overflow: hidden;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  /* ── Error shake ───────────────────────────────────────────────────────
+     Applied alongside the existing ring-1 ring-danger validation styling.
+     Retriggers whenever the class transitions from absent to present —
+     i.e. exactly when a field newly becomes invalid — and is always paired
+     with a visible, aria-describedby-linked error message, never a
+     motion-only signal. */
+  @keyframes error-shake {
+    0%, 100% { transform: translateX(0); }
+    20%      { transform: translateX(calc(-1 * var(--m-shake))); }
+    40%      { transform: translateX(var(--m-shake)); }
+    60%      { transform: translateX(calc(-0.6 * var(--m-shake))); }
+    80%      { transform: translateX(calc(0.6 * var(--m-shake))); }
+  }
+
+  .error-shake {
+    animation: error-shake var(--m-slow) var(--m-standard);
+  }
+
+  /* ── Copy button icon morph ────────────────────────────────────────────
+     Both icons share one grid cell (grid-area: 1/1) so the swap is a
+     cross-fade + scale instead of an instant replace. */
+  .copy-icon-swap {
+    display: inline-grid;
+  }
+
+  .copy-icon {
+    grid-area: 1 / 1;
+    transition: opacity var(--m-fast) var(--m-ease-out), transform var(--m-fast) var(--m-overshoot);
+  }
+
+  .copy-icon-done {
+    opacity: 0;
+    transform: scale(var(--m-scale-in));
+  }
+
+  .copy-icon-swap.is-copied .copy-icon-idle {
+    opacity: 0;
+    transform: scale(var(--m-scale-in));
+  }
+
+  .copy-icon-swap.is-copied .copy-icon-done {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @layer utilities {
@@ -978,5 +1197,64 @@
 
   .hairline {
     border: 1px solid var(--hairline);
+  }
+}
+
+/* =============================================================================
+   Reduced motion — single source of truth
+   Placed outside @layer so it wins on source order without needing
+   !important on the token half. Zeroing every --m-* token handles anything
+   built against them; the *,::before,::after backstop catches everything
+   else, including Tailwind's animate-* utilities, whose durations live in
+   tailwind.config.js and are otherwise unreachable from a media query here.
+   ============================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --m-instant: 0.01ms;
+    --m-fast: 0.01ms;
+    --m-base: 0.01ms;
+    --m-slow: 0.01ms;
+    --m-slower: 0.01ms;
+    --m-count: 0ms;
+    --m-shimmer-dur: 0.01ms;
+    --m-heartbeat-dur: 0.01ms;
+    --m-glow-dur: 0.01ms;
+    --m-ease-out: linear;
+    --m-overshoot: linear;
+    --m-standard: linear;
+    --m-rise: 0px;
+    --m-rise-sm: 0px;
+    --m-slide: 0px;
+    --m-lift: 0px;
+    --m-scale-in: 1;
+    --m-scale-press: 1;
+    --m-shake: 0px;
+    --m-blur: 0px;
+    --m-stagger: 0ms;
+    --m-stagger-cap: 0;
+    --m-loop-iter: 1;
+    --m-loop-dur: 0.01ms;
+  }
+
+  /* Backstop for anything not (yet) built on the tokens above: Tailwind's
+     animate-* utilities, third-party CSS, inline styles. 0.01ms rather than
+     a hard "none" so animationend/transitionend listeners still fire —
+     "none" would silently deadlock any exit-transition code waiting on one. */
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Escape hatch for a genuine "work is happening" indicator that must keep
+     moving even under reduced motion — slow and non-oscillating, and only
+     ever paired with a visible text label so the state isn't motion-only.
+     Not applied anywhere yet; available for deliberate future use. */
+  .motion-essential {
+    animation-duration: 2400ms !important;
+    animation-iteration-count: infinite !important;
   }
 }

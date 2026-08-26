@@ -75,10 +75,9 @@ export function poolExplorerUrl(poolId) {
  * Prefers `metadata` (the actual pool name) when it is a non-empty string.
  *
  * @param {{ metadata?: string, stashDisplay?: string, poolId: number }} pool
- * @param {{ forLog?: boolean }} [opts]
  * @returns {string}
  */
-export function poolLabel(pool, opts = {}) {
+export function poolLabel(pool) {
   const meta  = (pool?.metadata ?? '').trim()
   const stash = pool?.stashDisplay || `Pool #${pool?.poolId ?? '?'}`
   if (!meta) return stash

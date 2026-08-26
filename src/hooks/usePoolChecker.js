@@ -1,16 +1,22 @@
-import { useReducer, useCallback, useRef } from 'react'
+import { useReducer, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   fetchAllPools, fetchVoted, fetchEraStat,
   fetchRewardSlash, probeEndpoint, delay,
+  resetSubscanRequestCount, readSubscanRequestCount,
 } from '../utils/api.js'
 import { enqueueRequest } from '../utils/api.js'
+import { loadEraCsvRows } from '../utils/eraCache.js'
 import { computePoolMissedEras } from '../utils/eraAnalysis.js'
 import { nowHHMMSS, safeInt, truncateAddress, poolLabel, parseCommission } from '../utils/format.js'
 import {
-  ERA_VALIDATORS_SAMPLE, API_DELAY_MS,
+  ERA_VALIDATORS_SAMPLE, API_DELAY_MS, SUBSCAN_MAX_ROW,
   DEFAULT_ERA_COUNT, MAX_RETRY_ATTEMPTS,
   POOL_ENDPOINTS_TO_PROBE, ENDPOINTS,
 } from '../constants.js'
+
+// Offline era boundary reference, shipped in public/ and shared with the other
+// era-aware tools. Loaded through the same localStorage-cached helper they use.
+const RELAY_ERA_CSV = '/relay-era-reference.csv'
 
 // ── State shape ────────────────────────────────────────────────────────────
 const initialState = {
@@ -87,6 +93,57 @@ function reducer(state, action) {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+/**
+ * Build Map<era, {start, end}> from era reference CSV rows.
+ *
+ * Rows without a complete block range are skipped. That always includes the
+ * final row (the era in progress when the file was generated) and means the map
+ * only ever contains eras whose boundaries are known exactly — era lengths vary
+ * by a few blocks, so end_block cannot be derived from the next era's start.
+ */
+export function buildEraRangeMap(rows) {
+  const map = new Map()
+  for (const row of rows ?? []) {
+    const era   = safeInt(row?.era)
+    const start = safeInt(row?.start_block)
+    const end   = safeInt(row?.end_block)
+    if (era > 0 && start > 0 && end > 0) map.set(era, { start, end })
+  }
+  return map
+}
+
+/**
+ * Choose which eras can actually be reward-checked, given known block ranges.
+ *
+ * Rewards for era N are paid out *during* era N+1, so era N is only checkable
+ * once era N+1's block range is fully closed. The newest closed era is therefore
+ * never itself checkable — it is the payout window for the era below it.
+ *
+ * The search window is bounded to the `eraCount` eras below the newest closed
+ * era, so a gap in the reference data reduces the number of eras reported rather
+ * than silently widening the window further into the past.
+ *
+ * @returns {{maxClosedEra:number, completedEras:number[], skipped:number[]}}
+ *          completedEras is newest-first; skipped lists in-window eras whose
+ *          payout range is unknown.
+ */
+export function selectCheckableEras(eraRangeMap, eraCount) {
+  const closed = [...eraRangeMap.entries()]
+    .filter(([, r]) => r?.start > 0 && r?.end > 0)
+    .map(([era]) => era)
+  if (closed.length === 0) return { maxClosedEra: 0, completedEras: [], skipped: [] }
+
+  const maxClosedEra = Math.max(...closed)
+  const completedEras = []
+  const skipped = []
+  for (let era = maxClosedEra - 1; era > 0 && era > maxClosedEra - 1 - eraCount; era--) {
+    const payout = eraRangeMap.get(era + 1)
+    if (payout && payout.start > 0 && payout.end > 0) completedEras.push(era)
+    else skipped.push(era)
+  }
+  return { maxClosedEra, completedEras, skipped }
+}
+
 /** Fisher-Yates shuffle (in-place) */
 function shuffle(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
@@ -100,6 +157,13 @@ function shuffle(arr) {
 export function usePoolChecker() {
   const [state, dispatch] = useReducer(reducer, initialState)
   const abortControllerRef = useRef(null)
+
+  // Abort any in-flight scan on unmount. Without this, navigating away mid-scan
+  // left the request chain running and dispatching into a dead reducer.
+  useEffect(() => () => {
+    try { abortControllerRef.current?.abort() } catch { /* noop */ }
+    abortControllerRef.current = null
+  }, [])
 
   const log = useCallback((level, message) => {
     dispatch({ type: 'LOG', level, message })
@@ -120,6 +184,7 @@ export function usePoolChecker() {
   const runCheck = useCallback(async (eraCount) => {
     abortControllerRef.current = new AbortController()
     dispatch({ type: 'START' })
+    resetSubscanRequestCount()
     const proxy  = state.proxyUrl
     const signal = abortControllerRef.current.signal
     const runStart = Date.now()
@@ -264,7 +329,7 @@ export function usePoolChecker() {
     }
     log('OK', `${allCollectedValidators.length} validator references collected across ${pools.length} pools (${uniqueValidators.length} unique). Step 2 completed in ${elapsed(s2)}s.`)
 
-    log('INFO', `─── Step 3: Resolving era block ranges (${ERA_VALIDATORS_SAMPLE}-validator consensus) ───`)
+    log('INFO', '─── Step 3: Resolving era block ranges (offline era reference + Subscan top-up) ───')
     const s3 = Date.now()
     if (uniqueValidators.length === 0) {
       log('ERR', 'No nominated validators found — cannot resolve era block ranges.')
@@ -272,83 +337,81 @@ export function usePoolChecker() {
       return
     }
 
-    const rowsNeeded = eraCount + 1
-    let consensusMap = null
-    let currentEra = 0
-    let usedIdx = 0
-
-    log('INFO', `Requesting ${rowsNeeded} era(s) per validator to identify current + ${eraCount} completed era(s).`)
-    shuffle(uniqueValidators)
-    const maxRounds = Math.ceil(uniqueValidators.length / ERA_VALIDATORS_SAMPLE)
-    for (let round = 0; round < maxRounds && !consensusMap; round++) {
-      if (signal.aborted) return
-      const sample = uniqueValidators.slice(usedIdx, usedIdx + ERA_VALIDATORS_SAMPLE)
-      usedIdx += ERA_VALIDATORS_SAMPLE
-      if (sample.length === 0) break
-
-      const eraMaps = []
-      log('INFO', `Consensus round ${round + 1}: sampling ${sample.length} validator(s)…`)
-      for (const v of sample) {
-        if (signal.aborted) return
-        const vLabel = v.display || truncateAddress(v.address)
-        log('INFO', `Checking era block ranges of validator ${vLabel}…`)
-        try {
-          const list = await fetchEraStat(v.address, rowsNeeded, proxy, signal)
-          const map = new Map()
-          for (const e of (list ?? [])) {
-            const era = safeInt(e?.era)
-            const start = safeInt(e?.start_block_num)
-            const end = safeInt(e?.end_block_num)
-            if (era > 0) map.set(era, { start, end })
-          }
-          if (map.size > 0) eraMaps.push(map)
-          log('OK', `${vLabel}: ${map.size} era(s) returned.`)
-        } catch (err) {
-          log('WARN', `Era stat fetch failed for ${vLabel}: ${err?.message || 'unknown error'}. Skipping.`)
-        }
-        await delay(API_DELAY_MS)
-      }
-
-      if (eraMaps.length === 0) continue
-
-      log('INFO', 'Comparing era block ranges...')
-      const refMap = eraMaps[0]
-      let mismatch = false
-      for (const [era, ref] of refMap) {
-        for (let m = 1; m < eraMaps.length; m++) {
-          const other = eraMaps[m].get(era)
-          if (other && (other.start !== ref.start || other.end !== ref.end)) {
-            mismatch = true
-            log('WARN', `Block range mismatch at era ${era}. Trying next validator set…`)
-            break
-          }
-        }
-        if (mismatch) break
-      }
-
-      if (!mismatch) {
-        consensusMap = refMap
-        log('OK', `Consensus achieved with ${eraMaps.length} validator(s) — ${refMap.size} era(s) mapped.`)
-      }
+    // Primary source: the checked-in era reference CSV. It covers era 1 onwards,
+    // is immutable once written, and costs zero Subscan requests — which also
+    // means eras older than the free tier's 3-month index still resolve.
+    const eraRangeMap = new Map()
+    let csvRows = []
+    try {
+      csvRows = await loadEraCsvRows(RELAY_ERA_CSV)
+    } catch (err) {
+      log('WARN', `Era reference CSV failed to load: ${err?.message || 'unknown error'}.`)
+    }
+    if (signal.aborted) return
+    for (const [era, range] of buildEraRangeMap(csvRows)) eraRangeMap.set(era, range)
+    const csvMaxEra = eraRangeMap.size ? Math.max(...eraRangeMap.keys()) : 0
+    if (csvMaxEra > 0) {
+      log('OK', `Era reference CSV: ${eraRangeMap.size} era(s) with complete block ranges (newest: era ${csvMaxEra}).`)
+    } else {
+      log('WARN', 'Era reference CSV unavailable — resolving every era range from Subscan instead.')
     }
 
-    if (!consensusMap || consensusMap.size === 0) {
-      log('ERR', `Failed to establish era block range consensus after ${usedIdx} validator(s) tried.`)
+    // Top-up: the CSV is regenerated periodically, so the newest eras (and the
+    // in-progress one) are normally absent from it. A single era_stat call fills
+    // that tail and reveals which era is currently live. Validators are tried in
+    // turn only because one address can return an empty list — this is a retry,
+    // not the old cross-validator vote: the CSV is now the trusted backbone.
+    const topUpRows = csvMaxEra > 0 ? SUBSCAN_MAX_ROW : eraCount + 1
+    let subscanMaxEra = 0
+    shuffle(uniqueValidators)
+    for (const v of uniqueValidators.slice(0, ERA_VALIDATORS_SAMPLE)) {
+      if (signal.aborted) return
+      const vLabel = v.display || truncateAddress(v.address)
+      try {
+        const list = await fetchEraStat(v.address, topUpRows, proxy, signal)
+        let added = 0
+        let mismatched = 0
+        for (const e of (list ?? [])) {
+          const era   = safeInt(e?.era)
+          const start = safeInt(e?.start_block_num)
+          const end   = safeInt(e?.end_block_num)
+          if (era <= 0) continue
+          if (era > subscanMaxEra) subscanMaxEra = era
+          const known = eraRangeMap.get(era)
+          if (known) {
+            // The CSV wins on conflict: it is a verified, checked-in artefact.
+            if (start > 0 && end > 0 && (known.start !== start || known.end !== end)) mismatched++
+            continue
+          }
+          if (start > 0) { eraRangeMap.set(era, { start, end }); added++ }
+        }
+        log('OK', `Era ranges topped up from ${vLabel}: ${added} era(s) added (live era ${subscanMaxEra || 'unknown'}).`)
+        if (mismatched > 0) {
+          log('WARN', `${mismatched} era(s) disagree between the era reference CSV and Subscan — keeping the CSV values.`)
+        }
+        break
+      } catch (err) {
+        log('WARN', `Era stat top-up failed for ${vLabel}: ${err?.message || 'unknown error'}. Trying next validator…`)
+        await delay(API_DELAY_MS)
+      }
+    }
+    if (signal.aborted) return
+
+    const { maxClosedEra, completedEras, skipped } = selectCheckableEras(eraRangeMap, eraCount)
+    if (maxClosedEra === 0) {
+      log('ERR', 'No complete era block ranges available from the era reference CSV or Subscan.')
       dispatch({ type: 'ERROR' })
       return
     }
-
-    currentEra = Math.max(...consensusMap.keys())
-    const currentEraRange = consensusMap.get(currentEra)
-    consensusMap.delete(currentEra)
-
-    const completedEras = [...consensusMap.keys()].sort((a, b) => b - a).slice(0, eraCount)
-    const completedEraSet = new Set(completedEras)
-    for (const era of consensusMap.keys()) {
-      if (!completedEraSet.has(era)) consensusMap.delete(era)
+    const currentEra = Math.max(subscanMaxEra, maxClosedEra + 1)
+    if (skipped.length > 0) {
+      log('WARN', `${skipped.length} era(s) in the requested window have no known payout block range and were skipped: ${[...skipped].sort((a, b) => a - b).join(', ')}.`)
     }
 
     const latestCompletedEra = completedEras[0] ?? 0
+    if (latestCompletedEra > 0 && currentEra - 1 > latestCompletedEra) {
+      log('WARN', `Newest checkable era is ${latestCompletedEra}, ${currentEra - 1 - latestCompletedEra} era(s) behind the latest completed era (${currentEra - 1}) — payout block ranges for the gap are not available yet.`)
+    }
     const erasAscending = [...completedEras].sort((a, b) => a - b).join(', ')
     log('OK', `Era block ranges resolved: current era ${currentEra} (excluded), ${completedEras.length} completed era(s): ${erasAscending}. Step 3 completed in ${elapsed(s3)}s.`)
     phases[3] = { ...phases[3], completed: 1, status: 'completed' }
@@ -379,7 +442,9 @@ export function usePoolChecker() {
         for (let eIdx = 0; eIdx < completedEras.length; eIdx++) {
           if (signal.aborted) break
           const era = completedEras[eIdx]
-          const payoutRange = consensusMap.get(era + 1) ?? currentEraRange
+          // Guaranteed present: completedEras only contains eras whose era+1
+          // payout window has a complete block range.
+          const payoutRange = eraRangeMap.get(era + 1)
           const { start, end } = payoutRange
           const blockRange = `${start}-${end}`
           try {
@@ -435,7 +500,7 @@ export function usePoolChecker() {
     phases[4] = { ...phases[4], status: 'completed' }
     syncProgress()
     log('OK', `Step 4 completed in ${elapsed(s4)}s. Results: ${poolsOk} all-rewarded, ${poolsMissed} with gaps, ${poolsErrored} errors.`)
-    log('DONE', `All pool data loaded. Total elapsed: ${elapsed(runStart)}s. Summary generated below.`)
+    log('DONE', `All pool data loaded. Total elapsed: ${elapsed(runStart)}s. Summary generated below. (${readSubscanRequestCount()} Subscan requests used this run.)`)
     dispatch({ type: 'DONE' })
   }, [state.proxyUrl, log])
 
@@ -492,8 +557,9 @@ export function usePoolChecker() {
     log('WARN', 'Pool scan stopped by user.')
   }, [log])
 
-  // Derive latestEra from pools' eraRewards for enrichment
-  const latestEra = resolvePoolLatestEra(state.pools)
+  // Derive latestEra from pools' eraRewards for enrichment. Previously
+  // recomputed on every render regardless of whether state.pools had changed.
+  const latestEra = useMemo(() => resolvePoolLatestEra(state.pools), [state.pools])
 
   return {
     ...state,

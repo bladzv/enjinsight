@@ -68,7 +68,7 @@ function normalizeTokenId(value) {
     ) {
       return tokenId
     }
-  } catch (error) {
+  } catch {
     // Plain token IDs are handled below.
   }
 
@@ -332,12 +332,20 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
   const singleResultRef = useRef(null)
   const bulkResultRef = useRef(null)
   const previousLoadingRef = useRef(false)
+  // Monotonic id assigned once per entry at creation. Deriving `id` from array
+  // position at render time (the previous approach) breaks down once the log
+  // hits its 500-entry cap: .slice(-500) shifts every remaining entry's index,
+  // so every row's "identity" changes on every append past the cap — which
+  // defeats memoizing the row component and rebuilds a fresh 500-element array
+  // into TerminalLog on every render regardless of whether logs had changed.
+  const nextLogIdRef = useRef(0)
 
   const log = useCallback((level, msg) => {
     setLogs(prev => {
       const entry = {
-        level,
-        msg: String(msg),
+        id: nextLogIdRef.current++,
+        level: level.toUpperCase(),
+        message: String(msg),
         ts: new Date().toLocaleTimeString('en', {
           hour12: false, hour: '2-digit', minute: '2-digit',
           second: '2-digit', fractionalSecondDigits: 2,
@@ -562,7 +570,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
       : 'not sorted'
 
     return (
-      <th className={`px-3 py-3 text-center ${className}`} aria-sort={isSorted ? (bulkSort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <th scope="col" className={`px-3 py-3 text-center ${className}`} aria-sort={isSorted ? (bulkSort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}>
         <button
           type="button"
           onClick={() => handleBulkSort(key)}
@@ -1308,6 +1316,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
 
         <div className="data-table-wrap">
           <table className="data-table min-w-[760px]">
+            <caption className="sr-only">Bulk ENJ infusion lookup results</caption>
             <thead className="data-table-head">
               <tr>
                 {renderSortableHeader('tokenId')}
@@ -1315,7 +1324,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
                 {renderSortableHeader('tokenName')}
                 {renderSortableHeader('amount')}
                 {renderSortableHeader('raw')}
-                <th className="px-3 py-3 text-center">More Details</th>
+                <th scope="col" className="px-3 py-3 text-center">More Details</th>
               </tr>
             </thead>
             <tbody>
@@ -1454,15 +1463,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
         onClose={() => setSelectedTokenDetails(null)}
       />
 
-      {!simpleMode && <TerminalLog
-        sticky
-        logs={logs.map((l, i) => ({
-          id: i,
-          ts: l.ts,
-          level: l.level.toUpperCase(),
-          message: l.msg,
-        }))}
-      />}
+      {!simpleMode && <TerminalLog sticky logs={logs} />}
     </div>
   )
 }
@@ -1477,7 +1478,6 @@ function TokenDetailsModal({ row, onClose }) {
       subtitle={row?.tokenId ? `Token ID ${formatTokenId(row.tokenId)}` : ''}
       onClose={onClose}
       widthClass="max-w-5xl"
-      eyebrow={null}
       actions={row?.tokenId ? (
         <a
           href={getEtherscanTokenUrl(row.tokenId)}

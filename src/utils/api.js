@@ -1,7 +1,7 @@
 import {
   SUBSCAN_BASE, ENDPOINTS, REQUEST_TIMEOUT_MS,
-  NOMINATORS_ROW, POOLS_PAGE_SIZE, REWARD_SLASH_ROW,
-  MAX_RETRIES, API_DELAY_MS, MAX_RETRY_ATTEMPTS, RETRY_BASE_MS,
+  SUBSCAN_MAX_ROW, SUBSCAN_MAX_PAGES,
+  API_DELAY_MS, MAX_RETRY_ATTEMPTS, RETRY_BASE_MS,
 } from '../constants.js'
 
 // Exact allowlist of permitted upstream path suffixes
@@ -26,6 +26,47 @@ function buildUrl(path) {
 }
 
 const delay = ms => new Promise(r => setTimeout(r, ms))
+
+/**
+ * Backoff that resolves early when `signal` aborts.
+ * A plain delay() left an aborted scan sitting through the remaining backoff —
+ * up to ~16 s at MAX_RETRY_ATTEMPTS=5 / RETRY_BASE_MS=1000 — before the next
+ * attempt noticed the abort.
+ */
+function abortableDelay(ms, signal) {
+  if (!signal) return delay(ms)
+  if (signal.aborted) return Promise.resolve()
+  return new Promise(resolve => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    function onAbort() {
+      clearTimeout(timer)
+      resolve()
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+// ── Per-scan request counter ────────────────────────────────────────────────
+// Purely informational: lets a hook report how many real Subscan HTTP requests
+// (including retries) a scan run used, to give visibility into the free tier's
+// 20,000/day quota. Module-scoped rather than threaded per-call: the app only
+// ever drives one scan at a time in practice (mode switching and starting a
+// second scan are disabled while a run is in progress), so a hook resetting
+// the counter at the start of its run and reading it at the end gets an
+// accurate count for that run. Counts every attempt, including retries, since
+// each is a real request against the quota.
+let _requestCount = 0
+
+export function resetSubscanRequestCount() {
+  _requestCount = 0
+}
+
+export function readSubscanRequestCount() {
+  return _requestCount
+}
 
 // ── In-flight request deduplication ──────────────────────────────────────────
 // If two callers request the exact same Subscan endpoint + body simultaneously,
@@ -69,7 +110,7 @@ class RequestQueue {
       const { fn, onStart, resolve, reject } = this.queue.shift()
       try {
         if (typeof onStart === 'function') {
-          try { onStart() } catch (e) { /* ignore */ }
+          try { onStart() } catch { /* ignore */ }
         }
         const result = await fn()
         resolve(result)
@@ -90,7 +131,7 @@ export const enqueueRequest = (fn) => requestQueue.add(fn)
  * Core fetch wrapper.
  * - Enforces timeout via AbortController
  * - Validates Content-Type of response
- * - Retries up to MAX_RETRIES times on 429 (rate-limit) responses
+ * - Retries up to MAX_RETRY_ATTEMPTS times on 429 (rate-limit) responses
  * - Reads retry-after header for precise back-off timing
  * - Never surfaces raw server errors to the UI
  * - Input body values are serialised as JSON (no eval, no injection)
@@ -126,6 +167,7 @@ async function _subscanPost(path, body, options = {}) {
 
     let response
     try {
+      _requestCount++
       response = await fetch(url, {
         method:  'POST',
         headers: {
@@ -140,23 +182,25 @@ async function _subscanPost(path, body, options = {}) {
       if (external) external.removeEventListener('abort', onExternalAbort)
       if (err.name === 'AbortError') {
         // If external aborted, propagate immediately
-        if (external && external.aborted) throw new Error('Request aborted.')
+        if (external && external.aborted) throw new Error('Request aborted.', { cause: err })
         // Otherwise treat as timeout
         if (attempt < attempts) {
           const waitMs = Math.round(retryBase * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.2))
           if (typeof options.onRetry === 'function') options.onRetry(attempt, err, waitMs)
-          await delay(waitMs)
+          await abortableDelay(waitMs, external)
+          if (external?.aborted) throw new Error('Request aborted.', { cause: err })
           continue
         }
-        throw new Error('Request timed out after 15 s.')
+        throw new Error('Request timed out after 15 s.', { cause: err })
       }
       if (attempt < attempts) {
         const waitMs = Math.round(retryBase * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.2))
         if (typeof options.onRetry === 'function') options.onRetry(attempt, err, waitMs)
-        await delay(waitMs)
+        await abortableDelay(waitMs, external)
+        if (external?.aborted) throw new Error('Request aborted.', { cause: err })
         continue
       }
-      throw new Error('Network error — check your connection or proxy URL.')
+      throw new Error('Network error — check your connection or proxy URL.', { cause: err })
     } finally {
       clearTimeout(timer)
       if (external) external.removeEventListener('abort', onExternalAbort)
@@ -169,7 +213,8 @@ async function _subscanPost(path, body, options = {}) {
         ? retryAfter * 1000
         : Math.round(retryBase * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.2))
       if (typeof options.onRetry === 'function') options.onRetry(attempt, { status: response.status }, waitMs)
-      await delay(waitMs)
+      await abortableDelay(waitMs, external)
+      if (external?.aborted) throw new Error('Request aborted.')
       continue
     }
 
@@ -200,6 +245,79 @@ async function _subscanPost(path, body, options = {}) {
   throw new Error('Retries exhausted while contacting Subscan.')
 }
 
+// ── Pagination ─────────────────────────────────────────────────────────────
+
+/**
+ * Walk a paginated Subscan endpoint, accumulating every record.
+ *
+ * The free plan caps `row` at SUBSCAN_MAX_ROW (25), so any call that previously
+ * fetched a single page of 100 now has to page for the remainder.  `row` is held
+ * constant across pages on purpose: Subscan computes the offset as page * row,
+ * so shrinking `row` on the final page would re-read earlier records instead of
+ * the tail.  Over-fetch and slice to `max` instead.
+ *
+ * Stops on the first short page, once `count` (reported on page 0) is reached,
+ * once `max` records are held, or at SUBSCAN_MAX_PAGES as a quota backstop.
+ *
+ * @param {string} path    endpoint from ENDPOINTS
+ * @param {object} body    request body minus `page` / `row`
+ * @param {string} proxyUrl
+ * @param {object} options subscanPost options ({ signal, attempts, onRetry })
+ * @param {object} pageOpts
+ * @param {number}   [pageOpts.max]      stop once this many records are held
+ * @param {function} [pageOpts.listOf]   extract the record array from a response
+ * @param {function} [pageOpts.countOf]  extract the total count from a response
+ * @param {function} [pageOpts.onPage]   called (pageNum, itemsInPage) after each page
+ * @param {number}   [pageOpts.delayMs]  inter-page delay (overridable for tests)
+ * @param {function} [pageOpts.post]     injection seam for tests
+ * @returns {Promise<Array>}
+ */
+export async function fetchPaged(path, body, proxyUrl, options = {}, pageOpts = {}) {
+  const {
+    max     = Infinity,
+    listOf  = d => d?.data?.list ?? [],
+    countOf = d => d?.data?.count ?? null,
+    onPage,
+    delayMs = API_DELAY_MS,
+    post    = subscanPost,
+  } = pageOpts
+
+  const { signal } = options
+  const out = []
+  let total = null
+
+  for (let page = 0; page < SUBSCAN_MAX_PAGES; page++) {
+    if (signal?.aborted) throw new Error('Aborted')
+
+    const data = await post(path, { ...body, page, row: SUBSCAN_MAX_ROW }, proxyUrl, options)
+    const list = listOf(data) ?? []
+
+    // `count` is the total matching records; capture it from the first response
+    // that reports one so we can stop without issuing a probing empty page.
+    if (total === null) {
+      const c = countOf(data)
+      if (c != null) total = c
+    }
+
+    out.push(...list)
+    if (onPage) onPage(page, list.length)
+
+    if (list.length < SUBSCAN_MAX_ROW) break
+    if (total !== null && out.length >= total) break
+    if (out.length >= max) break
+    if (page === SUBSCAN_MAX_PAGES - 1) {
+      console.warn(
+        `fetchPaged: hit the ${SUBSCAN_MAX_PAGES}-page cap on ${path} — results are truncated at ${out.length} records.`,
+      )
+      break
+    }
+
+    await delay(delayMs)
+  }
+
+  return Number.isFinite(max) ? out.slice(0, max) : out
+}
+
 // ── Typed helpers ──────────────────────────────────────────────────────────
 
 export async function fetchValidators(proxyUrl, signal) {
@@ -217,14 +335,12 @@ export async function fetchNominators(address, proxyUrl, options = {}) {
   if (options && typeof options === 'object' && typeof options.addEventListener === 'function') {
     options = { signal: options }
   }
-  const { signal } = options
-  const data = await subscanPost(
+  return fetchPaged(
     ENDPOINTS.nominators,
-    { page: 0, row: NOMINATORS_ROW, address, order: 'desc', order_field: 'bonded' },
+    { address, order: 'desc', order_field: 'bonded' },
     proxyUrl,
     options,
   )
-  return data?.data?.list ?? []
 }
 
 export async function fetchEraStat(address, row, proxyUrl, options = {}) {
@@ -232,13 +348,13 @@ export async function fetchEraStat(address, row, proxyUrl, options = {}) {
   if (options && typeof options === 'object' && typeof options.addEventListener === 'function') {
     options = { signal: options }
   }
-  const data = await subscanPost(
+  return fetchPaged(
     ENDPOINTS.eraStat,
-    { address, row, page: 0 },
+    { address },
     proxyUrl,
     options,
+    { max: row },
   )
-  return data?.data?.list ?? []
 }
 
 /** Re-export the delay utility for hooks. */
@@ -266,6 +382,7 @@ export async function probeEndpoint(path, _body, signal) {
   }
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
+    _requestCount++
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -321,37 +438,20 @@ export async function probeEndpoint(path, _body, signal) {
 
 /**
  * Fetch all nomination pools using multi-page loop.
- * Continues fetching until a page returns fewer items than POOLS_PAGE_SIZE.
+ * Continues fetching until a page returns fewer items than SUBSCAN_MAX_ROW.
  * @param {string} proxyUrl
  * @param {AbortSignal} signal
  * @param {function} [onPage] - optional callback(pageNum, itemsInPage) for logging
  * @returns {Promise<Array>} concatenated pool list
  */
 export async function fetchAllPools(proxyUrl, signal, onPage) {
-  const allPools = []
-  let page = 0
-  let totalCount = null
-  while (true) {
-    const data = await subscanPost(
-      ENDPOINTS.pools,
-      { multi_state: ['Open', 'Blocked'], page, row: POOLS_PAGE_SIZE },
-      proxyUrl,
-      { signal },
-    )
-    const list = data?.data?.list ?? []
-    // Capture the total count from the first page so we can stop as soon
-    // as we have fetched all pools, even if each page returns exactly POOLS_PAGE_SIZE items.
-    if (totalCount === null && data?.data?.count != null) {
-      totalCount = data.data.count
-    }
-    allPools.push(...list)
-    if (onPage) onPage(page, list.length)
-    if (list.length < POOLS_PAGE_SIZE) break
-    if (totalCount !== null && allPools.length >= totalCount) break
-    page++
-    await delay(API_DELAY_MS)
-  }
-  return allPools
+  return fetchPaged(
+    ENDPOINTS.pools,
+    { multi_state: ['Open', 'Blocked'] },
+    proxyUrl,
+    { signal },
+    { onPage },
+  )
 }
 
 /**
@@ -380,20 +480,17 @@ export async function fetchVoted(address, proxyUrl, signal) {
  * @returns {Promise<Array>}
  */
 export async function fetchRewardSlash(address, blockRange, proxyUrl, signal) {
-  const data = await subscanPost(
+  return fetchPaged(
     ENDPOINTS.rewardSlash,
     {
       address,
       is_stash: true,
       category: 'Reward',
       block_range: blockRange,
-      page: 0,
-      row: REWARD_SLASH_ROW,
     },
     proxyUrl,
     { signal },
   )
-  return data?.data?.list ?? []
 }
 
 // Module-level cache: address → Set<number>. Persists across runs for the same address.
@@ -415,6 +512,11 @@ export function clearHistPoolCache(address) {
  * Results are cached in memory by address; a second call for the same address
  * returns immediately without any network requests.
  *
+ * NOTE (free plan): Subscan only indexes the past 3 months, so for an address
+ * whose pool activity predates that window this returns an INCOMPLETE set.  The
+ * incomplete set is then cached, so a retry will not re-fetch it — call sites
+ * must not treat the result as an exhaustive history.
+ *
  * @param {string} address - Relaychain wallet address
  * @param {AbortSignal} signal
  * @param {function} [onPage] - optional callback(page, count) for progress logging
@@ -424,7 +526,7 @@ export async function fetchHistoricalPoolIds(address, signal, onPage) {
   if (_histPoolCache.has(address)) return _histPoolCache.get(address)
   const poolIds = new Set()
   let page = 0
-  const rowPerPage = 100
+  const rowPerPage = SUBSCAN_MAX_ROW
   const allowedCalls = new Set([
     'bond',
     'unbond',
@@ -432,7 +534,10 @@ export async function fetchHistoricalPoolIds(address, signal, onPage) {
     'withdraw_unbonded_kill',
   ])
 
-  while (true) {
+  // Bounded like fetchPaged: an address with a long extrinsic history would
+  // otherwise page indefinitely at two requests per page, against the same daily
+  // quota that SUBSCAN_MAX_PAGES exists to protect.
+  for (; page < SUBSCAN_MAX_PAGES; page++) {
     if (signal?.aborted) throw new Error('Aborted')
 
     const data = await subscanPost(
@@ -458,6 +563,8 @@ export async function fetchHistoricalPoolIds(address, signal, onPage) {
 
     if (indices.length) {
       try {
+        // Second request against the same rate-limit bucket — space it out.
+        await delay(API_DELAY_MS)
         const paramsResp = await subscanPost(
           ENDPOINTS.extrinsicParams,
           { extrinsic_index: indices },
@@ -507,237 +614,17 @@ export async function fetchHistoricalPoolIds(address, signal, onPage) {
     if (onPage) onPage(page, records.length)
 
     if (records.length < rowPerPage) break
-    page++
+
+    if (page === SUBSCAN_MAX_PAGES - 1) {
+      console.warn(
+        `fetchHistoricalPoolIds: hit the ${SUBSCAN_MAX_PAGES}-page cap for ${address} — pool discovery may be incomplete.`,
+      )
+      break
+    }
+
     await delay(API_DELAY_MS)
   }
 
   _histPoolCache.set(address, poolIds)
   return poolIds
-}
-
-/**
- * Fetch NominationPools reward events from Subscan for a specific pool and era,
- * within the block range that follows the era boundary.
- *
- * Mirrors Python's find_reinvested():
- *  1. Try EraRewardsProcessed first — single canonical event → return reinvested directly.
- *  2. Fall back to RewardPaid — sum (reward + commission.amount) for all validators.
- *
- * @param {number} poolId   - nomination pool ID
- * @param {number} era      - era number (used to filter events by era attribute)
- * @param {number} blockStart - first block to scan (= first block of era+1)
- * @param {number} blockEnd   - last block to scan (blockStart + 40)
- * @param {string} proxyUrl
- * @param {AbortSignal} signal
- * @returns {Promise<BigInt>} total reinvested amount in planck
- */
-export async function fetchNominationPoolEvents(poolId, era, blockStart, blockEnd, proxyUrl, signal) {
-  const blockRange = `${blockStart}-${blockEnd}`
-  const PAGE_SIZE = 100
-
-  const normKey = k => String(k ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
-
-  function toIntLike(v) {
-    if (v == null) return null
-    if (typeof v === 'number') return Number.isFinite(v) ? Math.trunc(v) : null
-    if (typeof v === 'bigint') return Number(v)
-    if (typeof v === 'string') {
-      const cleaned = v.replace(/[^0-9-]/g, '')
-      if (!cleaned || cleaned === '-' || cleaned === '--') return null
-      const n = Number.parseInt(cleaned, 10)
-      return Number.isFinite(n) ? n : null
-    }
-    if (typeof v === 'object') {
-      // common wrappers from decoded event params
-      if ('value' in v) return toIntLike(v.value)
-      if ('amount' in v) return toIntLike(v.amount)
-      return null
-    }
-    return null
-  }
-
-  function toBigIntLike(v) {
-    if (v == null) return 0n
-    if (typeof v === 'bigint') return v
-    if (typeof v === 'number') return BigInt(Math.trunc(v))
-    if (typeof v === 'string') {
-      const cleaned = v.replace(/[^0-9-]/g, '')
-      return BigInt(cleaned || '0')
-    }
-    if (typeof v === 'object') {
-      if ('value' in v) return toBigIntLike(v.value)
-      if ('amount' in v) return toBigIntLike(v.amount)
-    }
-    return 0n
-  }
-
-  function parseParams(raw) {
-    if (!raw) return []
-    if (Array.isArray(raw)) return raw
-    if (typeof raw === 'object') return raw
-    if (typeof raw === 'string') {
-      try { return JSON.parse(raw) } catch {
-        // Some Subscan payloads use single-quoted Python-ish repr strings.
-        try {
-          const normalized = raw
-            .replace(/\bNone\b/g, 'null')
-            .replace(/\bTrue\b/g, 'true')
-            .replace(/\bFalse\b/g, 'false')
-            .replace(/'/g, '"')
-          return JSON.parse(normalized)
-        } catch {
-          return []
-        }
-      }
-    }
-    return []
-  }
-
-  function extractParam(params, aliases, fallbackIndex = null) {
-    const wanted = new Set(aliases.map(normKey))
-
-    if (Array.isArray(params)) {
-      for (const item of params) {
-        if (item && typeof item === 'object') {
-          const k = normKey(item?.name ?? item?.key ?? item?.param)
-          if (k && wanted.has(k)) return item?.value ?? item
-        }
-      }
-      if (fallbackIndex != null && params.length > fallbackIndex) {
-        const item = params[fallbackIndex]
-        return (item && typeof item === 'object' && 'value' in item) ? item.value : item
-      }
-      return undefined
-    }
-
-    if (params && typeof params === 'object') {
-      for (const [k, v] of Object.entries(params)) {
-        if (wanted.has(normKey(k))) return v
-      }
-    }
-
-    return undefined
-  }
-
-  function eventName(ev) {
-    return String(
-      ev?.event_id
-      ?? ev?.event?.event_id
-      ?? ev?.event?.event_name
-      ?? ev?.event_name
-      ?? '',
-    ).trim()
-  }
-
-  async function fetchAllEventsInRange() {
-    const out = []
-    let page = 0
-    while (true) {
-      const resp = await subscanPost(
-        ENDPOINTS.events,
-        {
-          block_range: blockRange,
-          page,
-          row: PAGE_SIZE,
-        },
-        proxyUrl,
-        { signal },
-      )
-      const events = resp?.data?.events ?? []
-      out.push(...events)
-      if (events.length < PAGE_SIZE) break
-      page++
-      await delay(API_DELAY_MS)
-    }
-    return out
-  }
-
-  async function enrichEventParams(events) {
-    const pending = events
-      .filter(ev => {
-        const parsed = parseParams(ev?.params)
-        if (Array.isArray(parsed) && parsed.length > 0) return false
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.keys(parsed).length > 0) return false
-        return Boolean(ev?.event_index)
-      })
-      .map(ev => ev.event_index)
-
-    if (!pending.length) return events
-
-    try {
-      const resp = await subscanPost(
-        ENDPOINTS.extrinsicParams,
-        { event_index: pending },
-        proxyUrl,
-        { signal },
-      )
-      const arr = Array.isArray(resp?.data) ? resp.data
-                : Array.isArray(resp) ? resp
-                : []
-      const byIdx = {}
-      for (const item of arr) {
-        if (item?.event_index) byIdx[item.event_index] = item.params ?? []
-      }
-      return events.map(ev => (
-        ev?.event_index && byIdx[ev.event_index]
-          ? { ...ev, params: byIdx[ev.event_index] }
-          : ev
-      ))
-    } catch {
-      return events
-    }
-  }
-
-  // Mirrors Python's find_reinvested() order:
-  // scan all events in-range, return EraRewardsProcessed immediately when found,
-  // otherwise sum RewardPaid (reward + commission.amount).
-  try {
-    let events = await fetchAllEventsInRange()
-    events = await enrichEventParams(events)
-
-    const sorted = [...events].sort((a, b) => {
-      const ab = Number(a?.block_num ?? a?.block_height ?? 0)
-      const bb = Number(b?.block_num ?? b?.block_height ?? 0)
-      return ab - bb
-    })
-
-    let total = 0n
-    let totalOffsetPlusOne = 0n
-    for (const ev of sorted) {
-      const name = eventName(ev)
-      const isEraProcessed = name.toLowerCase() === 'erarewardsprocessed'
-      const isRewardPaid   = name.toLowerCase() === 'rewardpaid'
-      if (!isEraProcessed && !isRewardPaid) continue
-
-      const params  = parseParams(ev.params)
-      const evPool  = toIntLike(extractParam(params, ['pool_id', 'poolId'], 0))
-      const evEra   = toIntLike(extractParam(params, ['era', 'era_index', 'eraIndex'], 1))
-      if (evPool == null || evEra == null || evPool !== poolId) continue
-
-      if (isEraProcessed) {
-        if (evEra !== era) continue
-        const rawAmt = extractParam(params, ['reinvested'], 2)
-        return toBigIntLike(rawAmt)
-      }
-
-      if (isRewardPaid) {
-        const reward  = toBigIntLike(extractParam(params, ['reward'], 3))
-        const commRaw = extractParam(params, ['commission'], 4)
-        let commAmt   = 0n
-        if (commRaw != null) {
-          // commission can be a dict {amount:...} or a raw value
-          const amt = typeof commRaw === 'object' ? commRaw?.amount : commRaw
-          commAmt = toBigIntLike(amt)
-        }
-        const sum = reward + commAmt
-        if (evEra === era) total += sum
-        // Legacy Subscan-indexed RewardPaid can be +1 shifted on era.
-        if (evEra === era + 1) totalOffsetPlusOne += sum
-      }
-    }
-    return total > 0n ? total : totalOffsetPlusOne
-  } catch (e) {
-    if (signal?.aborted) throw e
-    return 0n
-  }
 }

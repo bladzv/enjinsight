@@ -8,29 +8,133 @@ export const config = { api: { bodyParser: false } }
 /** Maximum raw body size accepted from the client (32 KB — well above any API payload). */
 const MAX_BODY_BYTES = 32 * 1024
 
+// ── CORS origin allowlist ─────────────────────────────────────────────────────
+// This proxy injects server-side API keys (Subscan, Etherscan, Alchemy, OpenSea)
+// into upstream requests, so it must never serve arbitrary cross-origin callers.
+// Reflecting the request's `Origin` — the previous behaviour — is the most
+// permissive CORS policy possible, and made this a public, credential-lending
+// API that any website could use to burn the deployment's API quota.
+//
+// Allowed origins are derived from the deployment itself (Vercel supplies these
+// as bare hosts), plus an optional ALLOWED_ORIGINS list for custom domains, plus
+// localhost outside production. No domain is hardcoded.
+const DEV_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173']
+
+const ALLOWED_ORIGINS = (() => {
+  const origins = new Set()
+  const add = (value) => {
+    const trimmed = String(value || '').trim().replace(/\/+$/, '')
+    if (trimmed) origins.add(trimmed)
+  }
+
+  const explicit = (process.env.ALLOWED_ORIGINS || '').split(',')
+  explicit.forEach(add)
+
+  // Vercel system env vars carry a bare host; the deployment is always https.
+  const vercelHosts = [
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
+    process.env.VERCEL_BRANCH_URL,
+    process.env.VERCEL_URL,
+  ]
+  vercelHosts.forEach((host) => {
+    if (host) add(`https://${String(host).replace(/^https?:\/\//, '')}`)
+  })
+
+  const isProd = process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production'
+  if (!isProd) DEV_ORIGINS.forEach(add)
+
+  return origins
+})()
+
+/**
+ * Classify the request's Origin.
+ *   'same-origin' — no Origin header. Browsers omit it for same-origin GET/HEAD
+ *                   and non-browser clients never send it; there is nothing to grant.
+ *   'allowed'     — cross-origin and on the allowlist.
+ *   'denied'      — cross-origin and not on the allowlist.
+ */
+function classifyOrigin(req) {
+  const raw = req.headers.origin
+  if (!raw) return { kind: 'same-origin', origin: null }
+  const origin = String(raw).trim().replace(/\/+$/, '')
+  return { kind: ALLOWED_ORIGINS.has(origin) ? 'allowed' : 'denied', origin }
+}
+
+/**
+ * Apply CORS and hardening headers. Emits Access-Control-Allow-Origin only for an
+ * allowlisted cross-origin caller and omits it entirely otherwise — it never
+ * reflects an arbitrary Origin.
+ */
+function applyCors(req, res) {
+  const { kind, origin } = classifyOrigin(req)
+  res.setHeader('Vary', 'Origin')
+  if (kind === 'allowed') res.setHeader('Access-Control-Allow-Origin', origin)
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+}
+
+/**
+ * Refuse cross-origin callers that are not allowlisted.
+ * Withholding the CORS header alone would still let the request reach upstream and
+ * spend the API key — the browser would only stop the caller from *reading* the
+ * response. Refusing outright is what actually protects the quota.
+ * Returns true when the request should continue.
+ */
+function enforceOrigin(req, res) {
+  if (classifyOrigin(req).kind !== 'denied') return true
+  applyCors(req, res)
+  res.statusCode = 403
+  res.end('Cross-origin requests are not permitted by this proxy.')
+  return false
+}
+
+/**
+ * Optional shared-secret gate (PROXY_SECRET), applied to every route rather than
+ * the Subscan branch alone. Returns true when the request should continue.
+ */
+function enforceProxySecret(req, res) {
+  const secret = process.env.PROXY_SECRET
+  if (!secret) return true
+  if ((req.headers['x-proxy-secret'] || '') === secret) return true
+  applyCors(req, res)
+  res.statusCode = 401
+  res.end('Missing or invalid proxy secret header.')
+  return false
+}
+
+// Exact Subscan paths this proxy will forward to. MUST stay in sync with ENDPOINTS
+// in src/constants.js — api.test.js asserts the two are identical. Host-only
+// allowlisting is not sufficient: without this, every path on the allowlisted host
+// (including expensive ones) is reachable with the injected API key.
+// Request headers forwarded upstream. Anything not listed here is dropped —
+// notably `cookie`, `authorization` and `referer`, which must never leave the
+// deployment, and `x-api-key`, which is injected server-side instead.
+const FORWARDABLE_REQUEST_HEADERS = ['content-type', 'accept', 'accept-encoding', 'user-agent']
+
+export const SUBSCAN_PATH_ALLOWLIST = new Set([
+  '/api/scan/staking/validators',
+  '/api/scan/staking/nominators',
+  '/api/scan/staking/era_stat',
+  '/api/scan/nomination_pool/pools',
+  '/api/scan/staking/voted',
+  '/api/v2/scan/account/reward_slash',
+  '/api/v2/scan/extrinsics',
+  '/api/scan/extrinsic/params',
+  '/api/v2/scan/events',
+])
+
 // ── Per-process token-bucket rate limiter ─────────────────────────────────────
 // Protects the shared Subscan API key against bursts caused by multiple concurrent
 // users.  Each Vercel function instance maintains its own bucket; there is no
 // cross-instance coordination (that would require Vercel KV / Redis).  For free-tier
 // traffic this provides meaningful protection within a single warm instance.
 //
-// Free-tier Subscan allows ~1 req/s sustained.  We allow a burst of 3 tokens
-// (absorbed instantly) then refill at 1 token/s, matching the free-tier limit.
+// Free-tier Subscan allows ~2 req/s sustained.  We allow a burst of 4 tokens
+// (absorbed instantly) then refill at 2 tokens/s, matching the free-tier limit.
 const _bucket = {
-  tokens:    3,            // initial burst allowance
-  max:       3,            // maximum burst
-  rate:      1,            // tokens refilled per second
+  tokens:    4,            // initial burst allowance
+  max:       4,            // maximum burst
+  rate:      2,            // tokens refilled per second
   lastRefill: Date.now(),
-}
-
-function consumeToken() {
-  const now     = Date.now()
-  const elapsed = (now - _bucket.lastRefill) / 1000
-  _bucket.tokens     = Math.min(_bucket.max, _bucket.tokens + elapsed * _bucket.rate)
-  _bucket.lastRefill = now
-  if (_bucket.tokens < 1) return false
-  _bucket.tokens -= 1
-  return true
 }
 
 // ── In-process response cache ─────────────────────────────────────────────────
@@ -122,7 +226,11 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-async function takeApiToken(bucket) {
+// `maxWaitMs` bounds how long a caller will block for a token before giving up.
+// Every caller passes a finite bound; the Infinity default exists only so a future
+// caller must opt into unbounded waiting explicitly. Returns false on timeout.
+async function takeApiToken(bucket, maxWaitMs = Infinity) {
+  const deadline = Date.now() + maxWaitMs
   while (true) {
     const now = Date.now()
     const elapsed = (now - bucket.lastRefill) / 1000
@@ -131,23 +239,38 @@ async function takeApiToken(bucket) {
 
     if (bucket.tokens >= 1) {
       bucket.tokens -= 1
-      return
+      return true
     }
 
-    await delay(Math.ceil((1 - bucket.tokens) / bucket.rate * 1000))
+    const waitMs = Math.ceil((1 - bucket.tokens) / bucket.rate * 1000)
+    if (Number.isFinite(maxWaitMs) && now + waitMs > deadline) return false
+    await delay(waitMs)
   }
 }
 
+// Vercel caps this function at 10s (vercel.json maxDuration). An unbounded token
+// wait therefore blocks until the platform kills the request, billing the full
+// duration; bound it well inside that ceiling and fail with a clear error instead.
+const API_TOKEN_WAIT_MS = 5000
+
 function takeEtherscanToken() {
-  return takeApiToken(_etherscanBucket)
+  return takeApiToken(_etherscanBucket, API_TOKEN_WAIT_MS)
 }
 
 function takeAlchemyToken() {
-  return takeApiToken(_alchemyBucket)
+  return takeApiToken(_alchemyBucket, API_TOKEN_WAIT_MS)
 }
 
 function takeOpenSeaToken() {
-  return takeApiToken(_openSeaBucket)
+  return takeApiToken(_openSeaBucket, API_TOKEN_WAIT_MS)
+}
+
+// Subscan bucket: block briefly for a token rather than failing fast, since a
+// token refills in well under a second at the 2 req/s free-tier rate — but cap
+// the wait so a request can never hang the function indefinitely.
+const SUBSCAN_TOKEN_WAIT_MS = 2000
+function takeSubscanToken() {
+  return takeApiToken(_bucket, SUBSCAN_TOKEN_WAIT_MS)
 }
 
 async function fetchWithRetries(url, options, retryOptions = {}) {
@@ -259,7 +382,7 @@ async function fetchEtherscanApi(params, options = {}) {
 
   const attempts = options.attempts ?? 3
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    await takeEtherscanToken()
+    if (!(await takeEtherscanToken())) throw new Error('Timed out waiting for an Etherscan request slot.')
     const response = await fetchWithRetries(url, undefined, { attempts: 1 })
 
     if (!response.ok) {
@@ -332,7 +455,7 @@ async function alchemyRpcCall(method, params) {
 
   const attempts = 3
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    await takeAlchemyToken()
+    if (!(await takeAlchemyToken())) throw new Error('Timed out waiting for an Alchemy request slot.')
     const response = await fetch(targetUrl, {
       method: 'POST',
       headers: {
@@ -506,6 +629,9 @@ async function proxyEnjWalletTokens(req, res) {
   const cacheKey = `etherscan:enj-wallet-tokens:${owner.toLowerCase()}`
   const hit = cacheGet(cacheKey, ETHERSCAN_DETAIL_TTL_MS)
   if (hit) {
+    // Cache hits must carry the same CORS headers as a miss, or an allowlisted
+    // cross-origin caller sees failures that depend purely on cache state.
+    applyCors(req, res)
     res.setHeader('Content-Type', hit.contentType)
     res.setHeader('Cache-Control', 'private, max-age=300')
     res.statusCode = hit.status
@@ -518,16 +644,14 @@ async function proxyEnjWalletTokens(req, res) {
 
     try {
       tokens = await fetchCurrentWalletTokens(owner)
-    } catch (error) {
+    } catch {
       tokens = await fetchWalletTokensViaAlchemy(owner)
       provider = 'alchemy'
     }
     const body = JSON.stringify({ owner, contractAddress: ENJIN_CRYPTOITEMS_CONTRACT, tokens })
 
     cacheSet(cacheKey, { body, status: 200, contentType: 'application/json; charset=utf-8' })
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '')
-    res.setHeader('Vary', 'Origin')
-    res.setHeader('X-Content-Type-Options', 'nosniff')
+    applyCors(req, res)
     res.setHeader('X-Token-List-Provider', provider)
     res.setHeader('Cache-Control', 'private, max-age=300')
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
@@ -545,7 +669,7 @@ function parseInfusionEthCall(rawBody) {
   try {
     payload = JSON.parse(rawBody.toString('utf8'))
   } catch (error) {
-    throw new Error('Invalid JSON-RPC body.')
+    throw new Error('Invalid JSON-RPC body.', { cause: error })
   }
 
   if (payload?.method !== 'eth_call') throw new Error('Only eth_call is allowed.')
@@ -575,9 +699,7 @@ async function proxyAlchemyEthCall(req, res) {
   const rawBody = await readRawBody(req)
   const rpcUrl = process.env.ALCHEMY_ETH_RPC_URL || ''
   const finish = (status, body, contentType = 'application/json; charset=utf-8', provider = '') => {
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '')
-    res.setHeader('Vary', 'Origin')
-    res.setHeader('X-Content-Type-Options', 'nosniff')
+    applyCors(req, res)
     res.setHeader('Cache-Control', 'no-store')
     res.setHeader('Content-Type', contentType)
     if (provider) res.setHeader('X-RPC-Provider', provider)
@@ -599,7 +721,7 @@ async function proxyAlchemyEthCall(req, res) {
       throw new Error('ALCHEMY_ETH_RPC_URL must use https.')
     }
 
-    await takeAlchemyToken()
+    if (!(await takeAlchemyToken())) throw new Error('Timed out waiting for an Alchemy request slot.')
     const upstreamRes = await fetch(targetUrl, {
       method: 'POST',
       headers: {
@@ -613,7 +735,7 @@ async function proxyAlchemyEthCall(req, res) {
     if (upstreamRes.ok) {
       return finish(upstreamRes.status, text, upstreamRes.headers.get('content-type') || 'application/json; charset=utf-8', 'Alchemy')
     }
-  } catch (error) {
+  } catch {
     // Fall back to Etherscan below.
   }
 
@@ -647,7 +769,7 @@ async function fetchOpenSeaTokenMetadata(tokenId, owner) {
   const attempts = 3
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    await takeOpenSeaToken()
+    if (!(await takeOpenSeaToken())) throw new Error('Timed out waiting for an OpenSea request slot.')
     const response = await fetchWithRetries(url, {
       headers: {
         accept: 'application/json',
@@ -772,6 +894,9 @@ async function proxyEnjTokenDetails(req, res) {
   const cacheKey = `etherscan:enj-token-details:${owner.toLowerCase()}:${tokenId}`
   const hit = cacheGet(cacheKey, ETHERSCAN_DETAIL_TTL_MS)
   if (hit) {
+    // Cache hits must carry the same CORS headers as a miss, or an allowlisted
+    // cross-origin caller sees failures that depend purely on cache state.
+    applyCors(req, res)
     res.setHeader('Content-Type', hit.contentType)
     res.setHeader('Cache-Control', 'private, max-age=300')
     res.statusCode = hit.status
@@ -820,9 +945,7 @@ async function proxyEnjTokenDetails(req, res) {
     const body = JSON.stringify(result)
 
     cacheSet(cacheKey, { body, status: 200, contentType: 'application/json; charset=utf-8' })
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '')
-    res.setHeader('Vary', 'Origin')
-    res.setHeader('X-Content-Type-Options', 'nosniff')
+    applyCors(req, res)
     res.setHeader('Cache-Control', 'private, max-age=300')
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.statusCode = 200
@@ -854,15 +977,24 @@ function readRawBody(req) {
 
 export default async function handler(req, res) {
   try {
+    // Gate every route on the origin allowlist before any upstream work happens.
+    if (!enforceOrigin(req, res)) return;
+
     if (req.method === 'OPTIONS') {
-      // Only allow same-origin requests; this proxy is not a public API
-      res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '');
-      res.setHeader('Vary', 'Origin');
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', req.headers['access-control-request-headers'] || '*');
+      // Preflight is answered with a fixed policy. The previous code echoed back
+      // whatever Access-Control-Request-Headers the caller asked for, which grants
+      // any header the caller wants. Preflights cannot carry x-proxy-secret, so the
+      // secret gate below deliberately runs after this branch.
+      applyCors(req, res);
+      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'content-type,accept,x-proxy-secret');
+      res.setHeader('Access-Control-Max-Age', '600');
       res.statusCode = 204;
       return res.end();
     }
+
+    // Optional shared-secret gate, applied to every route (not just Subscan).
+    if (!enforceProxySecret(req, res)) return;
 
     // Reject requests with no Content-Type on non-GET methods (body expected)
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !req.headers['content-type']) {
@@ -898,7 +1030,7 @@ export default async function handler(req, res) {
     let target;
     try {
       target = decodeURIComponent(encodedTarget);
-    } catch (e) {
+    } catch {
       res.statusCode = 400;
       return res.end('Invalid encoded target');
     }
@@ -917,13 +1049,12 @@ export default async function handler(req, res) {
       return res.end('Target host not allowed by PROXY_ALLOWLIST.');
     }
 
-    const secret = process.env.PROXY_SECRET;
-    if (secret) {
-      const incoming = req.headers['x-proxy-secret'] || '';
-      if (incoming !== secret) {
-        res.statusCode = 401;
-        return res.end('Missing or invalid proxy secret header.');
-      }
+    // Host-only allowlisting leaves every path on that host reachable with the
+    // injected API key. The exact-path list is the real control; the client-side
+    // allowlist in src/utils/api.js is a convenience, not a security boundary.
+    if (!SUBSCAN_PATH_ALLOWLIST.has(targetUrl.pathname)) {
+      res.statusCode = 403;
+      return res.end('Target path not allowed by this proxy.');
     }
 
     const originalQuery = raw.includes('?') ? raw.split('?').slice(1).join('?') : '';
@@ -946,9 +1077,7 @@ export default async function handler(req, res) {
       const ttl      = isImmutable ? CACHE_TTL_MS : SLOW_TTL_MS
       const hit      = cacheGet(cacheKey, ttl)
       if (hit) {
-        res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '')
-        res.setHeader('Vary', 'Origin')
-        res.setHeader('X-Content-Type-Options', 'nosniff')
+        applyCors(req, res)
         res.setHeader('X-Frame-Options', 'DENY')
         res.setHeader('Content-Type', hit.contentType)
         res.setHeader('X-Cache', 'HIT')
@@ -964,24 +1093,23 @@ export default async function handler(req, res) {
 
     // ── Token-bucket rate limiter ─────────────────────────────────────────
     // Applied after cache hits so cached responses are never throttled.
-    if (!consumeToken()) {
+    // Blocks briefly for a token (see takeSubscanToken); only 429s if the wait
+    // exceeds SUBSCAN_TOKEN_WAIT_MS, which the client's own backoff already expects.
+    if (!(await takeSubscanToken())) {
+      applyCors(req, res)
       res.setHeader('Retry-After', '1')
-      res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '')
       res.statusCode = 429
       return res.end('Too Many Requests — slow down and retry after 1 second.')
     }
 
-    const forwardHeaders = { ...req.headers };
-    delete forwardHeaders.host;
-    // Remove the client-supplied x-api-key — we inject it server-side below.
-    delete forwardHeaders['x-api-key'];
-    // Strip hop-by-hop and potentially dangerous headers
-    [
-      'connection', 'keep-alive', 'transfer-encoding',
-      'proxy-authorization', 'proxy-authenticate', 'upgrade',
-      'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto',
-      'x-real-ip', 'x-proxy-secret',
-    ].forEach(h => delete forwardHeaders[h]);
+    // Forward an explicit allowlist rather than stripping a denylist. The previous
+    // denylist did not cover `cookie`, `authorization` or `referer`, so any cookie
+    // scoped to this app's domain was sent upstream to Subscan on every request.
+    const forwardHeaders = {};
+    for (const name of FORWARDABLE_REQUEST_HEADERS) {
+      const value = req.headers[name];
+      if (value) forwardHeaders[name] = value;
+    }
 
     // Inject the Subscan API key from the server-side environment variable.
     const apiKey = process.env.SUBSCAN_API_KEY || '';
@@ -996,19 +1124,21 @@ export default async function handler(req, res) {
 
     const upstreamRes = await fetch(finalUrl, fetchOptions);
 
-    const disallowed = ['set-cookie', 'connection', 'content-encoding', 'transfer-encoding'];
+    // `content-length` must be dropped alongside `content-encoding`: fetch has
+    // already gunzipped the body, so the upstream (compressed) length is shorter
+    // than what we write and Node would silently truncate the response.
+    const disallowed = ['set-cookie', 'connection', 'content-encoding', 'transfer-encoding', 'content-length'];
     upstreamRes.headers.forEach((value, key) => {
       if (!disallowed.includes(key.toLowerCase())) {
         res.setHeader(key, value);
       }
     });
 
-    // Only allow same-origin requests; this proxy is not a public API
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '');
-    res.setHeader('Vary', 'Origin');
+    // CORS is granted only to allowlisted origins (see applyCors); this proxy is
+    // not a public API and never reflects an arbitrary Origin.
+    applyCors(req, res);
     res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
     // Prevent downstream content from being framed or sniffed
-    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
 
     // ── Cache-Control headers ─────────────────────────────────────────────

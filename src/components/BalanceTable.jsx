@@ -24,12 +24,6 @@ const COLS = [
   { key: 'feeFrozen',  label: 'Fee Frozen (ENJ)',    align: 'right' },
 ]
 
-function colValue(d, col, isNewFormat) {
-  if (col === 'miscFrozen' && isNewFormat) return 'frozen'
-  if (col === 'feeFrozen'  && isNewFormat) return 'n/a'
-  return d[col]
-}
-
 function truncHash(h) { return `${h.slice(0, 10)}…${h.slice(-8)}` }
 
 export default function BalanceTable({ records, isLoading = false }) {
@@ -122,22 +116,32 @@ export default function BalanceTable({ records, isLoading = false }) {
       {/* Table */}
       <div className="data-table-wrap">
         <table className={`data-table ${textSize}`}>
+          <caption className="sr-only">Historical balance snapshots by block</caption>
           <thead className="sticky top-0 z-10">
             <tr>
               {COLS.map(col => {
                 const isSorted = sortCol === col.key
+                const directionLabel = isSorted
+                  ? `sorted ${sortDir === 1 ? 'ascending' : 'descending'}`
+                  : 'not sorted'
                 return (
                   <th
                     key={col.key}
-                    onClick={() => handleSort(col.key)}
+                    scope="col"
                     className={`data-table-head px-3 py-3
-                                uppercase cursor-pointer select-none whitespace-nowrap transition-colors
-                                text-[calc(1em*0.79)] ${col.align === 'right' ? 'text-right' : 'text-left'}
-                                ${isSorted ? 'text-cyan' : 'text-muted hover:text-cyan'}`}
+                                uppercase whitespace-nowrap
+                                text-[calc(1em*0.79)] ${col.align === 'right' ? 'text-right' : 'text-left'}`}
                     aria-sort={isSorted ? (sortDir === 1 ? 'ascending' : 'descending') : 'none'}
                   >
-                    {colLabel(col)}
-                    {isSorted && (sortDir === 1 ? ' ↑' : ' ↓')}
+                    <button
+                      type="button"
+                      onClick={() => handleSort(col.key)}
+                      className={`select-none transition-colors ${isSorted ? 'text-cyan' : 'text-muted hover:text-cyan'}`}
+                      aria-label={`Sort by ${colLabel(col)} (${directionLabel})`}
+                    >
+                      {colLabel(col)}
+                      {isSorted && (sortDir === 1 ? ' ↑' : ' ↓')}
+                    </button>
                   </th>
                 )
               })}
