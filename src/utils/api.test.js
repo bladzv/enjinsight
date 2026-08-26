@@ -227,3 +227,97 @@ describe('abort-aware retry backoff', () => {
     vi.unstubAllGlobals()
   })
 })
+
+// ── Auth-failure reporting ───────────────────────────────────────────────────
+// Subscan answers an invalid or missing API key with HTTP 400 and puts the only
+// useful information in the body, so both the probe and the real fetch must read
+// the body rather than reporting a bare `HTTP 400`.
+describe('Subscan auth-failure reporting', () => {
+  const jsonResponse = (status, body) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: h => (h === 'content-type' ? 'application/json' : null) },
+    json: async () => body,
+  })
+
+  const withFetch = async (response, fn) => {
+    vi.stubGlobal('fetch', vi.fn(async () => response))
+    try { return await fn() } finally { vi.unstubAllGlobals() }
+  }
+
+  describe('probeEndpoint', () => {
+    it('names the rejected key on body code 20009', async () => {
+      const result = await withFetch(
+        jsonResponse(400, { code: 20009, message: 'API key invalid' }),
+        () => probeEndpoint(ENDPOINTS.validators),
+      )
+      expect(result.ok).toBe(false)
+      expect(result.code).toBe(20009)
+      expect(result.error).toMatch(/20009/)
+      expect(result.error).toMatch(/SUBSCAN_API_KEY/)
+    })
+
+    it('names the unset key on body code 403', async () => {
+      const result = await withFetch(
+        jsonResponse(400, { code: 403, message: 'Subscan API strictly requires an API key.' }),
+        () => probeEndpoint(ENDPOINTS.pools),
+      )
+      expect(result.ok).toBe(false)
+      expect(result.error).toMatch(/SUBSCAN_API_KEY is unset/)
+    })
+
+    it('still treats the empty-body 400/EOF reply as reachable', async () => {
+      const result = await withFetch(
+        jsonResponse(400, { code: 400, message: 'EOF' }),
+        () => probeEndpoint(ENDPOINTS.eraStat),
+      )
+      expect(result).toMatchObject({ ok: true, status: 400, code: 400, error: null })
+    })
+
+    it('treats a successful response as reachable', async () => {
+      const result = await withFetch(
+        jsonResponse(200, { code: 0, data: { list: [] } }),
+        () => probeEndpoint(ENDPOINTS.validators),
+      )
+      expect(result).toMatchObject({ ok: true, status: 200, code: 0, error: null })
+    })
+
+    it('fails an auth code even when the status is 200', async () => {
+      const result = await withFetch(
+        jsonResponse(200, { code: 20009, message: 'API key invalid' }),
+        () => probeEndpoint(ENDPOINTS.validators),
+      )
+      expect(result.ok).toBe(false)
+      expect(result.error).toMatch(/20009/)
+    })
+  })
+
+  describe('subscanPost', () => {
+    it('surfaces the auth cause instead of "HTTP 400 from Subscan"', async () => {
+      await withFetch(
+        jsonResponse(400, { code: 20009, message: 'API key invalid' }),
+        () => expect(
+          subscanPost(ENDPOINTS.validators, {}, '', { attempts: 1, signal: new AbortController().signal }),
+        ).rejects.toThrow(/20009: API key invalid/),
+      )
+    })
+
+    it('carries the upstream message on a non-zero body code', async () => {
+      await withFetch(
+        jsonResponse(200, { code: 10001, message: 'invalid param' }),
+        () => expect(
+          subscanPost(ENDPOINTS.pools, {}, '', { attempts: 1, signal: new AbortController().signal }),
+        ).rejects.toThrow(/code 10001: invalid param/),
+      )
+    })
+
+    it('collapses a multi-line upstream message to one line', async () => {
+      await withFetch(
+        jsonResponse(400, { code: 10001, message: 'bad\n  request\n' }),
+        () => expect(
+          subscanPost(ENDPOINTS.pools, {}, '', { attempts: 1, signal: new AbortController().signal }),
+        ).rejects.toThrow(/HTTP 400 from Subscan — bad request\./),
+      )
+    })
+  })
+})
