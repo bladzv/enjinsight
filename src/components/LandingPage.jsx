@@ -1,4 +1,5 @@
 import { ArrowUpRight, BarChart3, Gem, LineChart, Layers, TrendingUp } from 'lucide-react'
+import Reveal from './Reveal.jsx'
 
 const TOOLS = [
   {
@@ -82,12 +83,12 @@ export default function LandingPage({ onNavigate }) {
         </div>
 
         <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">
-          {TOOLS.map(tool => (
-            <li key={tool.key}>
+          {TOOLS.map((tool, i) => (
+            <Reveal as="li" key={tool.key} index={i}>
               <button
                 type="button"
                 onClick={() => onNavigate(tool.key)}
-                className="group grid w-full grid-cols-[auto_1fr_auto] items-start gap-4 rounded-sm border border-white/[0.06] bg-surface px-4 py-5 text-left transition-colors hover:bg-white/[0.02] sm:gap-6 sm:px-5"
+                className="tool-card group grid w-full grid-cols-[auto_1fr_auto] items-start gap-4 rounded-sm border border-white/[0.06] bg-surface px-4 py-5 text-left transition hover:bg-white/[0.02] sm:gap-6 sm:px-5"
                 aria-label={`Open ${tool.title}`}
               >
                 {/* code + icon */}
@@ -119,7 +120,7 @@ export default function LandingPage({ onNavigate }) {
                   <ArrowUpRight size={18} strokeWidth={2} />
                 </span>
               </button>
-            </li>
+            </Reveal>
           ))}
         </ul>
       </section>
@@ -130,13 +131,13 @@ export default function LandingPage({ onNavigate }) {
           { label: 'Read-only',   body: 'No wallet, no signing, no transactions.' },
           { label: 'Public data', body: 'From public RPC nodes, indexers, and era references.' },
           { label: 'Verify',      body: 'Confirm outputs against your own records.' },
-        ].map(item => (
-          <article key={item.label} className="flex items-start gap-3 rounded-sm border border-white/[0.06] bg-card p-4">
+        ].map((item, i) => (
+          <Reveal as="article" key={item.label} index={i} className="flex items-start gap-3 rounded-sm border border-white/[0.06] bg-card p-4">
             <div className="min-w-0 space-y-1">
               <p className="font-mono text-[10.5px] uppercase tracking-[0.2em] text-text">{item.label}</p>
               <p className="text-[13px] leading-5 text-text-secondary">{item.body}</p>
             </div>
-          </article>
+          </Reveal>
         ))}
       </section>
     </div>

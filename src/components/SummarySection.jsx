@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { ValidatorDetailsModal } from './ValidatorCard.jsx'
 import { findConsecutiveGroups, getSeverity } from '../utils/eraAnalysis.js'
 import { truncateAddress, validatorExplorerUrl } from '../utils/format.js'
+import { useCountUp } from '../hooks/useCountUp.js'
 
 export default function SummarySection({ validators, eraCount, latestEra, onRetry }) {
   const [showClean, setShowClean] = useState(false)
@@ -20,15 +21,18 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
   const critical = withGaps
     .map(v => ({ v, groups: findConsecutiveGroups(v.missedEras) }))
     .filter(({ groups }) => groups.length > 0)
-  const cleanPreview = clean.slice(0, 4)
 
-  // Gap table pagination
+  // Gap table pagination. Clamp on read (safeGapPage), not via a sync-back
+  // effect — the previous version sliced/displayed with the *raw* gapPage,
+  // so if withGaps shrank (e.g. a re-scan) after gapPage had advanced past
+  // its new range, gapPageItems briefly rendered empty and the counter showed
+  // an out-of-range page until the effect caught up a render later. Genuinely
+  // fixing that also resolves a real Rules of Hooks bug: this component
+  // returns early above when validators is empty, so that effect was being
+  // called conditionally across renders.
   const gapPages     = Math.max(1, Math.ceil(withGaps.length / gapPageSize))
-  const gapPageItems = withGaps.slice(gapPage * gapPageSize, (gapPage + 1) * gapPageSize)
   const safeGapPage  = Math.min(gapPage, gapPages - 1)
-  useEffect(() => {
-    if (safeGapPage !== gapPage) setGapPage(safeGapPage)
-  }, [safeGapPage, gapPage])
+  const gapPageItems = withGaps.slice(safeGapPage * gapPageSize, (safeGapPage + 1) * gapPageSize)
 
   function openValidator(validator) {
     setSelectedValidator(validator)
@@ -77,7 +81,7 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
             groups.map((g, gi) => (
               <div
                 key={`${v.address}-${gi}`}
-                role="alert"
+                role="button"
                 tabIndex={0}
                 onClick={() => openValidator(v)}
                 onKeyDown={event => handleOpenKey(event, v)}
@@ -127,7 +131,7 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
               const missed   = v.missedEras.length
               const rewarded = Math.max(0, eraCount - missed)
               return (
-                <article
+                <div
                   key={`m-${v.address}`}
                   role="button"
                   tabIndex={0}
@@ -162,24 +166,25 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
                     </p>
                     <SeverityBadge sev={sev} />
                   </div>
-                </article>
+                </div>
               )
             })}
           </div>
           <div className="hidden sm:block data-table-wrap">
             <table className="data-table min-w-[520px]">
+              <caption className="sr-only">Validators with missing rewards</caption>
               <thead>
                 <tr className="data-table-head">
-                  <th className="text-left px-4 py-3">Validator</th>
-                  <th className="text-center px-3 py-3">Checked</th>
-                  <th className="text-center px-3 py-3">Rewarded</th>
-                  <th className="text-center px-3 py-3">Missed</th>
-                  <th className="text-left px-3 py-3 hidden sm:table-cell">Missing Eras</th>
-                  <th className="text-center px-3 py-3">Severity</th>
+                  <th scope="col" className="text-left px-4 py-3">Validator</th>
+                  <th scope="col" className="text-center px-3 py-3">Checked</th>
+                  <th scope="col" className="text-center px-3 py-3">Rewarded</th>
+                  <th scope="col" className="text-center px-3 py-3">Missed</th>
+                  <th scope="col" className="text-left px-3 py-3 hidden sm:table-cell">Missing Eras</th>
+                  <th scope="col" className="text-center px-3 py-3">Severity</th>
                 </tr>
               </thead>
               <tbody>
-                {gapPageItems.map((v, i) => {
+                {gapPageItems.map((v) => {
                   const sev      = getSeverity(v.missedEras.length)
                   const missed   = v.missedEras.length
                   const rewarded = Math.max(0, eraCount - missed)
@@ -245,15 +250,15 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
               </div>
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setGapPage(p => Math.max(0, p - 1))}
-                  disabled={gapPage === 0}
+                  onClick={() => setGapPage(Math.max(0, safeGapPage - 1))}
+                  disabled={safeGapPage === 0}
                   className="btn-ghost disabled:opacity-30"
                   aria-label="Previous page"
                 >‹ Prev</button>
-                <span className="px-2">{gapPage + 1} / {gapPages}</span>
+                <span className="px-2">{safeGapPage + 1} / {gapPages}</span>
                 <button
-                  onClick={() => setGapPage(p => Math.min(gapPages - 1, p + 1))}
-                  disabled={gapPage >= gapPages - 1}
+                  onClick={() => setGapPage(Math.min(gapPages - 1, safeGapPage + 1))}
+                  disabled={safeGapPage >= gapPages - 1}
                   className="btn-ghost disabled:opacity-30"
                   aria-label="Next page"
                 >Next ›</button>
@@ -347,10 +352,17 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
 }
 
 function StatChip({ value, label, colour }) {
+  // Ticks up as more validators resolve mid-scan rather than jumping straight
+  // to the running total. aria-hidden + a stable sr-only sibling so a screen
+  // reader gets one final read, never the animated frames.
+  const animatedValue = useCountUp(value)
   return (
     <div className="metric-card">
       <span className="metric-label">{label}</span>
-      <div className={`metric-value ${colour}`}>{value}</div>
+      <div className={`metric-value ${colour}`}>
+        <span className="sr-only">{value}</span>
+        <span aria-hidden="true">{animatedValue}</span>
+      </div>
     </div>
   )
 }

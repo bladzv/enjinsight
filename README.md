@@ -91,11 +91,11 @@ Nomination pool mode:
 - Computes per-era staking reward estimates for an Enjin Relaychain address.
 - Supports manual era ranges and date presets.
 - Queries member sENJ balance and pool supply at era start blocks through archive RPC.
-- Fetches reinvested reward events from Subscan `reward_slash`.
+- Scans `NominationPools` reward events over archive RPC, net of pool operator commission.
 - Provides a unified filterable/sortable/paginated table and a chart that reacts to filters.
 - Summarizes total reward, average APY, reward eras, pool count, best APY era, and best pool.
 - Exports and imports JSON, CSV, and XML with optional encryption.
-- See [`docs/reward-history-computation.md`](./docs/reward-history-computation.md) for formula details and limitations.
+- See [`docs/reward-history-computation.md`](./docs/reward-history-computation.md) for formula details and limitations, and [`docs/nomination_pool_reward_accounting_fix.md`](./docs/nomination_pool_reward_accounting_fix.md) for the commission accounting rules.
 
 ### ENJ Infusion Checker
 

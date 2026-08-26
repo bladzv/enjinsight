@@ -50,7 +50,6 @@ export default {
       animation: {
         'pulse-slow':   'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'fade-in':      'fadeIn 0.25s ease-out',
-        'slide-down':   'slideDown 0.25s ease-out',
         'blink':        'blink 1.2s step-end infinite',
         'tick':         'tick 1.2s steps(2, end) infinite',
         'scroll-nudge': 'scrollNudge 1.5s ease-in-out infinite',
@@ -59,10 +58,6 @@ export default {
         fadeIn: {
           '0%':   { opacity: 0, transform: 'translateY(-4px)' },
           '100%': { opacity: 1, transform: 'translateY(0)' },
-        },
-        slideDown: {
-          '0%':   { opacity: 0, maxHeight: '0px' },
-          '100%': { opacity: 1, maxHeight: '2000px' },
         },
         blink: {
           '0%, 100%': { opacity: 1 },

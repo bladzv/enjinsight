@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { CheckCircle2, XCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { formatENJ, truncateAddress, validatorExplorerUrl } from '../utils/format.js'
 
@@ -15,32 +15,37 @@ export default function PoolRewardTable({
   const [pageSize, setPageSize] = useState(10)
   const [expandedEra, setExpandedEra] = useState(null)
 
+  // Re-parses every reward's BigInt amount and rebuilds the full row array.
+  // Previously ran on every render (e.g. toggling a row's expansion) even when
+  // none of these props had changed.
+  const rows = useMemo(() => {
+    const missedSet = new Set(missedEras ?? [])
+
+    // Build a lookup from era → summed reward amount (BigInt)
+    const rewardTotals = new Map()
+    if (Array.isArray(eraRewards)) {
+      for (const r of eraRewards) {
+        const era = parseInt(String(r.era), 10)
+        if (!Number.isFinite(era)) continue
+        const amtStr = String(r.amount ?? '0').replace(/[^0-9]/g, '') || '0'
+        let amt
+        try { amt = BigInt(amtStr) } catch { amt = 0n }
+        rewardTotals.set(era, (rewardTotals.get(era) || 0n) + amt)
+      }
+    }
+
+    // Build merged rows: all expected eras (descending), with reward data or gap marker
+    const allEras = latestEra && eraCount ? Array.from({ length: eraCount }, (_, i) => latestEra - i) : []
+    return allEras.map(era => ({
+      era,
+      rewardTotal: rewardTotals.get(era) ?? 0n,
+      missed: missedSet.has(era),
+    }))
+  }, [eraRewards, missedEras, eraCount, latestEra])
+
   if (!latestEra || !eraCount) {
     return <p className="text-xs text-dim py-4 text-center">No reward data available.</p>
   }
-
-  const missedSet = new Set(missedEras ?? [])
-
-  // Build a lookup from era → summed reward amount (BigInt)
-  const rewardTotals = new Map()
-  if (Array.isArray(eraRewards)) {
-    for (const r of eraRewards) {
-      const era = parseInt(String(r.era), 10)
-      if (!Number.isFinite(era)) continue
-      const amtStr = String(r.amount ?? '0').replace(/[^0-9]/g, '') || '0'
-      let amt
-      try { amt = BigInt(amtStr) } catch { amt = 0n }
-      rewardTotals.set(era, (rewardTotals.get(era) || 0n) + amt)
-    }
-  }
-
-  // Build merged rows: all expected eras (descending), with reward data or gap marker
-  const allEras = Array.from({ length: eraCount }, (_, i) => latestEra - i)
-  const rows = allEras.map(era => ({
-    era,
-    rewardTotal: rewardTotals.get(era) ?? 0n,
-    missed: missedSet.has(era),
-  }))
 
   const pages     = Math.ceil(rows.length / pageSize)
   const pageItems = rows.slice(page * pageSize, (page + 1) * pageSize)
@@ -61,6 +66,7 @@ export default function PoolRewardTable({
             value={pageSize}
             onChange={e => { setPageSize(Number(e.target.value)); setPage(0) }}
             className="select-compact"
+            aria-label="Rows per page"
           >
             {[5, 10, 20, 50].map(n => <option key={n} value={n}>{n}</option>)}
           </select>
@@ -135,15 +141,16 @@ export default function PoolRewardTable({
 
       <div className="hidden sm:block data-table-wrap">
         <table className="data-table min-w-[400px]">
+          <caption className="sr-only">Per-era reward status for this pool</caption>
           <thead>
             <tr className="data-table-head">
-              <th className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-16">Era</th>
-              <th className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-10">Reward</th>
-              <th className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold hidden md:table-cell w-20">Rewarded</th>
-              <th className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold hidden md:table-cell w-20">No Reward</th>
-              <th className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-20">Status</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-16">Era</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-10">Reward</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold hidden md:table-cell w-20">Rewarded</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold hidden md:table-cell w-20">No Reward</th>
+              <th scope="col" className="sticky top-0 bg-surface-high text-center px-3 py-2.5 text-[10px] uppercase text-muted font-bold w-20">Status</th>
               {hasBreakdown && (
-                <th className="sticky top-0 bg-surface-high text-center px-2 py-2.5 text-[10px] uppercase text-muted font-bold w-8" aria-label="Expand" />
+                <th scope="col" className="sticky top-0 bg-surface-high text-center px-2 py-2.5 text-[10px] uppercase text-muted font-bold w-8" aria-label="Expand" />
               )}
             </tr>
           </thead>
@@ -313,10 +320,11 @@ function BreakdownContent({ era, bd }) {
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs min-w-[240px]">
+                  <caption className="sr-only">Per-validator reward breakdown for this era</caption>
                   <thead>
                     <tr>
-                      <th className="text-left px-2 py-1 text-[10px] uppercase text-muted font-bold">Validator</th>
-                      <th className="text-right px-2 py-1 text-[10px] uppercase text-muted font-bold">ENJ Reward</th>
+                      <th scope="col" className="text-left px-2 py-1 text-[10px] uppercase text-muted font-bold">Validator</th>
+                      <th scope="col" className="text-right px-2 py-1 text-[10px] uppercase text-muted font-bold">ENJ Reward</th>
                     </tr>
                   </thead>
                   <tbody>

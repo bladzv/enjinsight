@@ -13,7 +13,7 @@
  *  6. Reward = (memberBalance × reinvested) / poolSupply.
  *     APY    = ((poolSupply + reinvested) / poolSupply)^365 − 1.
  */
-import { useReducer, useCallback, useRef } from 'react'
+import { useReducer, useCallback, useRef, useEffect } from 'react'
 import {
   WS_CONNECT_TIMEOUT_MS,
   PLANCK_PER_ENJ,
@@ -21,8 +21,12 @@ import {
 } from '../constants.js'
 import { WsProvider, ApiPromise } from '@polkadot/api'
 import { validateWsEndpoint, buildTokenAccountKey, buildTokenKey, decodeCompactFirst, buildBondedPoolsPrefix, poolIdFromBondedPoolsKey, computePoolBondedAccountId, buildStakingLedgerKey, decodeStakingLedgerActive } from '../utils/substrate.js'
-import { fetchHistoricalPoolIds, fetchAllPools, delay, enqueueRequest } from '../utils/api.js'
+import {
+  fetchHistoricalPoolIds, fetchAllPools, delay, enqueueRequest,
+  resetSubscanRequestCount, readSubscanRequestCount,
+} from '../utils/api.js'
 import { nowHHMMSS } from '../utils/format.js'
+import { netReinvested, poolRate, memberEraReward } from '../utils/rewardMath.js'
 import { SubstrateRPC } from '../utils/rpc.js'
 import { loadEraCsvRows } from '../utils/eraCache.js'
 
@@ -33,6 +37,17 @@ const ERAS_PER_YEAR  = 365
 const EVENT_SCAN_AFTER = 40        // python parity: scan_start..(scan_start+40) inclusive
 const CSV_PATHS      = ['/relay-era-reference.csv']
 const LOG_CAP        = 500
+
+// Rate-delta watchdog thresholds.
+// A single era diverges legitimately when the pool's sENJ supply churns mid-era (members
+// joining/exiting), so the systematic signal is the MEDIAN across all rows: a formula-level
+// defect shifts every row the same way, whereas churn scatters in both directions.
+//
+// Calibrated against Enjin relaychain era 1000 (pools 14 and 17), where a ~2.5% supply drift
+// produced divergences of +5.75% and −0.52%. A commission sign error shows ≈−13%, so 8% sits
+// clear of observed churn while still catching that defect with margin.
+const WATCHDOG_MEDIAN_WARN_PCT = 8   // |median| above this ⇒ likely systematic formula error
+const WATCHDOG_ROW_WARN_PCT    = 25  // single-row divergence above this ⇒ likely missing events
 
 // Staking.ActiveEra storage key: twox128("Staking") + twox128("ActiveEra")
 // Used to query the current era index at any block hash.
@@ -142,6 +157,27 @@ function reducer(state, action) {
 export function useRewardHistory() {
   const [state, dispatch] = useReducer(reducer, initialState)
   const abortRef = useRef(null)
+  // The AbortController alone only gates the checkpoint polls between awaits.
+  // Without direct handles, stop() left the raw RPC issuing calls and the
+  // polkadot-js provider auto-reconnecting in the background.
+  const rpcRef = useRef(null)
+  const eventApiRef = useRef(null)
+
+  /** Abort the active run and tear down both transports. Safe to call repeatedly. */
+  const teardown = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    try { rpcRef.current?.close() } catch { /* noop */ }
+    rpcRef.current = null
+    const handle = eventApiRef.current
+    eventApiRef.current = null
+    // close() is async; nothing awaits it here, but failures must not escape.
+    if (handle?.close) Promise.resolve(handle.close()).catch(() => {})
+  }, [])
+
+  // Unmounting mid-scan previously left the archive socket and a full ApiPromise
+  // alive, both dispatching into a reducer that no longer exists.
+  useEffect(() => teardown, [teardown])
 
   const log = useCallback((level, message) => {
     dispatch({ type: 'LOG', payload: { id: Date.now() + Math.random(), ts: nowHHMMSS(), level, message } })
@@ -327,14 +363,28 @@ export function useRewardHistory() {
   // Mirrors staking-rewards-rpc.py find_reinvested() via direct RPC event reads.
   async function findReinvestedViaRpc(eventApi, poolId, era, eventStart, eventEnd, signal) {
     let total = 0n
+    // A bare `catch { continue }` here hid systemic failures: if reading events
+    // broke for every block, the scan reported "no reward events found" and a
+    // total of 0 ENJ with no error anywhere. Track failures so a window that
+    // fails outright is raised instead of being reported as an empty result.
+    let attempted = 0
+    let failed = 0
+    let firstError = null
+
     for (let blk = eventStart; blk <= eventEnd; blk++) {
       if (signal?.aborted) throw new Error('Aborted')
 
       let events
+      attempted++
       try {
         const blockHash = await eventApi.rpc.chain.getBlockHash(blk)
-        events = await eventApi.query.system.events.at(blockHash)
-      } catch {
+        // `api.query.system.events.at(hash)` is the removed legacy form; the
+        // supported equivalent is a decorated API at that block.
+        const atBlock = await eventApi.at(blockHash)
+        events = await atBlock.query.system.events()
+      } catch (e) {
+        failed++
+        if (!firstError) firstError = e
         continue
       }
 
@@ -357,13 +407,22 @@ export function useRewardHistory() {
           if (meth === 'RewardPaid') {
             const reward = toBigIntLoose(eventField(data, ['reward'], 3))
             const comm = toBigIntLoose(eventField(data, ['commission'], 4))
-            total += reward + comm
+            // Net of commission — see src/utils/rewardMath.js for on-chain semantics.
+            total += netReinvested(reward, comm)
           }
         } catch {
           // best-effort per event; continue scanning
         }
       }
     }
+
+    // Every block in the window failed to read — that is an error, not a result.
+    if (attempted > 0 && failed === attempted) {
+      throw new Error(
+        `Could not read events for blocks ${eventStart}-${eventEnd} (${failed}/${attempted} failed): ${firstError?.message || 'unknown error'}`,
+      )
+    }
+
     return total
   }
 
@@ -391,7 +450,7 @@ export function useRewardHistory() {
         try {
           midEra = await eraAtBlock(rpc, mid)
           break
-        } catch (e) {
+        } catch {
           if (attempt < 2) await delay(1000)
         }
       }
@@ -418,7 +477,7 @@ export function useRewardHistory() {
         try {
           prevEra = await eraAtBlock(rpc, result - 1)
           break
-        } catch (e) {
+        } catch {
           if (attempt < 2) await delay(1000)
         }
       }
@@ -431,10 +490,15 @@ export function useRewardHistory() {
 
   // ── Main run ──────────────────────────────────────────────────────────
   const run = useCallback(async ({ address, startEra, endEra: endEraInput, endpoint, includeHistory = false }) => {
+    // Abort any previous run before replacing the controller. Two overlapping
+    // runs would otherwise interleave SET_RESULTS/DONE into the same reducer.
+    teardown()
+
     const ctrl = new AbortController()
     abortRef.current = ctrl
     const signal = ctrl.signal
-    let resolvedEndpoint = ARCHIVE_WSS
+    resetSubscanRequestCount()
+    let resolvedEndpoint  // always assigned before use, at validateWsEndpoint() below
 
     // endEra may be clamped to the current active era after connecting (mirrors Python)
     let endEra = endEraInput
@@ -524,6 +588,8 @@ export function useRewardHistory() {
       // ── Phase 1: Connect to archive ──────────────────────────────────
       logPhase('connect', 'INFO', `(${resolvedEndpoint})`)
       rpc = new SubstrateRPC(resolvedEndpoint, { concurrency: 3 })
+      rpcRef.current = rpc
+      signal.addEventListener('abort', () => { try { rpc.close() } catch { /* noop */ } }, { once: true })
       await rpc.connect()
       logFn('OK', 'Archive node connected.')
 
@@ -861,11 +927,19 @@ export function useRewardHistory() {
       // Open a dedicated polkadot-js API client for runtime event decoding via RPC.
       // This keeps reward scanning RPC-only (no Subscan events).
       eventApiHandle = await openRpcEventApi(resolvedEndpoint)
+      eventApiRef.current = eventApiHandle
+      // WsProvider reconnects on its own; only an explicit disconnect stops it.
+      signal.addEventListener('abort', () => {
+        Promise.resolve(eventApiHandle.close?.()).catch(() => {})
+      }, { once: true })
 
       // ── Phase 4: Scan reward events around era boundaries ──────────────
       logPhase('rewards', 'INFO', `for ${eraPoolData.length} era+pool pair(s)`)
       const results = []
       const accumulatedByPool = {}
+      // Counts era+pool pairs whose reward events could not be read at all, so a
+      // partial scan cannot be mistaken for a complete one at the end.
+      let rewardFetchFailures = 0
 
       for (let i = 0; i < eraPoolData.length; i++) {
         if (signal.aborted) { dispatch({ type: 'STOP' }); return }
@@ -877,19 +951,29 @@ export function useRewardHistory() {
 
         // Mirrors Python's find_reinvested(): query NominationPools events by pool_id + era
         // in the ~40 blocks after the era boundary. Checks EraRewardsProcessed first,
-        // falls back to summing RewardPaid (reward + commission) across all validators.
+        // falls back to summing RewardPaid net of commission across all validators.
         let reinvested = 0n
+        let rewardFetchFailed = false
         try {
           reinvested = await findReinvestedViaRpc(
             eventApiHandle.api, pool.poolId, era, eventStart, eventEnd, signal,
           )
         } catch (e) {
           if (signal.aborted) { dispatch({ type: 'STOP' }); return }
+          rewardFetchFailed = true
+          rewardFetchFailures++
           logFn('WARN', `Era ${era} Pool #${pool.poolId}: reward fetch failed — ${e.message}`)
         }
 
         if (reinvested === 0n) {
-          logFn('INFO', `Era ${era} Pool #${pool.poolId}: no reward events found in blocks ${eventStart}-${eventEnd}.`)
+          // Distinguish "the chain reported no rewards" from "we could not read
+          // the chain". Both used to print the same reassuring message.
+          logFn(
+            rewardFetchFailed ? 'WARN' : 'INFO',
+            rewardFetchFailed
+              ? `Era ${era} Pool #${pool.poolId}: reward data unavailable for blocks ${eventStart}-${eventEnd} — this row is omitted, not zero.`
+              : `Era ${era} Pool #${pool.poolId}: no reward events found in blocks ${eventStart}-${eventEnd}.`,
+          )
           patchPhase('rewards', { completed: i + 1 })
           syncProgress()
           continue
@@ -955,8 +1039,131 @@ export function useRewardHistory() {
         }
       }
 
+      // ── Post-process: rate-delta watchdog ────────────────────────────────
+      // Two independent routes to a member's era reward should agree:
+      //   (a) pro-rata   : memberBalance × reinvested ÷ poolSupply   ← the displayed value
+      //   (b) rate-delta : memberBalance × changeInRate ÷ 1e18
+      // (b) reads only on-chain state (bonded stake and point supply), so unlike (a) it cannot
+      // misinterpret commission semantics. Systematic disagreement therefore flags a
+      // formula-level defect — precisely the class of bug where commission was added instead of
+      // subtracted, inflating (a) by ~15%. See src/utils/rewardMath.js.
+      //
+      // IMPORTANT: era N's reward is bonded at the N/N+1 boundary, so the rate movement it causes
+      // is rate(start of N+1) − rate(start of N). The SUCCESSOR era's rate is required, not the
+      // predecessor's. Balances here are all read at each era's start block.
+      try {
+        const rateByKey = new Map()
+        for (const r of results) {
+          // activeStake === 0n means the staking-ledger read failed — rate is unknown, not zero.
+          if (r.activeStake > 0n && r.poolSupply > 0n) {
+            rateByKey.set(`${r.poolId}:${r.era}`, poolRate(r.activeStake, r.poolSupply))
+          }
+        }
+
+        // Rows at the top of the requested range have no successor among the scanned eras.
+        // Fetch that one extra era's pool-level state (2 reads per pool, no member balance
+        // needed). Era endEra+1's boundary was already resolved into eraCache earlier.
+        const succEra  = endEra + 1
+        const succHash = getEraRow(eraCache, succEra)?.startBlockHash ?? null
+        const succPoolIds = [...new Set(results.filter(r => r.era === endEra).map(r => r.poolId))]
+
+        if (succHash) {
+          for (const poolId of succPoolIds) {
+            if (signal.aborted) break
+            try {
+              const sRaw    = await rpc.call('state_getStorage', [buildTokenKey(COLLECTION_ID, BigInt(poolId)), succHash])
+              const sSupply = decodeCompactFirst(sRaw)
+              const lRaw    = await rpc.call('state_getStorage', [buildStakingLedgerKey(computePoolBondedAccountId(poolId)), succHash])
+              const sActive = decodeStakingLedgerActive(lRaw)
+              if (sSupply > 0n && sActive > 0n) {
+                rateByKey.set(`${poolId}:${succEra}`, poolRate(sActive, sSupply))
+              }
+            } catch {
+              // non-fatal: this era/pool simply goes unchecked
+            }
+          }
+        }
+
+        const divergencesBps = []
+        let compared = 0
+        let unchecked = 0
+
+        for (const r of results) {
+          const cur = rateByKey.get(`${r.poolId}:${r.era}`)
+          const nxt = rateByKey.get(`${r.poolId}:${r.era + 1}`)
+          // No successor rate (member exited, ledger read failed, or era outside range).
+          if (cur === undefined || nxt === undefined) { unchecked++; continue }
+
+          const changeInRate = nxt - cur
+          // Non-positive movement: slash era or flat era. memberEraReward clamps to 0, so a
+          // comparison here would be meaningless rather than informative.
+          if (changeInRate <= 0n) { unchecked++; continue }
+
+          const rateDeltaReward = memberEraReward(r.memberBalance, changeInRate)
+          r.rewardRateDelta = rateDeltaReward   // diagnostic only; not part of the export schema
+
+          if (r.reward === 0n || rateDeltaReward === 0n) { unchecked++; continue }
+
+          // Signed divergence in basis points, exact BigInt math (no Number precision loss).
+          // A commission sign error makes the displayed value too high ⇒ negative divergence.
+          const bps = Number(((rateDeltaReward - r.reward) * 10_000n) / r.reward)
+          divergencesBps.push(bps)
+          compared++
+
+          const absPct = Math.abs(bps) / 100
+          if (absPct >= WATCHDOG_ROW_WARN_PCT) {
+            logFn('WARN',
+              `Era ${r.era} Pool #${r.poolId}: reward cross-check differs by ${absPct.toFixed(1)}% ` +
+              `(shown ${fmtEnj(r.reward)} vs rate-derived ${fmtEnj(rateDeltaReward)} ENJ). ` +
+              `Likely a reward payout outside the ${EVENT_SCAN_AFTER}-block scan window, or mid-era pool churn.`)
+          }
+        }
+
+        if (compared > 0) {
+          const sorted = [...divergencesBps].sort((a, b) => a - b)
+          const mid = Math.floor(sorted.length / 2)
+          const medianBps = sorted.length % 2 === 0
+            ? (sorted[mid - 1] + sorted[mid]) / 2
+            : sorted[mid]
+          const medianPct = medianBps / 100
+
+          logFn('INFO',
+            `Reward cross-check: ${compared} row(s) verified against on-chain rate movement, ` +
+            `${unchecked} not checkable. Median divergence ${medianPct >= 0 ? '+' : ''}${medianPct.toFixed(2)}%.`)
+
+          if (Math.abs(medianPct) > WATCHDOG_MEDIAN_WARN_PCT) {
+            logFn('WARN',
+              `Reward figures diverge systematically from on-chain rate movement ` +
+              `(median ${medianPct >= 0 ? '+' : ''}${medianPct.toFixed(2)}%). Two independent methods ` +
+              `should agree; a consistent gap suggests a reward-formula defect rather than pool churn. ` +
+              `A commission sign error shows ≈−13%.`)
+          }
+        } else if (unchecked > 0) {
+          // Most likely cause: every Staking.Ledger read returned empty, so activeStake is 0n for
+          // every row and no rate can be formed. That failure is otherwise completely silent —
+          // state_getStorage returns null for a missing key and the decoder yields 0n — so name it.
+          const noLedger = results.every(r => r.activeStake === 0n)
+          logFn('WARN',
+            `Reward cross-check could not run (${unchecked} row(s) skipped)` +
+            (noLedger
+              ? ': the pool bonded-account staking ledger read returned empty for every row, so APY '
+                + 'is using the sENJ supply fallback rather than bonded ENJ.'
+              : '.'))
+        }
+      } catch (e) {
+        // The watchdog must never break a completed scan.
+        logFn('INFO', `Reward cross-check skipped — ${e.message}`)
+      }
+
       const total = results.reduce((s, r) => s + r.reward, 0n)
       logFn('OK', `─── Done. ${results.length} era+pool record(s). Grand total: ${fmtEnj(total)} ENJ ───`)
+      if (rewardFetchFailures > 0) {
+        logFn(
+          'WARN',
+          `${rewardFetchFailures} era+pool pair(s) could not be read and are missing from this total — it is a lower bound, not a complete figure.`,
+        )
+      }
+      logFn('INFO', `${readSubscanRequestCount()} Subscan requests used this run.`)
       dispatch({ type: 'DONE', results })
 
     } catch (e) {
@@ -967,20 +1174,33 @@ export function useRewardHistory() {
         dispatch({ type: 'ERROR', msg: e.message })
       }
     } finally {
-      try { await eventApiHandle?.close?.() } catch {}
+      try { await eventApiHandle?.close?.() } catch { /* noop */ }
       rpc?.close()
+      // Only release refs this run still owns — a newer run may have replaced them.
+      if (rpcRef.current === rpc) rpcRef.current = null
+      if (eventApiRef.current === eventApiHandle) eventApiRef.current = null
+      if (abortRef.current === ctrl) abortRef.current = null
     }
-  }, [])
+    // findEraStartBlock/findReinvestedViaRpc (and everything they call:
+    // eraAtBlock, toIntLoose, toBigIntLoose, eventField, parseBigIntLoose) are
+    // pure — parameter-driven only, no closure over hook state/props/refs — so
+    // they cannot go stale despite being recreated on every render. Adding them
+    // here would only make `run` itself unstable across every render for no
+    // correctness benefit. The correct long-term fix is hoisting them to module
+    // scope so they are actually reference-stable too; deferred as a larger,
+    // separate change rather than folded into this lint pass.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teardown])
 
   const stop = useCallback(() => {
-    abortRef.current?.abort()
+    teardown()
     dispatch({ type: 'STOP' })
-  }, [])
+  }, [teardown])
 
   const reset = useCallback(() => {
-    abortRef.current?.abort()
+    teardown()
     dispatch({ type: 'RESET' })
-  }, [])
+  }, [teardown])
 
   return { ...state, run, stop, reset, log }
 }

@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { Check, Info, RotateCcw } from 'lucide-react'
+import { useState, useId } from 'react'
+import { Info, RotateCcw } from 'lucide-react'
+import SuccessCheck from './SuccessCheck.jsx'
 
 /**
  * Horizontal step-progress bar.
@@ -26,6 +27,7 @@ export default function StepProgress({
   const infoOpen = isControlled ? infoOpenProp : infoOpenState
   const total    = steps.length
   const hasInfo  = !!infoContent
+  const infoPanelId = useId()
 
   function handleToggle() {
     const next = !infoOpen
@@ -46,12 +48,10 @@ export default function StepProgress({
         <div className="relative flex-1">
           {/* Track — inset 16 px each side to align with circle centres */}
           <div className="absolute top-4 left-4 right-4 h-px bg-white/[0.08]">
-            {progress > 0 && (
-              <div
-                className="absolute inset-y-0 left-0 bg-primary/40 transition-all duration-500"
-                style={{ width: `${progress * 100}%` }}
-              />
-            )}
+            <div
+              className="progress-fill absolute inset-y-0 left-0 w-full origin-left bg-primary/40"
+              style={{ transform: `scaleX(${progress})` }}
+            />
           </div>
 
           {/* All circles in one justify-between row */}
@@ -65,6 +65,7 @@ export default function StepProgress({
                   onClick={handleToggle}
                   aria-label={infoOpen ? 'Hide info' : 'Show info'}
                   aria-expanded={infoOpen}
+                  aria-controls={infoPanelId}
                   className={[
                     'relative z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all duration-300 overflow-hidden',
                     infoOpen
@@ -103,7 +104,7 @@ export default function StepProgress({
                       <span className="absolute inset-0 bg-primary/20" aria-hidden="true" />
                     )}
                     <span className="relative">
-                      {isDone ? <Check size={13} /> : stepNum}
+                      {isDone ? <SuccessCheck size={13} /> : stepNum}
                     </span>
                   </div>
                   <span
@@ -134,11 +135,23 @@ export default function StepProgress({
         )}
       </div>
 
-      {/* ── Collapsible info panel ── */}
-      {hasInfo && infoOpen && (
-        <div className="mx-auto max-w-2xl animate-fade-in overflow-hidden rounded-sm border border-cyan/20 bg-card">
-          <div className="px-3 py-3 text-xs leading-relaxed text-text-secondary sm:px-4 sm:text-sm sm:leading-6">
-            {infoContent}
+      {/* ── Collapsible info panel — grid-rows accordion, no JS height
+          measurement. Stays mounted so it can animate closed as well as
+          open; the border/background live one level in so overflow:hidden
+          on the row clips it cleanly at 0fr instead of leaving a border
+          sliver. */}
+      {hasInfo && (
+        <div
+          id={infoPanelId}
+          className={`accordion-rows ${infoOpen ? 'accordion-rows-open' : ''}`}
+          aria-hidden={!infoOpen}
+        >
+          <div className="accordion-rows-inner">
+            <div className="mx-auto max-w-2xl rounded-sm border border-cyan/20 bg-card">
+              <div className="px-3 py-3 text-xs leading-relaxed text-text-secondary sm:px-4 sm:text-sm sm:leading-6">
+                {infoContent}
+              </div>
+            </div>
           </div>
         </div>
       )}

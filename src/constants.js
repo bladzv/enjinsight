@@ -31,16 +31,25 @@ export const REQUEST_TIMEOUT_MS    = 15000
 export const MAX_RETRIES           = 3     // retry attempts on 429 rate-limit responses
 export const MAX_RETRY_ATTEMPTS    = 5     // general retry attempts for transient errors
 export const RETRY_BASE_MS         = 1000  // base backoff in ms for retries (exponential)
-export const API_DELAY_MS          = 1000  // global delay between sequential API requests (1 req/s)
-export const NOMINATORS_ROW        = 100  // max nominators to fetch per validator
-export const POOLS_PAGE_SIZE       = 100  // rows per page when fetching pools (multi-page loop)
-export const REWARD_SLASH_ROW      = 100  // max reward/slash events per request
-export const ERA_VALIDATORS_SAMPLE = 3    // validators to check for era block-range consensus
+export const API_DELAY_MS          = 500   // global delay between sequential API requests (2 req/s)
+
+// Subscan free-plan hard cap on `row` (page size).  Requesting more is either
+// rejected or silently clamped, so every paginated call must use this value and
+// page for the rest.
+export const SUBSCAN_MAX_ROW       = 25
+// Safety cap on pages walked by a single paginated fetch (25 x 400 = 10,000 rows).
+// Guards the 20,000 req/day free-tier quota against a runaway loop.
+export const SUBSCAN_MAX_PAGES     = 400
+export const ERA_VALIDATORS_SAMPLE = 3    // validators to try when topping up era block ranges from Subscan
 
 // ── Defaults ───────────────────────────────────────────────────────────────
 export const DEFAULT_ERA_COUNT     = 2
 export const MIN_ERA_COUNT         = 1
-export const MAX_ERA_COUNT         = 100
+// Subscan free-plan history window is the past 3 months; 1 era = 1 day on Enjin,
+// so 90 eras is the practical ceiling before era_stat/reward_slash lookups start
+// coming back empty.
+export const MAX_ERA_COUNT         = 90
+export const SUBSCAN_HISTORY_DAYS  = 90
 export const CONSECUTIVE_MISS_THRESHOLD = 3   // eras before critical alert
 
 // ── ENJ precision ─────────────────────────────────────────────────────────
@@ -106,6 +115,11 @@ export const BALANCE_FIELDS = [
   { key: 'miscFrozen', label: 'Misc Frozen', color: '#ff7a35', colorBg: 'rgba(255,122,53,.65)' },
   { key: 'feeFrozen',  label: 'Fee Frozen',  color: '#ff2d78', colorBg: 'rgba(255,45,120,.65)' },
 ]
+
+// ── Motion tuning (durations/easings live as --m-* tokens in index.css) ────
+// Only the thresholds JS has to decide on are here; everything else is CSS.
+export const STAGGER_MAX_ROWS = 25   // above this, fade a <tbody> as one element instead of per-row
+export const BULK_FLUSH_MAX   = 5    // log lines appended at once before the stream-in is skipped
 
 // ── Typical chain sizes (used for scan-time estimates in ControlPanel) ──────
 // Approximate counts for Enjin Relaychain at time of writing. Used only for

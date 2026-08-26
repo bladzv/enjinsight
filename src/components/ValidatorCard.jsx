@@ -4,19 +4,17 @@ import {
   Clock,
   Users,
   BarChart3,
-  Copy,
   ExternalLink,
-  CheckCircle2,
   RefreshCw,
 } from 'lucide-react'
 import DetailModal from './DetailModal.jsx'
+import CopyButton from './CopyButton.jsx'
 import NominatorsTable from './NominatorsTable.jsx'
 import EraStatTable from './EraStatTable.jsx'
 import { formatENJ, truncateAddress, validatorExplorerUrl } from '../utils/format.js'
 
 export default function ValidatorCard({ validator, eraCount, latestEra, onRetry }) {
   const [open, setOpen] = useState(false)
-  const [copied, setCopied] = useState(false)
 
   const {
     address, display, commission, bondedTotal,
@@ -37,42 +35,30 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
         ? `${missedEras.length} missed era${missedEras.length !== 1 ? 's' : ''}`
         : 'No missed eras'
 
-  async function copyAddress() {
-    try {
-      await navigator.clipboard.writeText(address)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Clipboard access denied.
-    }
-  }
-
   function renderActions() {
     return (
       <>
         {hasError && (
           <button
             type="button"
-            onClick={() => onRetry?.(address)}
+            onClick={event => { event.stopPropagation(); onRetry?.(address) }}
             className="btn-icon"
             aria-label={`Retry fetching data for ${displayName}`}
           >
             <RefreshCw size={14} className="text-danger" />
           </button>
         )}
-        <button
-          type="button"
-          onClick={copyAddress}
-          className="btn-icon"
-          aria-label={`Copy address of ${displayName}`}
-        >
-          {copied ? <CheckCircle2 size={14} className="text-success" /> : <Copy size={14} />}
-        </button>
+        <CopyButton
+          value={address}
+          label={`Copy address of ${displayName}`}
+          onClick={event => event.stopPropagation()}
+        />
         <a
           href={validatorExplorerUrl(address)}
           target="_blank"
           rel="noopener noreferrer"
           className="btn-icon"
+          onClick={event => event.stopPropagation()}
           aria-label={`Open ${displayName} on Subscan`}
         >
           <ExternalLink size={14} />
@@ -90,7 +76,7 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
 
   return (
     <>
-      <article
+      <div
         role="button"
         tabIndex={0}
         onClick={() => setOpen(true)}
@@ -119,7 +105,7 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
             <p className="mt-0.5 break-all font-mono text-[10px] text-muted sm:text-[11px]">{address}</p>
           </div>
 
-          <div className="flex shrink-0 items-center gap-0.5" onClick={event => event.stopPropagation()}>
+          <div className="flex shrink-0 items-center gap-0.5">
             {renderActions()}
           </div>
         </div>
@@ -142,7 +128,7 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
           </div>
           <span className="mini-chip text-primary">View →</span>
         </div>
-      </article>
+      </div>
 
       <ValidatorDetailsModal
         open={open}
@@ -158,13 +144,12 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
 
 export function ValidatorDetailsModal({ open, onClose, validator, eraCount, latestEra, onRetry }) {
   const [activeTab, setActiveTab] = useState('era')
-  const [copied, setCopied] = useState(false)
 
   if (!validator) return null
 
   const {
     address, display, commission, bondedTotal,
-    isActive, nominators, eraStat, missedEras,
+    nominators, eraStat, missedEras,
     fetchStatus, countNominators,
   } = validator
 
@@ -181,16 +166,6 @@ export function ValidatorDetailsModal({ open, onClose, validator, eraCount, late
         ? `${missedEras.length} missed era${missedEras.length !== 1 ? 's' : ''}`
         : 'No missed eras detected'
 
-  async function copyAddress() {
-    try {
-      await navigator.clipboard.writeText(address)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Clipboard access denied.
-    }
-  }
-
   function renderActions() {
     return (
       <>
@@ -204,14 +179,7 @@ export function ValidatorDetailsModal({ open, onClose, validator, eraCount, late
             <RefreshCw size={14} className="text-danger" />
           </button>
         )}
-        <button
-          type="button"
-          onClick={copyAddress}
-          className="btn-icon"
-          aria-label={`Copy address of ${displayName}`}
-        >
-          {copied ? <CheckCircle2 size={14} className="text-success" /> : <Copy size={14} />}
-        </button>
+        <CopyButton value={address} label={`Copy address of ${displayName}`} />
         <a
           href={validatorExplorerUrl(address)}
           target="_blank"
@@ -331,7 +299,7 @@ function TabButton({ active, onClick, icon, label, badge, badgeVariant }) {
         active ? 'bg-primary/15 text-primary-glow' : 'text-text-secondary hover:bg-surface-high'
       }`}
       style={active ? { boxShadow: 'inset 0 0 0 1px rgba(124, 58, 237, 0.35)', fontFamily: 'JetBrains Mono, ui-monospace, monospace' } : { fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}
-      aria-selected={active}
+      aria-pressed={active}
     >
       {icon}
       <span className="truncate">{label}</span>
