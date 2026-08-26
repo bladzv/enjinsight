@@ -3,6 +3,7 @@ import { AlertCircle, Square } from 'lucide-react'
 import {
   DEFAULT_ERA_COUNT, MIN_ERA_COUNT, MAX_ERA_COUNT,
 } from '../constants.js'
+import Stepper from './Stepper.jsx'
 
 export default function ControlPanel({
   status,
@@ -16,7 +17,7 @@ export default function ControlPanel({
 
   const isLoading = status === 'loading'
   const isResetState = status === 'done' || status === 'stopped' || status === 'error'
-  const title = 'Cadence Controls'
+  const title = 'Scan Range'
   const helper = 'Set how many recent eras to check.'
 
   function validate(raw) {
@@ -28,8 +29,7 @@ export default function ControlPanel({
     return ''
   }
 
-  function handleChange(e) {
-    const raw = e.target.value.replace(/[^0-9]/g, '').slice(0, 3)
+  function handleValueChange(raw) {
     setValue(raw)
     setError(validate(raw))
   }
@@ -60,11 +60,7 @@ export default function ControlPanel({
   }
 
   const disableAction = !isLoading && !isResetState && !!error
-  const showWarning = !error && parseInt(value, 10) > 30
-  const helperTone = error ? 'text-danger' : 'text-warning'
-  const helperMessage = error
-    ? error
-    : 'Longer range selected. Expect a slower scan.'
+  const helperTone = 'text-danger'
   const actionButtonClass = 'w-full min-h-[2.8rem] text-sm font-semibold sm:min-h-[3.15rem] sm:text-base'
   const actionButton = isLoading ? (
     <button onClick={handleAction} className={`btn-stop ${actionButtonClass}`} aria-label="Stop running scan">
@@ -91,38 +87,33 @@ export default function ControlPanel({
       </div>
 
       <div className="mt-3 rounded-sm border border-[var(--hairline)] bg-card px-3 py-3 sm:px-4 sm:py-4">
-        <div className={`flex ${compact ? 'items-baseline gap-3' : 'items-center justify-between gap-2'}`}>
-          <label htmlFor="reward-count" className="section-label">
+        <div className="flex items-center justify-center">
+          <label htmlFor="reward-count" className="sr-only">
             Scan Range
           </label>
-          <input
-            id="reward-count"
-            type="text"
-            inputMode="numeric"
+          <Stepper
+            inputId="reward-count"
             value={value}
-            onChange={handleChange}
+            onChange={handleValueChange}
             onKeyDown={handleKeyDown}
-            disabled={isLoading}
             placeholder={String(DEFAULT_ERA_COUNT)}
-            aria-describedby="reward-count-error"
-            aria-invalid={!!error}
-            maxLength={3}
-            className={`border-none bg-transparent px-0 py-0 font-mono font-bold tracking-tight text-primary focus:outline-none disabled:opacity-50
-              ${compact
-                ? 'w-16 text-[2.5rem]'
-                : 'w-20 text-right text-3xl sm:text-4xl'}
-              ${error ? 'text-danger' : ''}`}
+            min={MIN_ERA_COUNT}
+            max={MAX_ERA_COUNT}
+            disabled={isLoading}
+            ariaDescribedBy="reward-count-error"
+            ariaInvalid={!!error}
+            compact={compact}
           />
         </div>
 
-        {(error || showWarning) && (
+        {error && (
           <p
             id="reward-count-error"
-            role={error ? 'alert' : undefined}
+            role="alert"
             className={`mt-3 flex items-start gap-1.5 text-xs leading-snug ${helperTone}`}
           >
             <AlertCircle size={12} className="mt-0.5 flex-shrink-0" />
-            <span>{helperMessage}</span>
+            <span>{error}</span>
           </p>
         )}
       </div>
