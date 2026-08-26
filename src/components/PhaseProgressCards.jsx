@@ -112,7 +112,7 @@ function PhaseCard({ phase, index, indexLabel }) {
           <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-muted" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
             {indexLabel} {index}
           </p>
-          <h4 className="mt-0.5 line-clamp-2 text-xs font-semibold text-text sm:text-[13px]">{phase?.label ?? 'Untitled Phase'}</h4>
+          <h4 className="mt-0.5 line-clamp-2 text-xs font-semibold text-text sm:text-[13px]" title={phase?.label ?? 'Untitled Phase'}>{phase?.label ?? 'Untitled Phase'}</h4>
           {detail && <span className="mt-1 block text-[10px] text-text-secondary">{detail}</span>}
         </div>
       </div>
