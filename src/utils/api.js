@@ -7,6 +7,31 @@ import {
 // Exact allowlist of permitted upstream path suffixes
 const ALLOWED_PATHS = new Set(Object.values(ENDPOINTS))
 
+// Subscan reports auth failures as HTTP 400 with the real cause only in the JSON
+// body, so a bare `HTTP 400` tells the user nothing.  These are the codes worth
+// naming explicitly, shared by `probeEndpoint` and `_subscanPost`.
+const AUTH_ERROR_CODES = new Map([
+  [20009, 'Subscan rejected the API key (20009: API key invalid) — set a valid SUBSCAN_API_KEY.'],
+  [403,   'No API key reached Subscan (403) — SUBSCAN_API_KEY is unset in .env (dev) or in the deployment environment.'],
+])
+
+/** Actionable message for an auth-class Subscan body code, or null. */
+function authErrorMessage(code) {
+  if (code == null) return null
+  return AUTH_ERROR_CODES.get(Number(code)) ?? null
+}
+
+/**
+ * Collapse an upstream `message` field into one short, single-line fragment.
+ * Subscan's messages are short and non-sensitive; truncating and stripping
+ * whitespace keeps a hostile upstream from injecting multi-line noise into the
+ * activity log while still naming the fault.
+ */
+function upstreamDetail(data) {
+  const message = typeof data?.message === 'string' ? data.message.replace(/\s+/g, ' ').trim() : ''
+  return message ? message.slice(0, 120) : ''
+}
+
 /**
  * Build the full request URL, always routing through the same-origin proxy.
  * - In dev: Vite's devServer proxy at /api/ intercepts and forwards to Subscan,
@@ -218,24 +243,36 @@ async function _subscanPost(path, body, options = {}) {
       continue
     }
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} from Subscan.`)
+    const contentType = response.headers.get('content-type') || ''
+    const isJson = contentType.includes('application/json')
+
+    // Parse before branching on `response.ok`: Subscan answers an invalid or
+    // missing API key with HTTP 400 and puts the only useful information in the
+    // body, so throwing on the status alone discarded it.
+    let data = null
+    if (isJson) {
+      try {
+        data = await response.json()
+      } catch {
+        throw new Error('Failed to parse server response.')
+      }
     }
 
-    const contentType = response.headers.get('content-type') || ''
-    if (!contentType.includes('application/json')) {
+    const authError = authErrorMessage(data?.code)
+    if (authError) throw new Error(authError)
+
+    if (!response.ok) {
+      const detail = upstreamDetail(data)
+      throw new Error(`HTTP ${response.status} from Subscan${detail ? ` — ${detail}` : ''}.`)
+    }
+
+    if (!isJson) {
       throw new Error('Unexpected response format from server.')
     }
 
-    let data
-    try {
-      data = await response.json()
-    } catch {
-      throw new Error('Failed to parse server response.')
-    }
-
     if (data?.code !== 0) {
-      throw new Error(`Subscan API error (code ${data?.code ?? '?'})`)
+      const detail = upstreamDetail(data)
+      throw new Error(`Subscan API error (code ${data?.code ?? '?'}${detail ? `: ${detail}` : ''})`)
     }
 
     return data
@@ -362,12 +399,13 @@ export { delay }
 
 /**
  * Probe a single endpoint to verify it is reachable and the API key is accepted.
- * Sends an empty JSON body ({}) — Subscan returns HTTP 200 with code 400 ("EOF")
- * when the body is missing required fields, which is enough to confirm:
+ * Sends an empty JSON body ({}) — Subscan replies with a body-level code such as
+ * 400 ("EOF") when required fields are missing, which is enough to confirm:
  *   - the endpoint URL is correct (404 = wrong path)
- *   - the API key is valid (401/403 = auth failure)
+ *   - the API key is valid (body code 20009 / 403 = auth failure, HTTP 400)
  *   - the network and proxy are working
- * Returns { ok, status, code, error }.
+ * Returns { ok, status, code, error }.  `error` names the upstream cause when
+ * Subscan supplies one; see AUTH_ERROR_CODES.
  */
 export async function probeEndpoint(path, _body, signal) {
   if (!ALLOWED_PATHS.has(path)) {
@@ -400,6 +438,14 @@ export async function probeEndpoint(path, _body, signal) {
     let data = null
     try { data = await response.json() } catch { /* ignore parse errors */ }
 
+    // Auth failures arrive as HTTP 400 with the cause only in the body, and are
+    // checked before the status branches so the log names the actual problem
+    // instead of reporting a bare `HTTP 400`.
+    const authError = authErrorMessage(data?.code)
+    if (authError) {
+      return { ok: false, status: response.status, code: data?.code ?? null, error: authError }
+    }
+
     // 401/403 = API key rejected
     if (response.status === 401 || response.status === 403) {
       return { ok: false, status: response.status, code: data?.code ?? null, error: `HTTP ${response.status} — API key may be invalid or missing` }
@@ -414,15 +460,22 @@ export async function probeEndpoint(path, _body, signal) {
       return { ok: true, status: response.status, code: data?.code ?? null, error: null }
     }
 
-    // Some Subscan endpoints respond with HTTP 400 and a body of
-    // `{ code: 400, message: 'EOF' }` when the request body is empty.
-    // Treat that specific case as a successful probe.
-    if (response.status === 400 && data?.code === 400) {
+    // Subscan answers the deliberately-empty probe body with HTTP 400 and a
+    // body-level code (`400 / 'EOF'`, or a param-validation code).  Reaching
+    // body validation at all proves the path exists and the key was accepted,
+    // so any non-auth code here counts as a successful probe.
+    if (response.status === 400 && typeof data?.code === 'number') {
       return { ok: true, status: response.status, code: data.code, error: null }
     }
 
     // Any other non-2xx response is a failure.
-    return { ok: false, status: response.status, code: data?.code ?? null, error: `HTTP ${response.status}` }
+    const detail = upstreamDetail(data)
+    return {
+      ok: false,
+      status: response.status,
+      code: data?.code ?? null,
+      error: `HTTP ${response.status}${detail ? ` — ${detail}` : ''}`,
+    }
   } catch (err) {
     clearTimeout(timer)
     if (signal) signal.removeEventListener('abort', onAbort)
