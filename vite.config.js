@@ -3,8 +3,13 @@ import react from '@vitejs/plugin-react'
 
 const ENJIN_CRYPTOITEMS_CONTRACT = '0xfaafdc07907ff5120a76b34b731b278c38d6043c'
 const ETHERSCAN_API_URL = 'https://api.etherscan.io/v2/api'
+const OPENSEA_API_URL = 'https://api.opensea.io/api/v2'
 const URI_SELECTOR = '0x0e89341c'
 const BALANCE_OF_SELECTOR = '0x00fdd58e'
+// typeData(uint256) — legacy Enjin ERC-1155 accessor. Its first return value is a
+// dynamic `string` (the type/token name) at the same head-word-0 offset layout as a
+// bare `uri()` return, so decodeAbiString() decodes it unchanged.
+const TYPE_DATA_SELECTOR = '0x4341963e'
 
 function encodeUint256(value) {
   return BigInt(value).toString(16).padStart(64, '0')
@@ -28,6 +33,90 @@ function decodeAbiString(hex) {
 function decodeUint256(hex) {
   if (!hex || hex === '0x') return ''
   return BigInt(hex).toString()
+}
+
+function parseBigIntValue(raw, defaultValue = 0n) {
+  if (raw == null) return defaultValue
+  const value = String(raw).trim()
+  if (!value) return defaultValue
+  if (/^0x[0-9a-f]+$/i.test(value)) return BigInt(value)
+  if (/^\d+$/.test(value)) return BigInt(value)
+  return defaultValue
+}
+
+// ── Multi-source field merge ────────────────────────────────────────────────
+// Mirrors mergeTokenDetails() in api/[...proxy].js — kept as a separate copy
+// deliberately (this is a standalone Vite dev-server plugin, not the Vercel
+// serverless entry), but the merge rule and field-priority table must stay
+// identical or dev and prod will disagree. See that file for the full
+// per-field-authority rationale.
+function isEmptyValue(value) {
+  if (value === null || value === undefined) return true
+  if (Array.isArray(value)) return value.length === 0
+  if (typeof value === 'string') return value === ''
+  return false
+}
+
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    if (!isEmptyValue(value)) return value
+  }
+  return values.length ? values[values.length - 1] : ''
+}
+
+function pickSourced(...entries) {
+  for (const [value, source] of entries) {
+    if (!isEmptyValue(value)) return { value, source }
+  }
+  return { value: '', source: '' }
+}
+
+function mergeTokenDetails({
+  tokenId,
+  owner,
+  typeDataName = '',
+  onChainUri = '',
+  uriMetadata = {},
+  openSeaMetadata = {},
+  onChainQuantity = '',
+  contractCreator = '',
+}) {
+  const namePick = pickSourced([typeDataName, 'typedata'], [openSeaMetadata.name, 'opensea'])
+  const nameConflict = typeDataName && openSeaMetadata.name
+    && String(typeDataName).trim() !== String(openSeaMetadata.name).trim()
+    ? { typeData: typeDataName, openSea: openSeaMetadata.name }
+    : null
+
+  const previewImage = firstNonEmpty(openSeaMetadata.previewImage, uriMetadata.previewImage, '')
+  const imageUrl = firstNonEmpty(openSeaMetadata.imageUrl, uriMetadata.imageUrl, '')
+  const description = firstNonEmpty(openSeaMetadata.description, uriMetadata.description, '')
+  const properties = firstNonEmpty(openSeaMetadata.properties, uriMetadata.properties, [])
+  const quantity = firstNonEmpty(onChainQuantity, openSeaMetadata.quantity, '')
+  const creator = firstNonEmpty(contractCreator, openSeaMetadata.creator, '')
+  const tokenUri = firstNonEmpty(onChainUri, openSeaMetadata.tokenUri, '')
+
+  const metadataError = !namePick.value && !previewImage
+    ? (openSeaMetadata.metadataError || uriMetadata.metadataError || null)
+    : null
+
+  return {
+    tokenId,
+    owner,
+    contractAddress: ENJIN_CRYPTOITEMS_CONTRACT,
+    creator,
+    tokenStandard: 'ERC-1155',
+    quantity,
+    tokenUri,
+    name: namePick.value,
+    nameSource: namePick.source,
+    nameConflict,
+    previewImage,
+    imageUrl,
+    description,
+    properties,
+    source: openSeaMetadata.source || (onChainUri ? 'etherscan-api-eth-call' : 'etherscan-api-typedata'),
+    metadataError,
+  }
 }
 
 function normalizeMetadataUrl(uri, tokenId) {
@@ -59,23 +148,33 @@ function normalizeMetadataJson(body, tokenId) {
   }
 }
 
-function createEtherscanDevDetailsPlugin(apiKey, alchemyRpcUrl) {
+function createEtherscanDevDetailsPlugin(apiKey, alchemyRpcUrl, openSeaApiKey) {
   const bucket = { tokens: 5, max: 5, rate: 5, lastRefill: Date.now() }
+  // OpenSea is capped at 1 req/sec, same bucket size used in api/[...proxy].js.
+  const openSeaBucket = { tokens: 1, max: 1, rate: 1, lastRefill: Date.now() }
   const contractCreatorCache = { value: null }
   let contractCreatorPromise = null
 
-  async function takeToken() {
+  async function takeFromBucket(target) {
     while (true) {
       const now = Date.now()
-      const elapsed = (now - bucket.lastRefill) / 1000
-      bucket.tokens = Math.min(bucket.max, bucket.tokens + elapsed * bucket.rate)
-      bucket.lastRefill = now
-      if (bucket.tokens >= 1) {
-        bucket.tokens -= 1
+      const elapsed = (now - target.lastRefill) / 1000
+      target.tokens = Math.min(target.max, target.tokens + elapsed * target.rate)
+      target.lastRefill = now
+      if (target.tokens >= 1) {
+        target.tokens -= 1
         return
       }
-      await new Promise(resolve => setTimeout(resolve, Math.ceil((1 - bucket.tokens) / bucket.rate * 1000)))
+      await new Promise(resolve => setTimeout(resolve, Math.ceil((1 - target.tokens) / target.rate * 1000)))
     }
+  }
+
+  async function takeToken() {
+    return takeFromBucket(bucket)
+  }
+
+  async function takeOpenSeaToken() {
+    return takeFromBucket(openSeaBucket)
   }
 
   async function etherscanApi(params, options = {}) {
@@ -100,15 +199,22 @@ function createEtherscanDevDetailsPlugin(apiKey, alchemyRpcUrl) {
     return body
   }
 
+  // `tokenName`/`tokenSymbol` are the ERC-1155 *contract's* name/symbol as reported
+  // by Etherscan's token1155tx endpoint (e.g. "Enjin"), not per-token metadata —
+  // Etherscan returns the same value for every token on this contract. Synthesizing
+  // a per-token display name from them fabricated a string that looked like real
+  // token metadata but wasn't. This is only the initial wallet-scan row; the
+  // /__enj-token-details handler fills in the real name (typeData/OpenSea) right
+  // after. See the matching comment on toTokenMetadata in api/[...proxy].js.
   function toTokenMetadata(owner, tokenId, tokenName, tokenSymbol, quantity) {
-    const label = tokenName || tokenSymbol
-
     return {
       tokenId,
       metadata: {
         tokenId,
-        name: label ? `${label} #${tokenId}` : `Token ${tokenId.length > 12 ? `${tokenId.slice(0, 5)}...${tokenId.slice(-5)}` : tokenId}`,
+        name: '',
+        nameSource: '',
         previewImage: '',
+        imageUrl: '',
         owner,
         contractAddress: ENJIN_CRYPTOITEMS_CONTRACT,
         creator: '',
@@ -304,6 +410,51 @@ function createEtherscanDevDetailsPlugin(apiKey, alchemyRpcUrl) {
     return normalizeMetadataJson(await response.json(), tokenId)
   }
 
+  // Mirrors fetchOpenSeaTokenMetadata() in api/[...proxy].js, minus the response
+  // cache and retry/backoff loop — this is a local dev server, not a warm
+  // serverless instance shared across requests, so a single attempt is enough.
+  async function fetchOpenSeaMetadata(tokenId, owner) {
+    if (!openSeaApiKey) throw new Error('OPENSEA_API_KEY is not configured.')
+
+    await takeOpenSeaToken()
+    const url = `${OPENSEA_API_URL}/chain/ethereum/contract/${ENJIN_CRYPTOITEMS_CONTRACT}/nfts/${tokenId}`
+    const response = await fetch(url, {
+      headers: {
+        accept: 'application/json',
+        'x-api-key': openSeaApiKey,
+      },
+    })
+    if (!response.ok) throw new Error(`OpenSea API returned HTTP ${response.status}.`)
+
+    const body = await response.json()
+    const nft = body?.nft || {}
+    const owners = Array.isArray(nft.owners) ? nft.owners : []
+    const ownerEntry = owners.find(item => String(item.address || '').toLowerCase() === owner.toLowerCase())
+    const quantity = ownerEntry ? parseBigIntValue(ownerEntry.quantity, 0n).toString() : ''
+    const properties = Array.isArray(nft.traits)
+      ? nft.traits.map(item => ({
+        trait: String(item?.trait_type ?? '').trim(),
+        value: String(item?.value ?? '').trim(),
+        rarity: String(item?.display_type ?? '').trim(),
+      })).filter(item => item.trait || item.value || item.rarity)
+      : []
+
+    return {
+      tokenId,
+      owner,
+      tokenUri: normalizeMetadataUrl(String(nft.metadata_url || ''), tokenId),
+      name: String(nft.name || '').trim(),
+      previewImage: normalizeMetadataUrl(String(nft.display_image_url || nft.image_url || ''), tokenId),
+      imageUrl: normalizeMetadataUrl(String(nft.image_url || nft.original_image_url || ''), tokenId),
+      description: String(nft.description || '').trim(),
+      properties,
+      creator: String(nft.creator || '').trim(),
+      tokenStandard: String(nft.token_standard || 'erc1155').toUpperCase(),
+      quantity,
+      source: 'opensea-api',
+    }
+  }
+
   return {
     name: 'enj-token-details-dev',
     configureServer(server) {
@@ -350,24 +501,32 @@ function createEtherscanDevDetailsPlugin(apiKey, alchemyRpcUrl) {
           }
 
           const encodedTokenId = encodeUint256(tokenId)
-          const [creator, uriHex, quantityHex] = await Promise.all([
+          const [creator, uriHex, quantityHex, typeDataHex] = await Promise.all([
             getCreator().catch(() => ''),
             ethCall(`${URI_SELECTOR}${encodedTokenId}`).catch(() => ''),
             ethCall(`${BALANCE_OF_SELECTOR}${encodeAddress(owner)}${encodedTokenId}`).catch(() => ''),
+            ethCall(`${TYPE_DATA_SELECTOR}${encodedTokenId}`).catch(() => ''),
           ])
           const tokenUri = decodeAbiString(uriHex)
-          const metadata = await fetchJsonMetadata(tokenUri, tokenId).catch(error => ({ metadataError: error.message }))
-          res.setHeader('Content-Type', 'application/json; charset=utf-8')
-          res.end(JSON.stringify({
+          const typeDataName = decodeAbiString(typeDataHex)
+          const uriMetadata = await fetchJsonMetadata(tokenUri, tokenId).catch(error => ({ metadataError: error.message }))
+          // Same as prod: OpenSea is unconditional, since it is the sole source of
+          // image/description/traits and a fallback name source. Degrades cleanly
+          // when OPENSEA_API_KEY is unset — see mergeTokenDetails' fallback chain.
+          const openSeaMetadata = await fetchOpenSeaMetadata(tokenId, owner).catch(error => ({ metadataError: error.message }))
+
+          const result = mergeTokenDetails({
             tokenId,
             owner,
-            contractAddress: ENJIN_CRYPTOITEMS_CONTRACT,
-            creator,
-            tokenStandard: 'ERC-1155',
-            quantity: decodeUint256(quantityHex),
-            tokenUri,
-            ...metadata,
-          }))
+            typeDataName,
+            onChainUri: tokenUri,
+            uriMetadata,
+            openSeaMetadata,
+            onChainQuantity: decodeUint256(quantityHex),
+            contractCreator: creator,
+          })
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify(result))
         } catch (error) {
           res.statusCode = 502
           res.setHeader('Content-Type', 'application/json; charset=utf-8')
@@ -386,9 +545,13 @@ export default defineConfig(({ mode }) => {
   const apiKey = env.SUBSCAN_API_KEY || ''
   const etherscanApiKey = env.ETHERSCAN_API_KEY || ''
   const alchemyRpcUrl = env.ALCHEMY_ETH_RPC_URL || ''
+  // Server-side only, like the other keys above — read here (Node config context)
+  // and passed into the dev middleware closure; never exposed via `define` or a
+  // `VITE_`-prefixed name, so it never reaches the browser bundle.
+  const openSeaApiKey = env.OPENSEA_API_KEY || ''
 
   return {
-    plugins: [react(), createEtherscanDevDetailsPlugin(etherscanApiKey, alchemyRpcUrl)],
+    plugins: [react(), createEtherscanDevDetailsPlugin(etherscanApiKey, alchemyRpcUrl, openSeaApiKey)],
     // './' base makes the app work at any subdirectory path,
     // including use in relative subdirectories for static hosts
     base: './',
