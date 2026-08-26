@@ -25,35 +25,29 @@ The app is a static Vite frontend with a serverless proxy function at `api/[...p
 
 Set these in Vercel Project Settings -> Environment Variables:
 
+- `SUBSCAN_API_KEY`
+  - Required for staking cadence and reward-history Subscan calls
 - `PROXY_ALLOWLIST`
   - Comma-separated hostnames allowed through proxy
   - Recommended value: `enjin.api.subscan.io`
-- `PROXY_SECRET` (optional but recommended)
-  - If set, requests to proxy must include `x-proxy-secret`
+- `ALLOWED_ORIGINS` (optional — usually not needed)
+  - Comma-separated extra origins allowed to call the proxy cross-origin
+  - The deployment's own Vercel URLs are added automatically, so this is only needed if you serve the app from a **custom domain** — without it, that domain gets a hard 403 on every proxy request
+- `PROXY_SECRET` (optional — leave unset)
+  - If set, every proxy request must include a matching `x-proxy-secret` header
+  - The shipped clients (the browser app, `scripts/*.py`) never send this header, so setting it returns 401 on every route and breaks the app
 - `ETHERSCAN_API_KEY`
   - Required for ENJ Infusion wallet/token detail discovery
 - `ALCHEMY_ETH_RPC_URL` (recommended)
   - Used for Ethereum RPC reads and wallet discovery fallback
-- `OPENSEA_API_KEY` (recommended)
-  - Used server-side for metadata fallback when token URI metadata is unavailable
-- `OPENSEA_API_KEY_EXPIRES_AT` (optional)
-  - ISO-8601 timestamp for operations visibility
+- `OPENSEA_API_KEY` (required for full token detail display)
+  - Primary server-side source for image/description/traits, and a fallback name source; on-chain `typeData` still resolves name/quantity without it, but images and descriptions stay blank
 
-## OpenSea Key Rotation (Every ~20 Days)
+## OpenSea API Key
 
-This repository includes a scheduled workflow at `.github/workflows/rotate-opensea-key.yml`.
-
-What it does:
-
-1. Calls OpenSea instant-key API (`POST /api/v2/auth/keys`)
-2. Parses `api_key` and `expires_at`
-3. Replaces `OPENSEA_API_KEY` and `OPENSEA_API_KEY_EXPIRES_AT` in Vercel production env
-
-GitHub Secrets required by the workflow:
-
-- `VERCEL_TOKEN`
-- `VERCEL_PROJECT_ID`
-- `VERCEL_TEAM_ID` (set when project is under a team)
+`OPENSEA_API_KEY` is a manually-issued key from OpenSea Settings -> Developer (email verification,
+an application form, and a reCAPTCHA are required). It does not expire and needs no rotation --
+set it once in Vercel Production and redeploy.
 
 Security note:
 
@@ -93,9 +87,11 @@ vercel dev
 ## Troubleshooting
 
 - 403 from proxy:
-  - Check `PROXY_ALLOWLIST`
+  - Likely cause if you're on a custom domain: the origin isn't allowlisted — add it to `ALLOWED_ORIGINS`
+  - Otherwise: check `PROXY_ALLOWLIST`
 - 401 from proxy:
-  - Check `PROXY_SECRET` and request header
+  - Likely cause: `PROXY_SECRET` is set, but no client sends `x-proxy-secret` — unset `PROXY_SECRET`
+  - Otherwise: check the request's `x-proxy-secret` header matches
 - Build failures:
   - Ensure Node 18+ and `npm ci` succeeds locally
 

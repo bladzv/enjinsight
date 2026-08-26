@@ -5,37 +5,46 @@ function clampPercent(value) {
   return Math.max(0, Math.min(100, Math.round(value)))
 }
 
-function getPhasePercent(phase) {
+export function getPhasePercent(phase) {
   if (phase?.status === 'completed') return 100
+  if (phase?.status === 'skipped' || phase?.status === 'canceled') return 0
   const total = Number(phase?.total) || 0
   const completed = Math.max(0, Number(phase?.completed) || 0)
   if (total <= 0) return 0
   return clampPercent((Math.min(completed, total) / total) * 100)
 }
 
-function getStatusMeta(status) {
+export function getStatusMeta(status) {
   if (status === 'completed') {
     return {
-      label: 'Complete',
       cardClass: 'border-success/20 bg-success/5',
-      statusClass: 'text-success',
       ringClass: 'text-success',
       trackClass: 'text-success/10',
     }
   }
   if (status === 'in_progress') {
     return {
-      label: 'Running',
       cardClass: 'border-cyan/20 bg-card',
-      statusClass: 'text-cyan',
       ringClass: 'text-cyan',
       trackClass: 'text-cyan/10',
     }
   }
+  if (status === 'failed') {
+    return {
+      cardClass: 'border-danger/20 bg-danger/5',
+      ringClass: 'text-danger',
+      trackClass: 'text-danger/10',
+    }
+  }
+  if (status === 'skipped' || status === 'canceled') {
+    return {
+      cardClass: 'border-white/5 bg-card/80',
+      ringClass: 'text-muted/45',
+      trackClass: 'text-muted/20',
+    }
+  }
   return {
-    label: 'Queued',
     cardClass: 'border-white/5 bg-card/80',
-    statusClass: 'text-text-secondary',
     ringClass: 'text-muted/45',
     trackClass: 'text-muted/20',
   }
@@ -89,6 +98,12 @@ function PhaseRing({ percent, phaseStatus }) {
               {animatedPercent}%
             </span>
           </>
+        ) : phaseStatus === 'failed' ? (
+          <span aria-hidden="true" className="text-xs font-bold leading-none text-danger">✕</span>
+        ) : phaseStatus === 'skipped' ? (
+          <span aria-hidden="true" className="text-xs leading-none text-muted/60">—</span>
+        ) : phaseStatus === 'canceled' ? (
+          <span aria-hidden="true" className="text-xs leading-none text-muted/60">⊘</span>
         ) : (
           <span className="text-xs leading-none text-text-secondary">…</span>
         )}
@@ -105,14 +120,14 @@ function PhaseCard({ phase, index, indexLabel }) {
     : Math.max(0, Number(phase?.completed) || 0)
   const meta = getStatusMeta(phase?.status)
 
-  const detail = phase?.status === 'completed'
-    ? (total > 0 ? `${completed} / ${total} complete` : 'Complete')
-    : phase?.status === 'in_progress'
-      ? (total > 0 ? `${completed} / ${total} complete` : 'Running')
-      : null
+  const counter = (phase?.status === 'completed' || phase?.status === 'in_progress') && total > 0
+    ? `${completed} / ${total} complete`
+    : null
+  const detail = phase?.reason ?? counter
+  const detailClass = phase?.status === 'failed' ? 'text-danger' : 'text-text-secondary'
 
   return (
-    <article className={`rounded-sm border px-2.5 py-2 transition-colors ${meta.cardClass}`}>
+    <article className={`h-full rounded-sm border px-2.5 py-2 transition-colors ${meta.cardClass}`}>
       <div className="flex items-center gap-3">
         <PhaseRing percent={percent} phaseStatus={phase?.status} />
 
@@ -120,11 +135,15 @@ function PhaseCard({ phase, index, indexLabel }) {
           <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-muted" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
             {indexLabel} {index}
           </p>
-          <h4 className="mt-0.5 truncate text-xs font-semibold text-text sm:text-[13px]">{phase?.label ?? 'Untitled Phase'}</h4>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            <span className={`text-[10px] font-semibold uppercase tracking-wider ${meta.statusClass}`}>{meta.label}</span>
-            {detail && <span className="text-[10px] text-text-secondary">{detail}</span>}
-          </div>
+          <h4 className="mt-0.5 line-clamp-2 text-xs font-semibold text-text sm:text-[13px]" title={phase?.label ?? 'Untitled Phase'}>{phase?.label ?? 'Untitled Phase'}</h4>
+          {detail && (
+            <span
+              className={`mt-1 line-clamp-2 block text-[10px] ${detailClass}`}
+              title={phase?.reason ? detail : undefined}
+            >
+              {detail}
+            </span>
+          )}
         </div>
       </div>
     </article>
