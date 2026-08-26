@@ -45,10 +45,20 @@ export const ERA_VALIDATORS_SAMPLE = 3    // validators to try when topping up e
 // ── Defaults ───────────────────────────────────────────────────────────────
 export const DEFAULT_ERA_COUNT     = 2
 export const MIN_ERA_COUNT         = 1
-// Subscan free-plan history window is the past 3 months; 1 era = 1 day on Enjin,
-// so 90 eras is the practical ceiling before era_stat/reward_slash lookups start
-// coming back empty.
-export const MAX_ERA_COUNT         = 90
+// Scan-range ceiling. 1 era = 1 day on Enjin, so this is "one week" in both
+// units. Deliberately far below Subscan's 90-day index window
+// (SUBSCAN_HISTORY_DAYS): the binding constraint is scan cost, not data
+// availability — a wide range burns request quota and runs for many minutes.
+// Enforced in the UI *and* re-clamped inside the hooks, so a programmatic
+// caller cannot exceed it either.
+export const MAX_ERA_COUNT         = 7
+// Same ceiling expressed in days, for the date-range inputs.
+export const MAX_SCAN_DAYS         = 7
+// Reward History era-span ceiling (its own name because it bounds a
+// start..end range rather than a "last N eras" count).
+export const MAX_REWARD_ERA_SPAN   = 7
+// How far back Subscan's free tier indexes. Descriptive, not a limit we set —
+// used in copy to explain why older data may come back empty.
 export const SUBSCAN_HISTORY_DAYS  = 90
 export const CONSECUTIVE_MISS_THRESHOLD = 3   // eras before critical alert
 
@@ -102,6 +112,12 @@ export const WS_DEFAULT_ENDPOINT   = ENJIN_NETWORKS[0].endpoint
 export const WS_CONNECT_TIMEOUT_MS = 10000
 export const WS_CALL_TIMEOUT_MS    = 15000
 export const MAX_RPC_CALLS         = 2000   // upper cap on block-range query size
+// Reward History cost ceiling, checked once pool membership is known: the
+// balance sweep is (era span × pools) archive reads, which the era-span cap
+// alone cannot bound — a 7-era window over a wallet in many pools still
+// multiplies out. Balance Viewer has had MAX_RPC_CALLS since day one; this is
+// the equivalent guard for the reward path.
+export const MAX_REWARD_RPC_CALLS  = 2000
 export const CHART_MAX_PTS         = 250    // decimate chart data above this many points
 export const MAX_IMPORT_MB         = 10     // maximum import file size in megabytes
 // The IS_NEW_LOGIC flag bit distinguishes the new frozen-field format

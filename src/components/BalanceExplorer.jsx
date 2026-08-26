@@ -18,7 +18,7 @@ import { fetchLiveChainInfo } from '../utils/chainInfo.js'
 import { Activity, AlertTriangle, ChevronDown, Info, RotateCcw, Server, Sparkles, Square, Upload } from 'lucide-react'
 import { fmtENJ } from '../utils/balanceExport.js'
 import useBalanceExplorer, { STATUS } from '../hooks/useBalanceExplorer.js'
-import { ENJIN_NETWORKS, MAX_RPC_CALLS } from '../constants.js'
+import { ENJIN_NETWORKS, MAX_RPC_CALLS, MAX_SCAN_DAYS } from '../constants.js'
 import { fetchEraBoundariesFromRpc } from '../utils/eraRpc.js'
 import BalanceChart       from './BalanceChart.jsx'
 import BalanceTable       from './BalanceTable.jsx'
@@ -197,13 +197,13 @@ function toDateInput(date) {
   return date.toISOString().slice(0, 10)
 }
 
+// Capped at MAX_SCAN_DAYS — longer presets are unreachable under the date-range
+// limit, and offering a button that always errors is worse than not offering it.
+// Block mode stays uncapped for anyone who needs a wider window.
 const DATE_PRESETS = [
-  { label: '1 day',    days: 1   },
-  { label: '1 week',   days: 7   },
-  { label: '1 month',  days: 30  },
-  { label: '3 months', days: 90  },
-  { label: '6 months', days: 180 },
-  { label: '1 year',   days: 365 },
+  { label: '1 day',    days: 1 },
+  { label: '3 days',   days: 3 },
+  { label: '1 week',   days: 7 },
 ]
 
 const TABS = [
@@ -581,6 +581,8 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
       return `Era ${e} is in the future (current era: ${cur}).`
     if (startEraNum && endEraNum && !isNaN(s) && !isNaN(e) && s > e)
       return 'Start era must be less than or equal to end era.'
+    if (startEraNum && endEraNum && !isNaN(s) && !isNaN(e) && (e - s + 1) > MAX_SCAN_DAYS)
+      return `Era range is limited to ${MAX_SCAN_DAYS} eras (requested ${e - s + 1}). Narrow the range, or use Block mode for a wider window.`
     return ''
   })()
 
@@ -591,6 +593,11 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
     if (endDate   && endDate   > today) return 'End date cannot be in the future.'
     if (startDate && endDate && startDate > endDate)
       return 'Start date must be before or equal to end date.'
+    if (startDate && endDate) {
+      const spanDays = Math.round((new Date(endDate) - new Date(startDate)) / 86_400_000) + 1
+      if (spanDays > MAX_SCAN_DAYS)
+        return `Date range is limited to ${MAX_SCAN_DAYS} days (requested ${spanDays}). Narrow the range, or use Block mode for a wider window.`
+    }
     return ''
   })()
 
