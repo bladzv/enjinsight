@@ -53,7 +53,7 @@ const ALLOWED_ORIGINS = (() => {
  *   'allowed'     — cross-origin and on the allowlist.
  *   'denied'      — cross-origin and not on the allowlist.
  */
-function classifyOrigin(req) {
+export function classifyOrigin(req) {
   const raw = req.headers.origin
   if (!raw) return { kind: 'same-origin', origin: null }
   const origin = String(raw).trim().replace(/\/+$/, '')
@@ -79,7 +79,7 @@ function applyCors(req, res) {
  * response. Refusing outright is what actually protects the quota.
  * Returns true when the request should continue.
  */
-function enforceOrigin(req, res) {
+export function enforceOrigin(req, res) {
   if (classifyOrigin(req).kind !== 'denied') return true
   applyCors(req, res)
   res.statusCode = 403
@@ -91,7 +91,7 @@ function enforceOrigin(req, res) {
  * Optional shared-secret gate (PROXY_SECRET), applied to every route rather than
  * the Subscan branch alone. Returns true when the request should continue.
  */
-function enforceProxySecret(req, res) {
+export function enforceProxySecret(req, res) {
   const secret = process.env.PROXY_SECRET
   if (!secret) return true
   if ((req.headers['x-proxy-secret'] || '') === secret) return true

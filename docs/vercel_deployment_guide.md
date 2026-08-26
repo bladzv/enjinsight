@@ -30,8 +30,12 @@ Set these in Vercel Project Settings -> Environment Variables:
 - `PROXY_ALLOWLIST`
   - Comma-separated hostnames allowed through proxy
   - Recommended value: `enjin.api.subscan.io`
-- `PROXY_SECRET` (optional but recommended)
-  - If set, requests to proxy must include `x-proxy-secret`
+- `ALLOWED_ORIGINS` (optional — usually not needed)
+  - Comma-separated extra origins allowed to call the proxy cross-origin
+  - The deployment's own Vercel URLs are added automatically, so this is only needed if you serve the app from a **custom domain** — without it, that domain gets a hard 403 on every proxy request
+- `PROXY_SECRET` (optional — leave unset)
+  - If set, every proxy request must include a matching `x-proxy-secret` header
+  - The shipped clients (the browser app, `scripts/*.py`) never send this header, so setting it returns 401 on every route and breaks the app
 - `ETHERSCAN_API_KEY`
   - Required for ENJ Infusion wallet/token detail discovery
 - `ALCHEMY_ETH_RPC_URL` (recommended)
@@ -83,9 +87,11 @@ vercel dev
 ## Troubleshooting
 
 - 403 from proxy:
-  - Check `PROXY_ALLOWLIST`
+  - Likely cause if you're on a custom domain: the origin isn't allowlisted — add it to `ALLOWED_ORIGINS`
+  - Otherwise: check `PROXY_ALLOWLIST`
 - 401 from proxy:
-  - Check `PROXY_SECRET` and request header
+  - Likely cause: `PROXY_SECRET` is set, but no client sends `x-proxy-secret` — unset `PROXY_SECRET`
+  - Otherwise: check the request's `x-proxy-secret` header matches
 - Build failures:
   - Ensure Node 18+ and `npm ci` succeeds locally
 

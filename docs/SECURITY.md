@@ -44,7 +44,8 @@ This project is a read-only monitoring UI with a serverless proxy.
 - Subscan endpoint paths are allowlisted in `src/constants.js`
 - Production proxy target URLs must be HTTPS
 - Hostname allowlist is controlled through `PROXY_ALLOWLIST`
-- Optional shared secret via `PROXY_SECRET`
+- Cross-origin callers are never granted by reflecting an arbitrary `Origin`; an unlisted origin (beyond the deployment's own Vercel URLs, or `ALLOWED_ORIGINS`) is refused outright with a 403
+- Optional shared secret via `PROXY_SECRET`, unused by the shipped clients — setting it 401s every route
 - Hop-by-hop and sensitive response headers are stripped
 
 ## In Scope
