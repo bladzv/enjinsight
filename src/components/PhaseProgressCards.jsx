@@ -16,26 +16,20 @@ function getPhasePercent(phase) {
 function getStatusMeta(status) {
   if (status === 'completed') {
     return {
-      label: 'Complete',
       cardClass: 'border-success/20 bg-success/5',
-      statusClass: 'text-success',
       ringClass: 'text-success',
       trackClass: 'text-success/10',
     }
   }
   if (status === 'in_progress') {
     return {
-      label: 'Running',
       cardClass: 'border-cyan/20 bg-card',
-      statusClass: 'text-cyan',
       ringClass: 'text-cyan',
       trackClass: 'text-cyan/10',
     }
   }
   return {
-    label: 'Queued',
     cardClass: 'border-white/5 bg-card/80',
-    statusClass: 'text-text-secondary',
     ringClass: 'text-muted/45',
     trackClass: 'text-muted/20',
   }
@@ -105,14 +99,12 @@ function PhaseCard({ phase, index, indexLabel }) {
     : Math.max(0, Number(phase?.completed) || 0)
   const meta = getStatusMeta(phase?.status)
 
-  const detail = phase?.status === 'completed'
-    ? (total > 0 ? `${completed} / ${total} complete` : 'Complete')
-    : phase?.status === 'in_progress'
-      ? (total > 0 ? `${completed} / ${total} complete` : 'Running')
-      : null
+  const detail = (phase?.status === 'completed' || phase?.status === 'in_progress') && total > 0
+    ? `${completed} / ${total} complete`
+    : null
 
   return (
-    <article className={`rounded-sm border px-2.5 py-2 transition-colors ${meta.cardClass}`}>
+    <article className={`h-full rounded-sm border px-2.5 py-2 transition-colors ${meta.cardClass}`}>
       <div className="flex items-center gap-3">
         <PhaseRing percent={percent} phaseStatus={phase?.status} />
 
@@ -120,11 +112,8 @@ function PhaseCard({ phase, index, indexLabel }) {
           <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-muted" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>
             {indexLabel} {index}
           </p>
-          <h4 className="mt-0.5 truncate text-xs font-semibold text-text sm:text-[13px]">{phase?.label ?? 'Untitled Phase'}</h4>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            <span className={`text-[10px] font-semibold uppercase tracking-wider ${meta.statusClass}`}>{meta.label}</span>
-            {detail && <span className="text-[10px] text-text-secondary">{detail}</span>}
-          </div>
+          <h4 className="mt-0.5 line-clamp-2 text-xs font-semibold text-text sm:text-[13px]">{phase?.label ?? 'Untitled Phase'}</h4>
+          {detail && <span className="mt-1 block text-[10px] text-text-secondary">{detail}</span>}
         </div>
       </div>
     </article>
