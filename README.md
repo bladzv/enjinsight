@@ -238,7 +238,8 @@ Do not prefix these values with `VITE_`; they must not be embedded into the brow
 | `ALCHEMY_ETH_RPC_URL` | Optional ENJ Infusion preferred RPC and wallet-scan fallback | Full HTTPS Alchemy Mainnet RPC URL, for example `https://eth-mainnet.g.alchemy.com/v2/<key>`. |
 | `OPENSEA_API_KEY` | ENJ Infusion metadata fallback when on-chain URI is empty/unreachable | Server-side OpenSea API key used only by `api/[...proxy].js`. |
 | `PROXY_ALLOWLIST` | Optional proxy hardening | Comma-separated allowed upstream hostnames for encoded Subscan proxy targets. Defaults to `enjin.api.subscan.io`. |
-| `PROXY_SECRET` | Optional proxy hardening | If set, encoded-target proxy calls require matching `x-proxy-secret`. Browser app flows generally leave this unset. |
+| `ALLOWED_ORIGINS` | Optional, only for a custom domain | Comma-separated extra origins allowed to call the proxy cross-origin. The deployment's own Vercel URLs and localhost (outside production) are added automatically. An unlisted origin gets a hard 403 on every route. |
+| `PROXY_SECRET` | Optional proxy hardening | If set, every proxy request requires a matching `x-proxy-secret` header. Must be left unset for the browser app — it gates every route and no in-repo client sends the header. |
 
 ### NPM Scripts
 
@@ -397,7 +398,8 @@ The app is deployed on Vercel as a static Vite build plus one serverless catch-a
 | `ALCHEMY_ETH_RPC_URL` | Recommended for ENJ Infusion reliability and wallet fallback coverage | Full HTTPS Ethereum Mainnet Alchemy RPC URL |
 | `OPENSEA_API_KEY` | Recommended for ENJ Infusion metadata enrichment | Server-side only; used for metadata fallback when URI metadata is empty/unreachable |
 | `PROXY_ALLOWLIST` | Optional | Defaults to `enjin.api.subscan.io` |
-| `PROXY_SECRET` | Optional | Usually unset for the browser app |
+| `ALLOWED_ORIGINS` | Optional, only for a custom domain | Vercel URLs are added automatically; an unlisted origin gets a hard 403 |
+| `PROXY_SECRET` | Optional | Leave unset — gates every route, no in-repo client sends the header |
 
 Vercel config:
 
