@@ -26,6 +26,9 @@ import ToolInfoSection from './ToolInfoSection.jsx'
 import { PLANCK_PER_ENJ, SUBSCAN_HISTORY_DAYS, MAX_SCAN_DAYS, MAX_REWARD_ERA_SPAN } from '../constants.js'
 import { aesEncrypt, aesDecrypt, downloadFile, safeFilename } from '../utils/balanceExport.js'
 import { MAX_IMPORT_MB } from '../constants.js'
+import Spinner from './Spinner.jsx'
+import Field from './Field.jsx'
+import HoldButton from './HoldButton.jsx'
 
 // ── Era-CSV date helpers (copied from BalanceExplorer) ───────────────────────
 let _eraCache = null
@@ -991,19 +994,17 @@ function RewardExportPanel({ results, address }) {
       </div>
       {encOn && (
         <div className="mb-4 max-w-sm">
-          <label htmlFor="rh-enc-pwd" className="block text-xs font-bold tracking-widest uppercase text-text-secondary mb-1.5">Encryption Password</label>
-          <input id="rh-enc-pwd" type="password" placeholder="Enter password…" maxLength={1024}
+          <Field label="Encryption Password" id="rh-enc-pwd" type="password" placeholder="Enter password…" maxLength={1024}
             value={password} onChange={e => setPassword(e.target.value)}
-            className="w-full input-field font-mono" />
+            controlClassName="font-mono" />
         </div>
       )}
       <div className="grid gap-3 sm:grid-cols-[1fr_120px_auto] items-end">
         <div>
-          <label htmlFor="rh-fname" className="block text-xs font-bold tracking-widest uppercase text-text-secondary mb-2">Filename</label>
-          <input id="rh-fname" type="text" maxLength={200} autoComplete="off" spellCheck="false"
+          <Field label="Filename" id="rh-fname" type="text" maxLength={200} autoComplete="off" spellCheck="false"
             placeholder={`reward-history-${(address||'').slice(0,10)}`}
             value={filename} onChange={e => setFilename(e.target.value)}
-            className="w-full input-field font-mono" />
+            controlClassName="font-mono" />
         </div>
         <div>
           <label htmlFor="rh-fmt" className="block text-xs font-bold tracking-widest uppercase text-text-secondary mb-2">Format</label>
@@ -1016,7 +1017,7 @@ function RewardExportPanel({ results, address }) {
         </div>
         <button onClick={handleExport} disabled={busy||!results.length}
           className="btn-primary py-2 px-5 disabled:opacity-40 self-end">
-          {busy ? <span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" /> : <Download size={14} />}
+          {busy ? <Spinner size={16} tone="on-primary" /> : <Download size={14} />}
           Export
         </button>
       </div>
@@ -1168,7 +1169,7 @@ function RewardImportPanel({ onImport }) {
         onDrop={onDrop}>
         {isPending ? (
           <div className="flex flex-col items-center gap-2">
-            <span className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <Spinner size={32} />
             <p className="text-sm text-text-secondary">Reading file…</p>
           </div>
         ) : (
@@ -1189,13 +1190,12 @@ function RewardImportPanel({ onImport }) {
           </div>
           <div className="flex gap-3 items-end">
             <div className="flex-1">
-              <label htmlFor="rh-dec-pwd" className="input-label">Password</label>
-              <input id="rh-dec-pwd" type="password" placeholder="Enter password…" maxLength={1024}
+              <Field label="Password" id="rh-dec-pwd" type="password" placeholder="Enter password…" maxLength={1024}
                 value={decPwd} onChange={e=>setDecPwd(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleDecrypt()}
-                className="w-full input-field font-mono" />
+                controlClassName="font-mono" />
             </div>
             <button onClick={handleDecrypt} disabled={isPending} className="btn-primary py-2 px-4 self-end">
-              {isPending?<span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"/>:<Upload size={14}/>}
+              {isPending?<Spinner size={16} tone="on-primary" />:<Upload size={14}/>}
               Decrypt &amp; Import
             </button>
           </div>
@@ -1459,15 +1459,15 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
       {/* ── Simple step 4: running screen ── */}
       {simpleMode && rhSimpleStep === 4 && !simpleInfoOpen && (
         <div className="mx-auto w-full max-w-md rounded-sm border border-white/[0.06] bg-surface px-6 py-14 text-center shadow-ambient">
-          <div className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+          <Spinner size={40} className="mx-auto mb-5" />
           <h2 className="mb-1 text-base font-semibold text-text">{activePhase?.label ?? 'Computing rewards…'}</h2>
           {displayMeta && (
             <p className="mb-6 text-sm text-text-secondary">{displayMeta}</p>
           )}
-          <button onClick={stop} className="btn-stop mx-auto flex items-center gap-2">
+          <HoldButton onActivate={stop} className="btn-stop mx-auto flex items-center gap-2">
             <Square size={14} />
             Stop
-          </button>
+          </HoldButton>
         </div>
       )}
 
@@ -1514,19 +1514,14 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
 
               {/* Address */}
               <div className="rounded-sm border border-[var(--hairline)] bg-card px-3 py-3 sm:px-4 sm:py-4">
-                <p className="text-sm font-semibold text-text">Relaychain Wallet Address</p>
-                <input type="text" value={address}
+                <Field
+                  label="Relaychain Wallet Address" id="rh-address" type="text" value={address}
                   onChange={e => setAddress(e.target.value)}
                   placeholder="en…" disabled={isLoading}
-                  className={`mt-3 w-full input-field font-mono ${addrErr ? 'error-shake ring-1 ring-danger/60' : ''}`}
-                  aria-invalid={!!addrErr}
-                  aria-describedby={addrErr ? 'rh-address-error' : undefined}
-                  maxLength={60} />
-                {addrErr && (
-                  <p id="rh-address-error" className="mt-2 flex items-center gap-1.5 text-xs leading-5 text-danger">
-                    <AlertTriangle size={12} className="flex-shrink-0" />{addrErr}
-                  </p>
-                )}
+                  controlClassName={`font-mono ${addrErr ? 'error-shake ring-1 ring-danger/60' : ''}`}
+                  error={addrErr}
+                  maxLength={60}
+                />
               </div>
 
               {/* Pool scope toggle */}
@@ -1598,21 +1593,15 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                     <h4 className="mt-1 text-base font-semibold text-text">Range Parameters</h4>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <label htmlFor="reward-start-era" className="input-label w-28 flex-shrink-0">Start Era</label>
-                    <input id="reward-start-era" type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
-                      onChange={e => setStartEra(e.target.value)}
-                      placeholder="e.g. 980" disabled={isLoading}
-                      className="flex-1 input-field font-mono" />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <label htmlFor="reward-end-era" className="input-label w-28 flex-shrink-0">End Era</label>
-                    <input id="reward-end-era" type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
-                      onChange={e => setEndEra(e.target.value)}
-                      placeholder="e.g. 1000" disabled={isLoading}
-                      className="flex-1 input-field font-mono" />
-                  </div>
+                <div className="space-y-3">
+                  <Field label="Start Era" id="reward-start-era" type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
+                    onChange={e => setStartEra(e.target.value)}
+                    placeholder="e.g. 980" disabled={isLoading}
+                    controlClassName="font-mono" />
+                  <Field label="End Era" id="reward-end-era" type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
+                    onChange={e => setEndEra(e.target.value)}
+                    placeholder="e.g. 1000" disabled={isLoading}
+                    controlClassName="font-mono" />
                   {eraValidErr && <p className="flex items-center gap-1 text-xs text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{eraValidErr}</p>}
                 </div>
               </div>
@@ -1645,21 +1634,15 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                     ))}
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <label htmlFor="reward-start-date" className="input-label w-28 flex-shrink-0">Start Date</label>
-                    <input id="reward-start-date" type="date" placeholder="2026-03-01" max={toDateInput(new Date())} value={startDate}
-                      onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
-                      disabled={isLoading}
-                      className="flex-1 input-field font-mono" />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <label htmlFor="reward-end-date" className="input-label w-28 flex-shrink-0">End Date</label>
-                    <input id="reward-end-date" type="date" placeholder="2026-03-04" max={toDateInput(new Date())} value={endDate}
-                      onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
-                      disabled={isLoading}
-                      className="flex-1 input-field font-mono" />
-                  </div>
+                <div className="space-y-3">
+                  <Field label="Start Date" id="reward-start-date" type="date" max={toDateInput(new Date())} value={startDate}
+                    onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
+                    disabled={isLoading}
+                    controlClassName="font-mono" />
+                  <Field label="End Date" id="reward-end-date" type="date" max={toDateInput(new Date())} value={endDate}
+                    onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
+                    disabled={isLoading}
+                    controlClassName="font-mono" />
                 </div>
                 {dateValidErr && <p className="flex items-center gap-1 text-xs text-danger"><AlertTriangle size={11} className="flex-shrink-0"/>{dateValidErr}</p>}
               </div>
@@ -1667,16 +1650,19 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
 
             {/* Action button — single slot: Stop → Reset → Compute Rewards */}
             <div className="flex flex-col items-center gap-2">
+              {/* Distinct keys: Stop and Reset share this slot, and without
+                  them the charge earned on Stop would carry straight over to
+                  Reset on a double click. */}
               {isLoading ? (
-                <button onClick={stop} className="btn-danger gap-1.5 px-5">
+                <HoldButton key="stop" onActivate={stop} className="btn-danger gap-1.5 px-5">
                   <Square size={14} />Stop
-                </button>
+                </HoldButton>
               ) : (isDone || isStopped || isError || importedResults) ? (
-                <button onClick={() => { reset(); setImportedResults(null); setImportedAddress('') }} className="btn-primary gap-1.5 px-5">
+                <HoldButton key="reset" onActivate={() => { reset(); setImportedResults(null); setImportedAddress('') }} className="btn-primary gap-1.5 px-5">
                   <RotateCcw size={14} />Reset
-                </button>
+                </HoldButton>
               ) : (
-                <button onClick={handleRun} className="btn-primary gap-1.5 px-5"
+                <button onClick={handleRun} className="btn-primary btn-push gap-1.5 px-5"
                   disabled={!address.trim() || !!addrErr || (rangeMode === 'era' ? (!startEra || !endEra || !!eraValidErr) : (!startDate || !endDate || !!dateValidErr))}>
                   <Play size={14} />Compute Rewards
                 </button>
@@ -1725,23 +1711,17 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
             <p className="mt-1 text-sm text-text-secondary">Your Enjin Relaychain address — starts with "en".</p>
           </div>
           <div>
-            <label htmlFor="rh-simple-address" className="input-label">Relaychain Address</label>
-            <input
+            <Field
+              label="Relaychain Address"
               id="rh-simple-address"
               type="text"
               value={address}
               onChange={e => setAddress(e.target.value)}
               placeholder="en…"
               maxLength={60}
-              className={`mt-2 w-full input-field font-mono ${addrErr ? 'error-shake ring-1 ring-danger/60' : ''}`}
-              aria-invalid={!!addrErr}
-              aria-describedby={addrErr ? 'rh-address-error' : undefined}
+              controlClassName={`font-mono ${addrErr ? 'error-shake ring-1 ring-danger/60' : ''}`}
+              error={addrErr}
             />
-            {addrErr && (
-              <p id="rh-address-error" className="mt-2 flex items-center gap-1.5 text-xs text-danger">
-                <AlertTriangle size={12} className="flex-shrink-0" />{addrErr}
-              </p>
-            )}
           </div>
           <div className="flex justify-end pt-1">
             <button
@@ -1808,20 +1788,14 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
           {/* Era range inputs */}
           {rangeMode === 'era' && (
             <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <label htmlFor="reward-start-era" className="input-label w-28 flex-shrink-0">Start Era</label>
-                <input id="reward-start-era" type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
-                  onChange={e => setStartEra(e.target.value)}
-                  placeholder="e.g. 980"
-                  className="flex-1 input-field font-mono" />
-              </div>
-              <div className="flex items-center gap-3">
-                <label htmlFor="reward-end-era" className="input-label w-28 flex-shrink-0">End Era</label>
-                <input id="reward-end-era" type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
-                  onChange={e => setEndEra(e.target.value)}
-                  placeholder="e.g. 1000"
-                  className="flex-1 input-field font-mono" />
-              </div>
+              <Field label="Start Era" id="reward-start-era" type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={startEra}
+                onChange={e => setStartEra(e.target.value)}
+                placeholder="e.g. 980"
+                controlClassName="font-mono" />
+              <Field label="End Era" id="reward-end-era" type="number" min="1" max={chainInfo.era ?? undefined} step="1" value={endEra}
+                onChange={e => setEndEra(e.target.value)}
+                placeholder="e.g. 1000"
+                controlClassName="font-mono" />
               {eraValidErr && (
                 <p className="flex items-center gap-1 text-xs text-danger">
                   <AlertTriangle size={11} className="flex-shrink-0" />{eraValidErr}
@@ -1848,18 +1822,12 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                   ))}
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <label htmlFor="reward-start-date" className="input-label w-28 flex-shrink-0">Start Date</label>
-                <input id="reward-start-date" type="date" max={toDateInput(new Date())} value={startDate}
-                  onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
-                  className="flex-1 input-field font-mono" />
-              </div>
-              <div className="flex items-center gap-3">
-                <label htmlFor="reward-end-date" className="input-label w-28 flex-shrink-0">End Date</label>
-                <input id="reward-end-date" type="date" max={toDateInput(new Date())} value={endDate}
-                  onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
-                  className="flex-1 input-field font-mono" />
-              </div>
+              <Field label="Start Date" id="reward-start-date" type="date" max={toDateInput(new Date())} value={startDate}
+                onChange={e => { setStartDate(e.target.value); setActivePreset(null) }}
+                controlClassName="font-mono" />
+              <Field label="End Date" id="reward-end-date" type="date" max={toDateInput(new Date())} value={endDate}
+                onChange={e => { setEndDate(e.target.value); setActivePreset(null) }}
+                controlClassName="font-mono" />
               {dateValidErr && (
                 <p className="flex items-center gap-1 text-xs text-danger">
                   <AlertTriangle size={11} className="flex-shrink-0" />{dateValidErr}
@@ -1902,7 +1870,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
             <button
               onClick={handleRun}
               disabled={rangeMode === 'era' ? (!startEra || !endEra || !!eraValidErr) : (!startDate || !endDate || !!dateValidErr)}
-              className="btn-primary px-6 disabled:opacity-40"
+              className="btn-primary btn-push px-6 disabled:opacity-40"
             >
               <Play size={14} />
               Compute Rewards

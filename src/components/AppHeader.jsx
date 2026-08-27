@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap.js'
+import PillSwitch from './PillSwitch.jsx'
 import {
   BarChart3,
   BookOpen,
@@ -14,6 +15,20 @@ import {
   TrendingUp,
   X,
 } from 'lucide-react'
+
+// Option tables for the two rail switches. Declared at module scope so the
+// arrays are referentially stable — PillSwitch measures its options on every
+// render pass that changes them, and a fresh array each render would thrash
+// that measurement.
+const THEME_OPTIONS = [
+  { value: 'dark', label: 'Dark', icon: <SunMoon size={13} strokeWidth={2} className="opacity-90" /> },
+  { value: 'light', label: 'Light' },
+]
+
+const UI_MODE_OPTIONS = [
+  { value: 'advanced', label: 'Advanced' },
+  { value: 'simple', label: 'Simple' },
+]
 
 const NAV_ITEMS = [
   { key: 'home',           label: 'Home',            icon: Home,       group: 'workspace' },
@@ -201,49 +216,24 @@ function RailContent({ view, isLoading, tools, workspace, onNavigate, onAbout, t
       <section className="px-2 pb-3" aria-label="Appearance">
         <div className="space-y-2 px-1">
           <p className="rail-section-label px-2">Theme</p>
-          <div className="flex items-center rounded-sm border p-1" style={{ borderColor: 'var(--hairline)', background: 'var(--card)' }} role="group" aria-label="Theme switch">
-            <button
-              type="button"
-              onClick={() => selectTheme('dark')}
-              className={`inline-flex min-h-[2rem] flex-1 items-center justify-center gap-1 rounded-sm px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${theme === 'dark' ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:text-text'}`}
-              aria-pressed={theme === 'dark'}
-            >
-              <SunMoon size={13} strokeWidth={2} className="opacity-90" />
-              Dark
-            </button>
-            <button
-              type="button"
-              onClick={() => selectTheme('light')}
-              className={`inline-flex min-h-[2rem] flex-1 items-center justify-center rounded-sm px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${theme === 'light' ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:text-text'}`}
-              aria-pressed={theme === 'light'}
-            >
-              Light
-            </button>
-          </div>
+          <PillSwitch
+            ariaLabel="Theme switch"
+            value={theme}
+            onChange={selectTheme}
+            options={THEME_OPTIONS}
+          />
         </div>
       </section>
 
       <section className="px-2 pb-3" aria-label="UI mode">
         <div className="space-y-2 px-1">
           <p className="rail-section-label px-2">Mode</p>
-          <div className="flex items-center rounded-sm border p-1" style={{ borderColor: 'var(--hairline)', background: 'var(--card)' }} role="group" aria-label="UI mode switch">
-            <button
-              type="button"
-              onClick={() => onSimpleModeChange?.(false)}
-              className={`inline-flex min-h-[2rem] flex-1 items-center justify-center rounded-sm px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${!simpleMode ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:text-text'}`}
-              aria-pressed={!simpleMode}
-            >
-              Advanced
-            </button>
-            <button
-              type="button"
-              onClick={() => onSimpleModeChange?.(true)}
-              className={`inline-flex min-h-[2rem] flex-1 items-center justify-center rounded-sm px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition-colors ${simpleMode ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:text-text'}`}
-              aria-pressed={simpleMode}
-            >
-              Simple
-            </button>
-          </div>
+          <PillSwitch
+            ariaLabel="UI mode switch"
+            value={simpleMode ? 'simple' : 'advanced'}
+            onChange={(next) => onSimpleModeChange?.(next === 'simple')}
+            options={UI_MODE_OPTIONS}
+          />
         </div>
       </section>
 

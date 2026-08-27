@@ -19,17 +19,19 @@ import TerminalLog         from './components/TerminalLog.jsx'
 import SummarySection      from './components/SummarySection.jsx'
 import PoolSummarySection  from './components/PoolSummarySection.jsx'
 import PhaseProgressCards  from './components/PhaseProgressCards.jsx'
+import Spinner from './components/Spinner.jsx'
+import HoldButton from './components/HoldButton.jsx'
 
 const BalanceExplorer     = lazy(() => import('./components/BalanceExplorer.jsx'))
 const RewardHistoryViewer = lazy(() => import('./components/RewardHistoryViewer.jsx'))
 const EraBlockExplorer    = lazy(() => import('./components/EraBlockExplorer.jsx'))
 const InfusionChecker     = lazy(() => import('./components/InfusionChecker.jsx'))
 
-/** Suspense fallback for a lazy-loaded tool view — mirrors the spinner used elsewhere. */
+/** Suspense fallback for a lazy-loaded tool view. */
 function ViewLoadingFallback() {
   return (
     <div className="flex min-h-[40vh] items-center justify-center">
-      <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+      <Spinner size={40} />
     </div>
   )
 }
@@ -492,15 +494,15 @@ export default function App() {
         {/* Simple mode step 3: running screen */}
         {simpleMode && stakingSimpleStep === 3 && (
           <div className="mx-auto w-full max-w-md rounded-sm border border-white/[0.06] bg-surface px-6 py-14 text-center shadow-ambient">
-            <div className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+            <Spinner size={40} className="mx-auto mb-5" />
             <h2 className="mb-1 text-base font-semibold text-text">{activePhase?.label ?? 'Running scan…'}</h2>
             {displayProgressMeta && (
               <p className="mb-6 text-sm text-text-secondary">{displayProgressMeta}</p>
             )}
-            <button onClick={handleStop} className="btn-stop mx-auto flex items-center gap-2">
+            <HoldButton onActivate={handleStop} className="btn-stop mx-auto flex items-center gap-2">
               <Square size={14} />
               Stop
-            </button>
+            </HoldButton>
           </div>
         )}
 
@@ -620,7 +622,7 @@ export default function App() {
             <p className="text-xs text-text-secondary mb-4">
               Verify network connectivity and retry the same era window.
             </p>
-            <button onClick={() => handleRun(lastEraCount)} className="btn-primary">
+            <button onClick={() => handleRun(lastEraCount)} className="btn-primary btn-push">
               Retry Scan
             </button>
           </div>
