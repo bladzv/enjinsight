@@ -17,6 +17,10 @@ const initialState = {
   logs:       [],
   proxyUrl:   '',
   progress:   null,
+  // The N the user asked for. Pinned here at START so missed-era detection
+  // measures against the requested window rather than against whatever
+  // happens to have loaded — see enrichValidators.
+  requestedEraCount: 0,
 }
 
 // ── Reducer ────────────────────────────────────────────────────────────────
@@ -31,6 +35,7 @@ function reducer(state, action) {
         status: 'loading',
         validators: [],
         logs: [],
+        requestedEraCount: action.requestedEraCount ?? 0,
         progress: {
           phases: [
             { key: 'probe',      label: 'Check API Endpoints', total: VALIDATOR_ENDPOINTS_TO_PROBE.length, completed: 0, status: 'in_progress' },
@@ -143,7 +148,7 @@ export function useValidatorChecker() {
     const eraCount = clampInt(Number(requestedEraCount) || DEFAULT_ERA_COUNT, MIN_ERA_COUNT, MAX_ERA_COUNT)
     // create a fresh controller for this run
     abortControllerRef.current = new AbortController()
-    dispatch({ type: 'START' })
+    dispatch({ type: 'START', requestedEraCount: eraCount })
     resetSubscanRequestCount()
     const proxy = state.proxyUrl
     const signal = abortControllerRef.current.signal
@@ -415,9 +420,9 @@ export function useValidatorChecker() {
   // regardless of whether state.validators had actually changed.
   const enrichedValidators = useMemo(() => (
     state.status === 'done' || state.status === 'loading'
-      ? enrichValidators(state.validators)
+      ? enrichValidators(state.validators, state.requestedEraCount)
       : state.validators
-  ), [state.status, state.validators])
+  ), [state.status, state.validators, state.requestedEraCount])
 
   return {
     ...state,
@@ -431,16 +436,38 @@ export function useValidatorChecker() {
 }
 
 // ── Enrichment (pure) ──────────────────────────────────────────────────────
-function enrichValidators(validators) {
+/**
+ * Attach each validator's missed-era list.
+ *
+ * `requestedEraCount` is the N the user asked to scan, pinned in state at
+ * START. It must come from the request rather than from the loaded data,
+ * because the window being measured against is "the last N eras" — a fact
+ * about the request, not about the response.
+ *
+ * Deriving it from the responses instead (the previous
+ * `Math.max(...eraStat.length)`) under-reports whenever no validator returned
+ * a full N eras: the expected window shrinks to fit the data, so eras that
+ * every validator missed fall outside it and are silently not counted as
+ * missed. That is wrong for a completed scan, and during a live scan it also
+ * makes each validator's gap list grow as later validators widen the window.
+ *
+ * `latestEra` stays a running max over loaded data. It is a lower bound while
+ * a scan is in flight — a validator that missed the newest era can hold it
+ * down until one that didn't arrives — which is why the summary is labelled
+ * provisional until the scan completes.
+ */
+export function enrichValidators(validators, requestedEraCount) {
   if (!validators.length) return validators
   const latestEra = resolveLatestEra(validators)
   if (!latestEra) return validators
   // Hoisted out of the per-validator map below: this value does not depend on
   // which validator is being enriched, so it was previously recomputed once
   // per validator instead of once per call — O(n^2) for no reason.
-  const eraCount = Math.max(...validators
-    .filter(x => x.eraStat?.length)
-    .map(x => x.eraStat.length), 1)
+  const eraCount = requestedEraCount > 0
+    ? requestedEraCount
+    : Math.max(...validators
+        .filter(x => x.eraStat?.length)
+        .map(x => x.eraStat.length), 1)
   return validators.map(v => {
     if (!Array.isArray(v.eraStat) || !v.eraStat.length) return v
     const missedEras = computeMissedEras(v.eraStat, latestEra, eraCount)

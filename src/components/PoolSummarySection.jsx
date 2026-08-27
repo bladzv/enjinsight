@@ -5,7 +5,7 @@ import { poolExplorerUrl, poolLabel } from '../utils/format.js'
 import { useCountUp } from '../hooks/useCountUp.js'
 
 const GAP_PAGE_SIZES = [5, 10, 20]
-export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
+export default function PoolSummarySection({ pools, eraCount, onPoolSelect, provisional = false, progressLabel }) {
   const [showClean, setShowClean] = useState(false)
   const [gapPage, setGapPage]     = useState(0)
   const [gapPageSize, setGapPageSize] = useState(10)
@@ -35,7 +35,17 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect }) {
     <section aria-labelledby="pool-summary-heading" className="space-y-3 animate-fade-in sm:space-y-4">
       <div>
         <p className="section-label">Summary</p>
-        <h2 id="pool-summary-heading" className="mt-1 font-headline text-lg font-bold text-text sm:text-xl">Pool Overview</h2>
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 id="pool-summary-heading" className="font-headline text-lg font-bold text-text sm:text-xl">Pool Overview</h2>
+          {provisional && (
+            /* These figures are aggregates over whatever has loaded so far, so
+               they climb as the scan proceeds. Said plainly rather than left
+               for the reader to infer from numbers that keep moving. */
+            <span className="mini-chip text-warning">
+              {progressLabel ? `${progressLabel} · provisional` : 'Provisional'}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* ── Overview stat chips (bento grid) ────────────────────────── */}

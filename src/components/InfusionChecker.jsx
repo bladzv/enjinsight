@@ -6,7 +6,6 @@ import StepProgress from './StepProgress.jsx'
 import TerminalLog from './TerminalLog.jsx'
 import ToolInfoSection from './ToolInfoSection.jsx'
 import { derivePhases } from '../utils/infusionPhases.js'
-import Spinner from './Spinner.jsx'
 import Field from './Field.jsx'
 import HoldButton from './HoldButton.jsx'
 import ScanStatusBar from './ScanStatusBar.jsx'
@@ -1050,18 +1049,6 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
         </div>
       )}
 
-      {/* ── Simple step 3: running screen ── */}
-      {simpleMode && infusionSimpleStep === 3 && !simpleInfoOpen && (
-        <div className="mx-auto w-full max-w-md rounded-sm border border-white/[0.06] bg-surface px-6 py-14 text-center shadow-ambient">
-          <Spinner size={40} className="mx-auto mb-5" />
-          <h2 className="mb-1 text-base font-semibold text-text">Scanning…</h2>
-          <HoldButton onActivate={handleStopScan} className="btn-stop mx-auto flex items-center gap-2">
-            <Square size={14} />
-            Stop
-          </HoldButton>
-        </div>
-      )}
-
       {!simpleMode && <ToolInfoSection tone="warning">
         <p>ERC-20 ENJ is different from native ENJ on the Enjin Blockchain.</p>
         <div className="mt-2 grid gap-2 sm:grid-cols-3">
@@ -1082,7 +1069,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
         <code className="mt-1 block break-all rounded-sm border border-[var(--hairline)] bg-term/80 px-2 py-1 font-mono text-[11px] text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>
       </ToolInfoSection>}
 
-      {(!simpleMode || infusionSimpleStep === 4) && (
+      {(!simpleMode || infusionSimpleStep >= 3) && (
       <section className={`grid gap-4 ${!simpleMode ? 'xl:grid-cols-3 xl:items-stretch' : ''}`}>
         <div className={`space-y-4 ${!simpleMode ? 'xl:col-span-2' : ''}`}>
           {!simpleMode && (
@@ -1189,7 +1176,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
           </div>
           )}
 
-          {(!simpleMode || infusionSimpleStep === 4) && (
+          {(!simpleMode || infusionSimpleStep >= 3) && (
           <div ref={singleResultRef} className="data-panel space-y-4" aria-live="polite">
             {mode === 'single' && isLoading && (
               <ScanStatusBar label="Checking token…" onStop={handleStopScan} />
@@ -1232,7 +1219,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
       </section>
       )}
 
-      {mode === 'wallet' && bulkStarted && (!simpleMode || infusionSimpleStep === 4) && (
+      {mode === 'wallet' && bulkStarted && (!simpleMode || infusionSimpleStep >= 3) && (
       <section ref={bulkResultRef} className="data-panel space-y-4">
         {isLoading && (
           <ScanStatusBar label="Scanning wallet…" meta={bulkStatus} onStop={handleStopScan} />
