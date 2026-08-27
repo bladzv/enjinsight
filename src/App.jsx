@@ -632,7 +632,7 @@ export default function App() {
           </div>
         )}
 
-        </> /* /results fragment */
+        </>{/* /results fragment */}
       </main>
       )}
 
