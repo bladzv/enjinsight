@@ -4,6 +4,7 @@ import {
   DEFAULT_ERA_COUNT, MIN_ERA_COUNT, MAX_ERA_COUNT,
 } from '../constants.js'
 import Stepper from './Stepper.jsx'
+import HoldButton from './HoldButton.jsx'
 
 export default function ControlPanel({
   status,
@@ -62,17 +63,21 @@ export default function ControlPanel({
   const disableAction = !isLoading && !isResetState && !!error
   const helperTone = 'text-danger'
   const actionButtonClass = 'w-full min-h-[2.8rem] text-sm font-semibold sm:min-h-[3.15rem] sm:text-base'
+  // The three states share one slot, so each guarded branch carries its own
+  // key. Without them React reconciles Stop and Reset as the same element and
+  // the charge earned on Stop would carry over — a second click would reset
+  // the results the first click had just preserved.
   const actionButton = isLoading ? (
-    <button onClick={handleAction} className={`btn-stop ${actionButtonClass}`} aria-label="Stop running scan">
+    <HoldButton key="stop" onActivate={handleAction} className={`btn-stop ${actionButtonClass}`} aria-label="Stop running scan">
       <Square size={15} className="fill-white stroke-white" />
       Stop Scan
-    </button>
+    </HoldButton>
   ) : isResetState ? (
-    <button onClick={handleAction} className={`btn-secondary ${actionButtonClass}`} aria-label="Reset scan results">
+    <HoldButton key="reset" onActivate={handleAction} className={`btn-secondary ${actionButtonClass}`} aria-label="Reset scan results">
       Reset View
-    </button>
+    </HoldButton>
   ) : (
-    <button onClick={handleAction} disabled={disableAction} className={`btn-primary staking-scan-button ${actionButtonClass}`} aria-label="Start scan">
+    <button onClick={handleAction} disabled={disableAction} className={`btn-primary btn-push staking-scan-button ${actionButtonClass}`} aria-label="Start scan">
       Run Scan
     </button>
   )

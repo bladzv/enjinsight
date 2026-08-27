@@ -5,12 +5,13 @@
  * with an EKG canvas, an era progress bar, and a past-era lookup tool.
  * Network: Enjin Relaychain only.
  */
-import { useState, useRef, useEffect, useCallback, useId } from 'react'
-import { AlertTriangle, ChevronDown, ChevronUp, Search, Globe, Clock } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { ChevronDown, ChevronUp, Search, Globe, Clock } from 'lucide-react'
 import { useEraExplorer, ERA_STATUS } from '../hooks/useEraExplorer.js'
 import { useCountUp } from '../hooks/useCountUp.js'
 import TerminalLog from './TerminalLog.jsx'
 import CopyButton from './CopyButton.jsx'
+import Field from './Field.jsx'
 
 const HEARTBEAT_PATH = 'M0 20 L20 20 L25 10 L30 30 L35 20 L100 20'
 
@@ -111,7 +112,6 @@ export default function EraBlockExplorer() {
   const [localTime, setLocalTime] = useState(false)
   const [pulseKey, setPulseKey] = useState(0)
   const lastSeenBlock = useRef(null)
-  const eraInputErrorId = useId()
 
   const eraEnd = eraStart != null ? eraStart + ERA_LEN - 1 : null
   const remaining = eraEnd != null && block != null ? Math.max(0, eraEnd - block) : null
@@ -269,34 +269,28 @@ export default function EraBlockExplorer() {
         </div>
 
         <form onSubmit={onLookup} className="mt-4 space-y-2">
-          <div className="flex flex-wrap gap-2">
-            <input
+          <div className="flex flex-wrap items-start gap-2">
+            <Field
+              label="Era number"
+              id="era-lookup-input"
+              className="w-32 sm:w-40"
+              controlClassName={`font-mono ${eraInputErr ? 'error-shake ring-1 ring-danger' : ''}`}
               type="number"
               min="0"
               step="1"
               value={eraInput}
               onChange={event => { setEraInput(event.target.value); resetLookup() }}
-              placeholder="Era number"
-              className={`w-32 input-field font-mono sm:w-40 ${eraInputErr ? 'error-shake ring-1 ring-danger' : ''}`}
-              aria-label="Era number to look up"
-              aria-invalid={!!eraInputErr}
-              aria-describedby={eraInputErr ? eraInputErrorId : undefined}
+              error={eraInputErr}
             />
             <button
               type="submit"
-              className="btn-primary gap-1.5"
+              className="btn-primary btn-push gap-1.5"
               disabled={lookupLoading || !eraInput || !!eraInputErr}
               aria-label="Look up era"
             >
               {lookupLoading ? <span className="animate-pulse">Searching…</span> : <><Search size={14} />Look Up</>}
             </button>
           </div>
-          {eraInputErr ? (
-            <p id={eraInputErrorId} className="flex items-center gap-1 text-xs text-danger">
-              <AlertTriangle size={11} className="flex-shrink-0" />
-              {eraInputErr}
-            </p>
-          ) : null}
         </form>
 
         {lookupError ? (

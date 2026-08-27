@@ -1,6 +1,7 @@
 import { useState, useId } from 'react'
 import { Info, RotateCcw } from 'lucide-react'
 import SuccessCheck from './SuccessCheck.jsx'
+import HoldButton from './HoldButton.jsx'
 
 /**
  * Per-circle state for one step.
@@ -149,14 +150,16 @@ export default function StepProgress({
         </div>
 
         {onReset && (
-          <button
-            type="button"
-            onClick={onReset}
+          // Guarded: every wizard passes a callback here that discards the
+          // scan's results, and it sits inline with the step markers where a
+          // stray click is easy.
+          <HoldButton
+            onActivate={onReset}
             className="mt-0.5 shrink-0 btn-secondary flex items-center gap-1.5 px-3 py-1.5 text-xs"
           >
             <RotateCcw size={12} />
             Reset
-          </button>
+          </HoldButton>
         )}
       </div>
 
