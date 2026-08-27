@@ -21,6 +21,21 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
  * pair the rail already used; 'tablist' is for switches that actually
  * control a panel.
  */
+/**
+ * Decides whether a fresh measurement should replace the pill's geometry.
+ *
+ * Pulled out as a pure function because it is the one place this component
+ * can silently misbehave: a `width: 0` reading — a `display: none` ancestor,
+ * or the mobile drawer mid-open/close — must be discarded rather than
+ * applied, or the pill visibly collapses to nothing and then grows back once
+ * the container becomes visible again. Returning the previous geometry
+ * unchanged is what keeps that from happening.
+ */
+export function resolvePillGeometry(candidate, previous) {
+  if (!candidate || candidate.width === 0) return previous
+  return candidate
+}
+
 export default function PillSwitch({
   options,
   value,
@@ -41,14 +56,11 @@ export default function PillSwitch({
   const measure = useCallback(() => {
     const el = optionRefs.current.get(value)
     if (!el) return
-    const width = el.offsetWidth
-    // A zero width means the switch is laid out but not visible (a
-    // display:none ancestor, or a drawer mid-open). Keeping the last known
-    // good geometry avoids collapsing the pill to nothing and then having
-    // it grow back into place once the container is shown.
-    if (width === 0) return
-    setGeometry({ left: el.offsetLeft, width })
-    setInitialised(true)
+    setGeometry((previous) => {
+      const next = resolvePillGeometry({ left: el.offsetLeft, width: el.offsetWidth }, previous)
+      if (next !== previous) setInitialised(true)
+      return next
+    })
   }, [value])
 
   useLayoutEffect(measure, [measure])
