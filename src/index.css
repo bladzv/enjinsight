@@ -64,7 +64,12 @@
     --skeleton-highlight-rgb: 255 255 255;
     --theme-transition-ms: 620ms;
     --rail-w: 240px;
-    --status-h: 44px;
+    /* Mobile sticky header's real rendered height (py-2.5 padding + the
+       34px .btn-icon inside it, AppHeader.jsx:110) — measured, not assumed,
+       since the header's own markup has no min-height tying it to this
+       token. Used to offset ScanStatusBar so it doesn't tuck under the
+       header when both are stuck at the top simultaneously. */
+    --status-h: 55px;
 
     /* ── Motion tokens ──────────────────────────────────────────────────
        Every new motion rule reads one of these rather than a literal ms,
@@ -204,7 +209,19 @@
     @apply text-text font-sans antialiased;
     min-height: 100dvh;
     width: 100%;
-    overflow-x: hidden;
+    /* No overflow-x here, on purpose — html's own overflow-x: hidden above
+       already clips horizontal overflow for the whole page, since a
+       non-visible overflow-x on html isn't propagated from body regardless
+       of what body sets. Setting it here too used to double up: per the
+       CSS Overflow spec, pairing an explicit overflow-x with the default
+       overflow-y: visible forces the *used* value of overflow-y to auto,
+       so both html and body became independent scroll containers. Any
+       `position: sticky` descendant then resolved against the nearer one
+       (body), which never itself scrolls — only html does — so sticky
+       elements silently never engaged, including the existing mobile
+       header (AppHeader.jsx) and every ScanStatusBar in this codebase.
+       Verified: this one-line removal fixes it; no horizontal scroll
+       regression, since html's rule already does the clipping. */
     font-feature-settings: "ss01", "cv11";
     background-color: var(--ink);
     /* Subtle grid backdrop for "engineering" feel */

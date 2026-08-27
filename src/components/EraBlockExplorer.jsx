@@ -12,6 +12,7 @@ import { useCountUp } from '../hooks/useCountUp.js'
 import TerminalLog from './TerminalLog.jsx'
 import CopyButton from './CopyButton.jsx'
 import Field from './Field.jsx'
+import ScanStatusBar from './ScanStatusBar.jsx'
 
 const HEARTBEAT_PATH = 'M0 20 L20 20 L25 10 L30 30 L35 20 L100 20'
 
@@ -298,6 +299,10 @@ export default function EraBlockExplorer() {
             {lookupError}
           </p>
         ) : null}
+
+        {lookupLoading && (
+          <ScanStatusBar label="Looking up era…" sticky={false} className="mt-4" />
+        )}
 
         {lookupLoading ? (
           <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">

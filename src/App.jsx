@@ -21,6 +21,8 @@ import PoolSummarySection  from './components/PoolSummarySection.jsx'
 import PhaseProgressCards  from './components/PhaseProgressCards.jsx'
 import Spinner from './components/Spinner.jsx'
 import HoldButton from './components/HoldButton.jsx'
+import ScanStatusBar from './components/ScanStatusBar.jsx'
+import { isNavigationLocked } from './utils/navigationLock.js'
 
 const BalanceExplorer     = lazy(() => import('./components/BalanceExplorer.jsx'))
 const RewardHistoryViewer = lazy(() => import('./components/RewardHistoryViewer.jsx'))
@@ -177,14 +179,14 @@ export default function App() {
     : null
 
   const validatorLatestEra = resolveLatestEra(validators)
-  const isNavigationLocked = isLoading || balanceScanActive || rewardScanActive || infusionScanActive
+  const navigationLocked = isNavigationLocked({ isLoading, balanceScanActive, rewardScanActive, infusionScanActive })
 
   // Browser Back/Forward. If a scan is in progress, cancel the navigation by
   // re-pushing the current entry (there is no way to preventDefault a
   // popstate) and show the same lock toast a blocked click gets.
   useEffect(() => {
     function onPopState() {
-      if (isNavigationLocked) {
+      if (navigationLocked) {
         showScanLockToast()
         isPopStateRef.current = true
         window.history.pushState(
@@ -213,9 +215,9 @@ export default function App() {
     }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
-  }, [view, isNavigationLocked, isValidatorMode, vReset, pReset, showScanLockToast])
+  }, [view, navigationLocked, isValidatorMode, vReset, pReset, showScanLockToast])
 
-  const headerStatus = isNavigationLocked ? 'loading' : status
+  const headerStatus = navigationLocked ? 'loading' : status
   const activeRecords = isValidatorMode ? validators : pools
   const validatorPages = Math.max(1, Math.ceil(validators.length / STAKING_RESULTS_PAGE_SIZE))
   const safeValidatorPage = Math.min(validatorPage, validatorPages)
@@ -231,11 +233,11 @@ export default function App() {
   )
 
   useEffect(() => {
-    if (isNavigationLocked && !previousNavigationLockRef.current) {
+    if (navigationLocked && !previousNavigationLockRef.current) {
       showScanLockToast()
     }
-    previousNavigationLockRef.current = isNavigationLocked
-  }, [isNavigationLocked, showScanLockToast])
+    previousNavigationLockRef.current = navigationLocked
+  }, [navigationLocked, showScanLockToast])
 
   async function handleRun(eraCount) {
     setLastEraCount(eraCount)
@@ -260,7 +262,7 @@ export default function App() {
   }
 
   function handleModeChange(newMode) {
-    if (isNavigationLocked) {
+    if (navigationLocked) {
       showScanLockToast()
       return
     }
@@ -269,7 +271,7 @@ export default function App() {
   }
 
   function handleNavigate(dest) {
-    if (isNavigationLocked) {
+    if (navigationLocked) {
       showScanLockToast()
       return
     }
@@ -279,7 +281,7 @@ export default function App() {
   }
 
   function handleBack() {
-    if (isNavigationLocked) {
+    if (navigationLocked) {
       showScanLockToast()
       return
     }
@@ -509,6 +511,16 @@ export default function App() {
         {/* Results — hidden during simple step 3 (running) */}
         {(!simpleMode || stakingSimpleStep !== 3) && (
         <>
+
+        {/* Independent of validators.length/pools.length so it appears from
+            the first instant of a scan, not only once a record has landed. */}
+        {isLoading && (
+          <ScanStatusBar
+            label={activePhase?.label ?? 'Scanning…'}
+            meta={displayProgressMeta}
+            onStop={handleStop}
+          />
+        )}
 
         {/* ── Validator mode content ──────────────────────────────── */}
         {isValidatorMode && validators.length > 0 && (

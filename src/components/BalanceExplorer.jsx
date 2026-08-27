@@ -31,6 +31,7 @@ import ToolInfoSection    from './ToolInfoSection.jsx'
 import Spinner from './Spinner.jsx'
 import Field from './Field.jsx'
 import HoldButton from './HoldButton.jsx'
+import ScanStatusBar from './ScanStatusBar.jsx'
 
 // ── Address prefix map ───────────────────────────────────────────────────────
 const ADDR_PREFIX_MAP = {
@@ -1249,6 +1250,14 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
       {/* ── Results (shown for any data source; also visible DURING query) ── */}
       {(hasResults || isLoading) && (!simpleMode || balanceSimpleStep !== 3) && (
         <section ref={resultsRef} className="space-y-4">
+          {isLoading && (
+            <ScanStatusBar
+              label={activePhase?.label ?? 'Querying archive…'}
+              meta={displayMeta}
+              onStop={cancel}
+            />
+          )}
+
           {/* Records summary bar */}
           {hasResults && (
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3 data-panel">
