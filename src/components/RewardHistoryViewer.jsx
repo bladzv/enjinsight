@@ -28,6 +28,7 @@ import { aesEncrypt, aesDecrypt, downloadFile, safeFilename } from '../utils/bal
 import { MAX_IMPORT_MB } from '../constants.js'
 import Spinner from './Spinner.jsx'
 import Field from './Field.jsx'
+import Skeleton from './Skeleton.jsx'
 import HoldButton from './HoldButton.jsx'
 import ScanStatusBar from './ScanStatusBar.jsx'
 
@@ -664,7 +665,7 @@ const TABLE_COLS = [
 const PAGE_SIZES = [10, 25, 50, 100]
 
 // ── RewardTable v2 — exposes filtered rows via prop ──────────────────────────
-function RewardTableV2({ results, onFilter }) {
+function RewardTableV2({ results, onFilter, isLoading = false }) {
   const [sortCol, setSortCol]       = useState('era')
   const [sortDir, setSortDir]       = useState(1)
   const [filterPools, setFilterPools] = useState(null)   // null = all included; Set = explicit selection
@@ -830,7 +831,16 @@ function RewardTableV2({ results, onFilter }) {
                 <td className="px-3 py-1.5 text-right">
                   <span className="inline-block px-2 py-0.5 rounded bg-cyan/10 text-cyan text-[10px] font-bold">{fmtApy(r.apy)}</span>
                 </td>
-                <td className="px-3 py-1.5 text-right text-violet-300">{fmtApy(r.rollingApy)}</td>
+                {/* Rolling APY needs a 15-era window per pool, so it is only
+                    computed once every row has landed. Until then a dash would
+                    be indistinguishable from a genuine zero/absent APY, which
+                    fmtApy also renders as a dash — the skeleton says "still
+                    coming" instead of "nothing here". */}
+                <td className="px-3 py-1.5 text-right text-violet-300">
+                  {isLoading && r.rollingApy === undefined
+                    ? <Skeleton.Line width="2.5rem" height="0.75rem" className="ml-auto" />
+                    : fmtApy(r.rollingApy)}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -1457,21 +1467,6 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
         />
       )}
 
-      {/* ── Simple step 4: running screen ── */}
-      {simpleMode && rhSimpleStep === 4 && !simpleInfoOpen && (
-        <div className="mx-auto w-full max-w-md rounded-sm border border-white/[0.06] bg-surface px-6 py-14 text-center shadow-ambient">
-          <Spinner size={40} className="mx-auto mb-5" />
-          <h2 className="mb-1 text-base font-semibold text-text">{activePhase?.label ?? 'Computing rewards…'}</h2>
-          {displayMeta && (
-            <p className="mb-6 text-sm text-text-secondary">{displayMeta}</p>
-          )}
-          <HoldButton onActivate={stop} className="btn-stop mx-auto flex items-center gap-2">
-            <Square size={14} />
-            Stop
-          </HoldButton>
-        </div>
-      )}
-
       {!simpleMode && <div className="flex w-full gap-1 rounded-sm border border-[var(--hairline)] bg-card p-1">
         {[
           { key: 'compute', label: 'Compute Rewards', icon: Server },
@@ -1928,7 +1923,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
       {/* Independent of showResults, which additionally requires
           activeResults.length > 0 — this bar must appear from the first
           instant of a scan, before any row has landed. */}
-      {isLoading && (!simpleMode || rhSimpleStep !== 4) && (
+      {isLoading && (
         <ScanStatusBar
           label={activePhase?.label ?? 'Computing rewards…'}
           meta={displayMeta}
@@ -1936,8 +1931,9 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
         />
       )}
 
-      {/* ── Results section ── */}
-      {showResults && (!simpleMode || rhSimpleStep !== 4) && (
+      {/* ── Results section. Live during a scan in guided mode too, where a
+             spinner panel used to stand in for these. ── */}
+      {showResults && (
         <section ref={resultsRef} className="space-y-4">
           {/* Address summary bar */}
           {(() => { const dispAddr = importedResults ? importedAddress : address; return dispAddr ? (
@@ -1950,7 +1946,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
           ) : null })()
           }
           <RewardSummary results={filteredRows.length ? filteredRows : activeResults} />
-          <RewardTableV2 results={activeResults} onFilter={setFilteredRows} />
+          <RewardTableV2 results={activeResults} onFilter={setFilteredRows} isLoading={isLoading} />
           <RewardChart data={filteredRows} />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <PoolBondedPieChart data={filteredRows} />

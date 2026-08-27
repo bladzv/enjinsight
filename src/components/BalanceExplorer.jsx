@@ -28,7 +28,6 @@ import PhaseProgressCards from './PhaseProgressCards.jsx'
 import StepProgress       from './StepProgress.jsx'
 import TerminalLog        from './TerminalLog.jsx'
 import ToolInfoSection    from './ToolInfoSection.jsx'
-import Spinner from './Spinner.jsx'
 import Field from './Field.jsx'
 import HoldButton from './HoldButton.jsx'
 import ScanStatusBar from './ScanStatusBar.jsx'
@@ -668,21 +667,6 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
         ))}
       </div>}
 
-      {/* ── Simple step 3: running screen ── */}
-      {simpleMode && balanceSimpleStep === 3 && !simpleInfoOpen && (
-        <div className="mx-auto w-full max-w-md rounded-sm border border-white/[0.06] bg-surface px-6 py-14 text-center shadow-ambient">
-          <Spinner size={40} className="mx-auto mb-5" />
-          <h2 className="mb-1 text-base font-semibold text-text">{activePhase?.label ?? 'Querying archive…'}</h2>
-          {displayMeta && (
-            <p className="mb-6 text-sm text-text-secondary">{displayMeta}</p>
-          )}
-          <HoldButton onActivate={cancel} className="btn-stop mx-auto flex items-center gap-2">
-            <Square size={14} />
-            Stop
-          </HoldButton>
-        </div>
-      )}
-
       {/* ── Simple page 1: Address + Network ── */}
       {simpleMode && balanceSimpleStep === 1 && !simpleInfoOpen && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
@@ -1247,8 +1231,9 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
         </div>
       )}
 
-      {/* ── Results (shown for any data source; also visible DURING query) ── */}
-      {(hasResults || isLoading) && (!simpleMode || balanceSimpleStep !== 3) && (
+      {/* ── Results (any data source, and live during a query — guided mode
+             included, where a spinner panel used to stand in for them) ── */}
+      {(hasResults || isLoading) && (
         <section ref={resultsRef} className="space-y-4">
           {isLoading && (
             <ScanStatusBar

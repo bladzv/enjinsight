@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react'
-import { ChevronDown, ChevronUp, Square } from 'lucide-react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { DEFAULT_ERA_COUNT } from './constants.js'
 import { useValidatorChecker } from './hooks/useValidatorChecker.js'
 import { usePoolChecker }      from './hooks/usePoolChecker.js'
@@ -20,7 +20,6 @@ import SummarySection      from './components/SummarySection.jsx'
 import PoolSummarySection  from './components/PoolSummarySection.jsx'
 import PhaseProgressCards  from './components/PhaseProgressCards.jsx'
 import Spinner from './components/Spinner.jsx'
-import HoldButton from './components/HoldButton.jsx'
 import ScanStatusBar from './components/ScanStatusBar.jsx'
 import { isNavigationLocked } from './utils/navigationLock.js'
 
@@ -152,7 +151,6 @@ export default function App() {
   const status    = isValidatorMode ? vStatus   : pStatus
   const logs      = isValidatorMode ? vLogs     : pLogs
   const isLoading = status === 'loading'
-  const isDone    = status === 'done'
   const activeProgress = isValidatorMode ? vProgress : pProgress
   const previewPhases = isValidatorMode ? VALIDATOR_PREVIEW_PHASES : POOL_PREVIEW_PHASES
   const phases = activeProgress?.phases ?? []
@@ -493,23 +491,10 @@ export default function App() {
           </div>
         )}
 
-        {/* Simple mode step 3: running screen */}
-        {simpleMode && stakingSimpleStep === 3 && (
-          <div className="mx-auto w-full max-w-md rounded-sm border border-white/[0.06] bg-surface px-6 py-14 text-center shadow-ambient">
-            <Spinner size={40} className="mx-auto mb-5" />
-            <h2 className="mb-1 text-base font-semibold text-text">{activePhase?.label ?? 'Running scan…'}</h2>
-            {displayProgressMeta && (
-              <p className="mb-6 text-sm text-text-secondary">{displayProgressMeta}</p>
-            )}
-            <HoldButton onActivate={handleStop} className="btn-stop mx-auto flex items-center gap-2">
-              <Square size={14} />
-              Stop
-            </HoldButton>
-          </div>
-        )}
-
-        {/* Results — hidden during simple step 3 (running) */}
-        {(!simpleMode || stakingSimpleStep !== 3) && (
+        {/* Results. Guided mode used to swap these out for a spinner panel
+            while a scan ran; they now stay mounted and fill in underneath the
+            ScanStatusBar, which carries the phase label and Stop that panel
+            used to own. */}
         <>
 
         {/* Independent of validators.length/pools.length so it appears from
@@ -552,13 +537,18 @@ export default function App() {
           </ResultsPanel>
         )}
 
-        {isValidatorMode && isDone && validators.length > 0 && (
+        {/* No longer gated on isDone: the summary fills in alongside the
+            result cards. Its figures are aggregates over what has loaded so
+            far, so it labels itself provisional until the scan settles. */}
+        {isValidatorMode && validators.length > 0 && (
           <section id="staking-validator-summary">
             <SummarySection
               validators={validators}
               eraCount={lastEraCount}
               latestEra={validatorLatestEra}
               onRetry={vRetryValidator}
+              provisional={isLoading}
+              progressLabel={isLoading ? `${validators.filter(v => v.fetchStatus === 'done').length} / ${validators.length} scanned` : null}
             />
           </section>
         )}
@@ -595,12 +585,14 @@ export default function App() {
           </ResultsPanel>
         )}
 
-        {!isValidatorMode && isDone && pools.length > 0 && (
+        {!isValidatorMode && pools.length > 0 && (
           <section id="staking-pool-summary">
             <PoolSummarySection
               pools={pools}
               eraCount={lastEraCount}
               onPoolSelect={handleSelectPool}
+              provisional={isLoading}
+              progressLabel={isLoading ? `${pools.filter(p => p.fetchStatus === 'done').length} / ${pools.length} scanned` : null}
             />
           </section>
         )}
@@ -641,7 +633,6 @@ export default function App() {
         )}
 
         </> /* /results fragment */
-        )}
       </main>
       )}
 
