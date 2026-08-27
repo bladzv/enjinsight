@@ -8,6 +8,9 @@ import { useHoverCapable } from '../hooks/useHoverCapable.js'
 // rather than read back out of computed style.
 const HOLD_MS = 700
 const NUDGE_MS = 220
+// The pulse is a 220ms flinch; four words need longer than that to be read.
+// Separate timer so the two cues can each run at their own natural pace.
+const HINT_MS = 1600
 
 /**
  * Decides whether an interaction should fire the button's action.
@@ -79,8 +82,13 @@ export default function HoldButton({
 
   const [armed, setArmed] = useState(false)
   const [nudge, setNudge] = useState(false)
+  // Shown only after a click this component actually refused — the one
+  // moment a user has demonstrated they don't know the control is guarded.
+  // Explaining on hover instead would tax everyone who was already waiting.
+  const [hint, setHint] = useState(false)
   const armTimerRef = useRef(null)
   const nudgeTimerRef = useRef(null)
+  const hintTimerRef = useRef(null)
   // A hybrid laptop reports `hover: hover` because its *primary* pointer is a
   // mouse, so a finger tap on one would otherwise hit the gate and do
   // nothing. The pointer type of the actual interaction settles it.
@@ -94,22 +102,36 @@ export default function HoldButton({
   useEffect(() => () => {
     if (armTimerRef.current) clearTimeout(armTimerRef.current)
     if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current)
+    if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
   }, [])
+
+  // Drop the hint the moment the wait is over, even if its timer has not run
+  // out — telling someone to hold a button that is already armed is worse
+  // than saying nothing.
+  useEffect(() => {
+    if (!armed) return
+    if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
+    setHint(false)
+  }, [armed])
 
   const disarm = useCallback(() => {
     if (armTimerRef.current) clearTimeout(armTimerRef.current)
     armTimerRef.current = null
     enterAtRef.current = null
     setArmed(false)
+    if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
+    setHint(false)
   }, [])
 
   function handlePointerEnter() {
     if (instant || disabled) return
     if (armTimerRef.current) clearTimeout(armTimerRef.current)
     enterAtRef.current = performance.now()
-    // The timer only drives the visual/ARIA `armed` state. Whether a click is
-    // honoured is decided from enterAtRef, so a late timer cannot refuse a
-    // click the user has already visibly earned.
+    // Nothing user-facing depends on this timer landing on time: whether a
+    // click is honoured is decided from enterAtRef against the clock, and the
+    // armed *look* is a CSS animation off :hover (see .hold-btn__charge in
+    // index.css). `armed` remains only to clear the hint below and as a
+    // handle for tests, both of which tolerate running late.
     armTimerRef.current = setTimeout(() => setArmed(true), holdMs)
   }
 
@@ -132,6 +154,9 @@ export default function HoldButton({
     // punish the impatient click, and the charge is already most of the way
     // there by the time anyone reaches for it.
     setNudge(true)
+    setHint(true)
+    if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
+    hintTimerRef.current = setTimeout(() => setHint(false), HINT_MS)
     if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current)
     nudgeTimerRef.current = setTimeout(() => setNudge(false), NUDGE_MS)
   }
@@ -166,6 +191,11 @@ export default function HoldButton({
     >
       <span className="hold-btn__charge" aria-hidden="true" />
       <span className="hold-btn__body">{children}</span>
+      {/* Absolutely positioned so it cannot resize the button, and
+          aria-hidden because the describedby text below already explains
+          the interaction to anyone not using a pointer — and a keyboard
+          user never reaches this path at all. */}
+      {hint && <span className="hold-btn__hint" aria-hidden="true">Hold</span>}
       {!instant && (
         <span id={describedBy} className="sr-only">
           Hold the pointer here briefly to enable, or press Enter to act immediately.
