@@ -29,6 +29,7 @@ import { MAX_IMPORT_MB } from '../constants.js'
 import Spinner from './Spinner.jsx'
 import Field from './Field.jsx'
 import HoldButton from './HoldButton.jsx'
+import ScanStatusBar from './ScanStatusBar.jsx'
 
 // ── Era-CSV date helpers (copied from BalanceExplorer) ───────────────────────
 let _eraCache = null
@@ -1922,6 +1923,17 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
             to scan historical pools.
           </p>
         </div>
+      )}
+
+      {/* Independent of showResults, which additionally requires
+          activeResults.length > 0 — this bar must appear from the first
+          instant of a scan, before any row has landed. */}
+      {isLoading && (!simpleMode || rhSimpleStep !== 4) && (
+        <ScanStatusBar
+          label={activePhase?.label ?? 'Computing rewards…'}
+          meta={displayMeta}
+          onStop={stop}
+        />
       )}
 
       {/* ── Results section ── */}

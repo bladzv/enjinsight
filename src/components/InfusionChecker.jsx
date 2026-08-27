@@ -9,6 +9,7 @@ import { derivePhases } from '../utils/infusionPhases.js'
 import Spinner from './Spinner.jsx'
 import Field from './Field.jsx'
 import HoldButton from './HoldButton.jsx'
+import ScanStatusBar from './ScanStatusBar.jsx'
 
 const CONTRACT_ADDRESS = '0xfaafdc07907ff5120a76b34b731b278c38d6043c'
 const ETHERSCAN_NFT_HOLDINGS_URL = import.meta.env.DEV
@@ -1190,6 +1191,10 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
 
           {(!simpleMode || infusionSimpleStep === 4) && (
           <div ref={singleResultRef} className="data-panel space-y-4" aria-live="polite">
+            {mode === 'single' && isLoading && (
+              <ScanStatusBar label="Checking token…" onStop={handleStopScan} />
+            )}
+
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="section-title">Infusion value</h2>
@@ -1229,6 +1234,10 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
 
       {mode === 'wallet' && bulkStarted && (!simpleMode || infusionSimpleStep === 4) && (
       <section ref={bulkResultRef} className="data-panel space-y-4">
+        {isLoading && (
+          <ScanStatusBar label="Scanning wallet…" meta={bulkStatus} onStop={handleStopScan} />
+        )}
+
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="section-label">Bulk Results</p>
