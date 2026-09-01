@@ -11,6 +11,8 @@ import {
   aesEncrypt, downloadFile,
   safeFilename, defaultFilename,
 } from '../utils/balanceExport.js'
+import Spinner from './Spinner.jsx'
+import Field from './Field.jsx'
 
 const MIME = { json: 'application/json', csv: 'text/csv', xml: 'application/xml' }
 
@@ -97,17 +99,15 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
       {/* Password field (visible when encrypt on) */}
       {encOn && (
         <div className="mb-4 max-w-sm">
-          <label htmlFor="enc-pwd" className="block text-xs font-bold tracking-widest uppercase text-muted mb-1.5">
-            Encryption Password
-          </label>
-          <input
+          <Field
+            label="Encryption Password"
             id="enc-pwd"
             type="password"
             placeholder="Enter password…"
             maxLength={1024}
             value={password}
             onChange={e => setPassword(e.target.value)}
-            className="w-full input-field font-mono"
+            controlClassName="font-mono"
           />
         </div>
       )}
@@ -115,10 +115,8 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
       {/* Filename + format + export button */}
       <div className="grid gap-3 sm:grid-cols-[1fr_120px_auto] items-end">
         <div>
-          <label htmlFor="exp-fname" className="block text-xs font-bold tracking-widest uppercase text-muted mb-1.5">
-            Filename
-          </label>
-          <input
+          <Field
+            label="Filename"
             id="exp-fname"
             type="text"
             maxLength={200}
@@ -127,7 +125,7 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
             placeholder={defaultFilename()}
             value={filename}
             onChange={e => setFilename(e.target.value)}
-            className="w-full input-field font-mono"
+            controlClassName="font-mono"
           />
         </div>
 
@@ -153,7 +151,7 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
           className="btn-primary py-2 px-5 disabled:opacity-40 disabled:cursor-not-allowed self-end"
         >
           {busy
-            ? <span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+            ? <Spinner size={16} tone="on-primary" />
             : <Download size={14} />
           }
           Export

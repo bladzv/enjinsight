@@ -18,7 +18,7 @@ import { fetchLiveChainInfo } from '../utils/chainInfo.js'
 import { Activity, AlertTriangle, ChevronDown, Info, RotateCcw, Server, Sparkles, Square, Upload } from 'lucide-react'
 import { fmtENJ } from '../utils/balanceExport.js'
 import useBalanceExplorer, { STATUS } from '../hooks/useBalanceExplorer.js'
-import { ENJIN_NETWORKS, MAX_RPC_CALLS } from '../constants.js'
+import { ENJIN_NETWORKS, MAX_RPC_CALLS, MAX_SCAN_DAYS } from '../constants.js'
 import { fetchEraBoundariesFromRpc } from '../utils/eraRpc.js'
 import BalanceChart       from './BalanceChart.jsx'
 import BalanceTable       from './BalanceTable.jsx'
@@ -28,6 +28,9 @@ import PhaseProgressCards from './PhaseProgressCards.jsx'
 import StepProgress       from './StepProgress.jsx'
 import TerminalLog        from './TerminalLog.jsx'
 import ToolInfoSection    from './ToolInfoSection.jsx'
+import Field from './Field.jsx'
+import HoldButton from './HoldButton.jsx'
+import ScanStatusBar from './ScanStatusBar.jsx'
 
 // ── Address prefix map ───────────────────────────────────────────────────────
 const ADDR_PREFIX_MAP = {
@@ -197,13 +200,13 @@ function toDateInput(date) {
   return date.toISOString().slice(0, 10)
 }
 
+// Capped at MAX_SCAN_DAYS — longer presets are unreachable under the date-range
+// limit, and offering a button that always errors is worse than not offering it.
+// Block mode stays uncapped for anyone who needs a wider window.
 const DATE_PRESETS = [
-  { label: '1 day',    days: 1   },
-  { label: '1 week',   days: 7   },
-  { label: '1 month',  days: 30  },
-  { label: '3 months', days: 90  },
-  { label: '6 months', days: 180 },
-  { label: '1 year',   days: 365 },
+  { label: '1 day',    days: 1 },
+  { label: '3 days',   days: 3 },
+  { label: '1 week',   days: 7 },
 ]
 
 const TABS = [
@@ -387,6 +390,8 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
   const balanceSimpleStep = (isLoading && balanceSimpleRunning) ? 3
     : ((status === STATUS.DONE || status === STATUS.CANCELLED || status === STATUS.ERROR) && balanceSimpleRunning) ? 4
     : balancePage
+  // CANCELLED/ERROR also land on step 4 above, so only DONE earns the check.
+  const balanceSimpleComplete = balanceSimpleStep === BALANCE_SIMPLE_STEPS.length && status === STATUS.DONE
   useEffect(() => {
     onScanStateChange?.(isLoading)
   }, [isLoading, onScanStateChange])
@@ -579,6 +584,8 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
       return `Era ${e} is in the future (current era: ${cur}).`
     if (startEraNum && endEraNum && !isNaN(s) && !isNaN(e) && s > e)
       return 'Start era must be less than or equal to end era.'
+    if (startEraNum && endEraNum && !isNaN(s) && !isNaN(e) && (e - s + 1) > MAX_SCAN_DAYS)
+      return `Era range is limited to ${MAX_SCAN_DAYS} eras (requested ${e - s + 1}). Narrow the range, or use Block mode for a wider window.`
     return ''
   })()
 
@@ -589,10 +596,14 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
     if (endDate   && endDate   > today) return 'End date cannot be in the future.'
     if (startDate && endDate && startDate > endDate)
       return 'Start date must be before or equal to end date.'
+    if (startDate && endDate) {
+      const spanDays = Math.round((new Date(endDate) - new Date(startDate)) / 86_400_000) + 1
+      if (spanDays > MAX_SCAN_DAYS)
+        return `Date range is limited to ${MAX_SCAN_DAYS} days (requested ${spanDays}). Narrow the range, or use Block mode for a wider window.`
+    }
     return ''
   })()
 
-  const inputField = 'w-full input-field font-mono'
 
   // Step label/hint
   const stepLabel       = rangeMode === 'date' ? 'Step (Every N Days)' :
@@ -627,6 +638,7 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
         <StepProgress
           steps={BALANCE_SIMPLE_STEPS}
           currentStep={balanceSimpleStep}
+          complete={balanceSimpleComplete}
           onReset={balanceSimpleStep > 1 ? () => { reset(); setQueriedAddress(''); setBalancePage(1); setBalanceSimpleRunning(false); setSimpleInfoOpen(false) } : undefined}
           infoOpen={simpleInfoOpen}
           onInfoOpenChange={setSimpleInfoOpen}
@@ -655,21 +667,6 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
         ))}
       </div>}
 
-      {/* ── Simple step 3: running screen ── */}
-      {simpleMode && balanceSimpleStep === 3 && !simpleInfoOpen && (
-        <div className="mx-auto w-full max-w-md rounded-sm border border-white/[0.06] bg-surface px-6 py-14 text-center shadow-ambient">
-          <div className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
-          <h2 className="mb-1 text-base font-semibold text-text">{activePhase?.label ?? 'Querying archive…'}</h2>
-          {displayMeta && (
-            <p className="mb-6 text-sm text-text-secondary">{displayMeta}</p>
-          )}
-          <button onClick={cancel} className="btn-stop mx-auto flex items-center gap-2">
-            <Square size={14} />
-            Stop
-          </button>
-        </div>
-      )}
-
       {/* ── Simple page 1: Address + Network ── */}
       {simpleMode && balanceSimpleStep === 1 && !simpleInfoOpen && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
@@ -693,8 +690,8 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
               <p className="mt-2 break-all font-mono text-xs text-muted">{activeNetwork.endpoint}</p>
             </div>
             <div>
-              <label htmlFor="bal-addr-sm" className="input-label mb-2 block">Wallet Address</label>
-              <input
+              <Field
+                label="Wallet Address"
                 id="bal-addr-sm"
                 type="text"
                 maxLength={64}
@@ -703,13 +700,9 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
                 placeholder={`${ADDR_PREFIX_MAP[activeNetwork.key]?.prefix ?? ''}…`}
                 value={address}
                 onChange={e => setAddress(e.target.value)}
-                className={`w-full ${inputField} ${addressNote?.type === 'error' ? 'border-danger/50 focus:border-danger/70' : ''}`}
+                controlClassName="font-mono"
+                error={addressNote?.type === 'error' ? addressNote.msg : undefined}
               />
-              {addressNote?.type === 'error' && (
-                <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-danger">
-                  <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" /><span>{addressNote.msg}</span>
-                </p>
-              )}
             </div>
           </div>
           <div className="flex justify-end pt-1">
@@ -760,19 +753,10 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
           {rangeMode === 'era' && (
             <div className="range-params-card space-y-3">
               <h4 className="text-base font-semibold text-text">Range Parameters</h4>
-              <div className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <label htmlFor="bal-start-era-sm" className="input-label w-40 flex-shrink-0">Start Era</label>
-                  <input id="bal-start-era-sm" type="number" placeholder="1000" min={1} max={chainInfo.era ?? undefined} step={1} value={startEraNum} onChange={e => { setStartEraNum(e.target.value); clearResolvedRange() }} className={inputField} />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label htmlFor="bal-end-era-sm" className="input-label w-40 flex-shrink-0">End Era</label>
-                  <input id="bal-end-era-sm" type="number" placeholder="1010" min={1} max={chainInfo.era ?? undefined} step={1} value={endEraNum} onChange={e => { setEndEraNum(e.target.value); clearResolvedRange() }} className={inputField} />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label htmlFor="bal-step-era-sm" className="input-label w-40 flex-shrink-0">{stepLabel}</label>
-                  <input id="bal-step-era-sm" type="number" min={1} max={999999} step={1} placeholder={stepPlaceholder} value={step} onChange={e => setStep(e.target.value)} className={inputField} />
-                </div>
+              <div className="space-y-3">
+                <Field label="Start Era" id="bal-start-era-sm" type="number" placeholder="1000" min={1} max={chainInfo.era ?? undefined} step={1} value={startEraNum} onChange={e => { setStartEraNum(e.target.value); clearResolvedRange() }} controlClassName="font-mono" />
+                <Field label="End Era" id="bal-end-era-sm" type="number" placeholder="1010" min={1} max={chainInfo.era ?? undefined} step={1} value={endEraNum} onChange={e => { setEndEraNum(e.target.value); clearResolvedRange() }} controlClassName="font-mono" />
+                <Field label={stepLabel} id="bal-step-era-sm" type="number" min={1} max={999999} step={1} placeholder={stepPlaceholder} value={step} onChange={e => setStep(e.target.value)} controlClassName="font-mono" />
               </div>
               {eraValidErr && <p className="flex items-center gap-1.5 text-[11px] font-mono text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{eraValidErr}</p>}
               {eraLoadErr  && <p className="flex items-center gap-1.5 text-[11px] font-mono text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{eraLoadErr}</p>}
@@ -781,19 +765,10 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
           {rangeMode === 'block' && (
             <div className="range-params-card space-y-3">
               <h4 className="text-base font-semibold text-text">Range Parameters</h4>
-              <div className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <label htmlFor="bal-start-sm" className="input-label w-40 flex-shrink-0">Start Block</label>
-                  <input id="bal-start-sm" type="number" placeholder="14400" min={0} max={chainInfo.block ?? 999999999} step={1} value={startBlock} onChange={e => setStartBlock(e.target.value)} className={inputField} />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label htmlFor="bal-end-sm" className="input-label w-40 flex-shrink-0">End Block</label>
-                  <input id="bal-end-sm" type="number" placeholder="28799" min={0} max={chainInfo.block ?? 999999999} step={1} value={endBlock} onChange={e => setEndBlock(e.target.value)} className={inputField} />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label htmlFor="bal-step-sm" className="input-label w-40 flex-shrink-0">{stepLabel}</label>
-                  <input id="bal-step-sm" type="number" min={stepMin} max={999999} step={1} placeholder={stepPlaceholder} value={step} onChange={e => setStep(e.target.value)} className={inputField} />
-                </div>
+              <div className="space-y-3">
+                <Field label="Start Block" id="bal-start-sm" type="number" placeholder="14400" min={0} max={chainInfo.block ?? 999999999} step={1} value={startBlock} onChange={e => setStartBlock(e.target.value)} controlClassName="font-mono" />
+                <Field label="End Block" id="bal-end-sm" type="number" placeholder="28799" min={0} max={chainInfo.block ?? 999999999} step={1} value={endBlock} onChange={e => setEndBlock(e.target.value)} controlClassName="font-mono" />
+                <Field label={stepLabel} id="bal-step-sm" type="number" min={stepMin} max={999999} step={1} placeholder={stepPlaceholder} value={step} onChange={e => setStep(e.target.value)} controlClassName="font-mono" />
               </div>
               {blockErr && <p className="flex items-center gap-1.5 text-[11px] font-mono text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{blockErr}</p>}
             </div>
@@ -809,19 +784,10 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
                   ))}
                 </div>
               </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <label htmlFor="bal-start-date-sm" className="input-label w-40 flex-shrink-0">Start Date</label>
-                  <input id="bal-start-date-sm" type="date" max={toDateInput(new Date())} value={startDate} onChange={e => { setStartDate(e.target.value); setActivePreset(null); clearResolvedRange() }} className={`flex-1 ${inputField}`} />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label htmlFor="bal-end-date-sm" className="input-label w-40 flex-shrink-0">End Date</label>
-                  <input id="bal-end-date-sm" type="date" max={toDateInput(new Date())} value={endDate} onChange={e => { setEndDate(e.target.value); setActivePreset(null); clearResolvedRange() }} className={`flex-1 ${inputField}`} />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label htmlFor="bal-step-date-sm" className="input-label w-40 flex-shrink-0">{stepLabel}</label>
-                  <input id="bal-step-date-sm" type="number" min={stepMin} max={999} step={1} placeholder={stepPlaceholder} value={step} onChange={e => setStep(e.target.value)} className={`flex-1 ${inputField}`} />
-                </div>
+              <div className="space-y-3">
+                <Field label="Start Date" id="bal-start-date-sm" type="date" max={toDateInput(new Date())} value={startDate} onChange={e => { setStartDate(e.target.value); setActivePreset(null); clearResolvedRange() }} controlClassName="font-mono" />
+                <Field label="End Date" id="bal-end-date-sm" type="date" max={toDateInput(new Date())} value={endDate} onChange={e => { setEndDate(e.target.value); setActivePreset(null); clearResolvedRange() }} controlClassName="font-mono" />
+                <Field label={stepLabel} id="bal-step-date-sm" type="number" min={stepMin} max={999} step={1} placeholder={stepPlaceholder} value={step} onChange={e => setStep(e.target.value)} controlClassName="font-mono" />
               </div>
               {dateValidErr && <p className="flex items-center gap-1.5 text-[11px] font-mono text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{dateValidErr}</p>}
               {eraLoadErr   && <p className="flex items-center gap-1.5 text-[11px] font-mono text-danger"><AlertTriangle size={11} className="flex-shrink-0" />{eraLoadErr}</p>}
@@ -833,7 +799,7 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
             </button>
             <button
               onClick={handleFetch}
-              className="btn-primary flex items-center gap-2 disabled:opacity-40"
+              className="btn-primary btn-push flex items-center gap-2 disabled:opacity-40"
               disabled={
                 (step === '' || step == null) ||
                 (rangeMode === 'block' ? (!startBlock || !endBlock || !!blockErr) :
@@ -884,8 +850,8 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
                     </div>
 
                     <div className="rounded-sm border border-[var(--hairline)] bg-card px-3 py-3 sm:px-4 sm:py-4">
-                      <p className="text-sm font-semibold text-text">Wallet Address</p>
-                      <input
+                      <Field
+                        label="Wallet Address"
                         id="bal-addr"
                         type="text"
                         maxLength={64}
@@ -895,14 +861,9 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
                         value={address}
                         onChange={e => setAddress(e.target.value)}
                         disabled={isLoading}
-                        className={`mt-3 ${inputField} ${addressNote?.type === 'error' ? 'border-danger/50 focus:border-danger/70' : ''}`}
+                        controlClassName="font-mono"
+                        error={addressNote?.type === 'error' ? addressNote.msg : undefined}
                       />
-                      {addressNote?.type === 'error' && (
-                        <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-danger">
-                          <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
-                          <span>{addressNote.msg}</span>
-                        </p>
-                      )}
                     </div>
 
                     {isDateRangeSupported && null}
@@ -957,58 +918,31 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
                     <h4 className="text-base font-semibold text-text">Range Parameters</h4>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <label htmlFor="bal-start-era" className="input-label w-40 flex-shrink-0">
-                      Start Era
-                    </label>
-                    <input
-                      id="bal-start-era"
-                      type="number"
-                      placeholder="1000"
-                      min={1} max={chainInfo.era ?? undefined} step={1}
-                      value={startEraNum}
-                      onChange={e => {
-                        setStartEraNum(e.target.value)
-                        clearResolvedRange()
-                      }}
-                      disabled={isLoading}
-                      className={inputField}
-                    />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <label htmlFor="bal-end-era" className="input-label w-40 flex-shrink-0">
-                      End Era
-                    </label>
-                    <input
-                      id="bal-end-era"
-                      type="number"
-                      placeholder="1010"
-                      min={1} max={chainInfo.era ?? undefined} step={1}
-                      value={endEraNum}
-                      onChange={e => {
-                        setEndEraNum(e.target.value)
-                        clearResolvedRange()
-                      }}
-                      disabled={isLoading}
-                      className={inputField}
-                    />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <label htmlFor="bal-step-era" className="input-label w-40 flex-shrink-0">
-                      {stepLabel}
-                    </label>
-                    <input
-                      id="bal-step-era"
-                      type="number"
-                      min={1} max={999999} step={1}
-                      placeholder={stepPlaceholder}
-                      value={step}
-                      onChange={e => setStep(e.target.value)}
-                      disabled={isLoading}
-                      className={inputField}
-                    />
-                  </div>
+                <div className="space-y-3">
+                  <Field
+                    label="Start Era" id="bal-start-era" type="number" placeholder="1000"
+                    min={1} max={chainInfo.era ?? undefined} step={1}
+                    value={startEraNum}
+                    onChange={e => { setStartEraNum(e.target.value); clearResolvedRange() }}
+                    disabled={isLoading}
+                    controlClassName="font-mono"
+                  />
+                  <Field
+                    label="End Era" id="bal-end-era" type="number" placeholder="1010"
+                    min={1} max={chainInfo.era ?? undefined} step={1}
+                    value={endEraNum}
+                    onChange={e => { setEndEraNum(e.target.value); clearResolvedRange() }}
+                    disabled={isLoading}
+                    controlClassName="font-mono"
+                  />
+                  <Field
+                    label={stepLabel} id="bal-step-era" type="number"
+                    min={1} max={999999} step={1} placeholder={stepPlaceholder}
+                    value={step}
+                    onChange={e => setStep(e.target.value)}
+                    disabled={isLoading}
+                    controlClassName="font-mono"
+                  />
                 </div>
                 {eraValidErr && (
                   <p className="flex items-center gap-1.5 text-[11px] font-mono text-danger">
@@ -1039,52 +973,31 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
                     <h4 className="text-base font-semibold text-text">Range Parameters</h4>
                   </div>
                 </div>
-                <div className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <label htmlFor="bal-start" className="input-label w-40 flex-shrink-0">
-                    Start Block
-                  </label>
-                  <input
-                    id="bal-start"
-                    type="number"
-                    placeholder="14400"
-                    min={0} max={chainInfo.block ?? 999999999} step={1}
-                    value={startBlock}
-                    onChange={e => setStartBlock(e.target.value)}
-                    disabled={isLoading}
-                    className={inputField}
-                  />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label htmlFor="bal-end" className="input-label w-40 flex-shrink-0">
-                    End Block
-                  </label>
-                  <input
-                    id="bal-end"
-                    type="number"
-                    placeholder="28799"
-                    min={0} max={chainInfo.block ?? 999999999} step={1}
-                    value={endBlock}
-                    onChange={e => setEndBlock(e.target.value)}
-                    disabled={isLoading}
-                    className={inputField}
-                  />
-                </div>
-                <div className="flex items-center gap-3">
-                  <label htmlFor="bal-step" className="input-label w-40 flex-shrink-0">
-                    {stepLabel}
-                  </label>
-                  <input
-                    id="bal-step"
-                    type="number"
-                    min={stepMin} max={999999} step={1}
-                    placeholder={stepPlaceholder}
-                    value={step}
-                    onChange={e => setStep(e.target.value)}
-                    disabled={isLoading}
-                    className={inputField}
-                  />
-                </div>
+                <div className="space-y-3">
+                <Field
+                  label="Start Block" id="bal-start" type="number" placeholder="14400"
+                  min={0} max={chainInfo.block ?? 999999999} step={1}
+                  value={startBlock}
+                  onChange={e => setStartBlock(e.target.value)}
+                  disabled={isLoading}
+                  controlClassName="font-mono"
+                />
+                <Field
+                  label="End Block" id="bal-end" type="number" placeholder="28799"
+                  min={0} max={chainInfo.block ?? 999999999} step={1}
+                  value={endBlock}
+                  onChange={e => setEndBlock(e.target.value)}
+                  disabled={isLoading}
+                  controlClassName="font-mono"
+                />
+                <Field
+                  label={stepLabel} id="bal-step" type="number"
+                  min={stepMin} max={999999} step={1} placeholder={stepPlaceholder}
+                  value={step}
+                  onChange={e => setStep(e.target.value)}
+                  disabled={isLoading}
+                  controlClassName="font-mono"
+                />
                 </div>
                 {blockErr && (
                   <p className="flex items-center gap-1.5 text-[11px] font-mono text-danger">
@@ -1123,60 +1036,31 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
                 </div>
 
                 {/* Start / End date + step */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <label htmlFor="bal-start-date" className="input-label w-40 flex-shrink-0">
-                      Start Date
-                    </label>
-                    <input
-                      id="bal-start-date"
-                      type="date"
-                      placeholder="2026-03-01"
-                      max={toDateInput(new Date())}
-                      value={startDate}
-                      onChange={e => {
-                        setStartDate(e.target.value)
-                        setActivePreset(null)
-                        clearResolvedRange()
-                      }}
-                      disabled={isLoading}
-                      className={`flex-1 ${inputField}`}
-                    />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <label htmlFor="bal-end-date" className="input-label w-40 flex-shrink-0">
-                      End Date
-                    </label>
-                    <input
-                      id="bal-end-date"
-                      type="date"
-                      placeholder="2026-03-04"
-                      max={toDateInput(new Date())}
-                      value={endDate}
-                      onChange={e => {
-                        setEndDate(e.target.value)
-                        setActivePreset(null)
-                        clearResolvedRange()
-                      }}
-                      disabled={isLoading}
-                      className={`flex-1 ${inputField}`}
-                    />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <label htmlFor="bal-step-date" className="input-label w-40 flex-shrink-0">
-                      {stepLabel}
-                    </label>
-                    <input
-                      id="bal-step-date"
-                      type="number"
-                      min={stepMin} max={999} step={1}
-                      placeholder={stepPlaceholder}
-                      value={step}
-                      onChange={e => setStep(e.target.value)}
-                      disabled={isLoading}
-                      className={`flex-1 ${inputField}`}
-                    />
-                  </div>
+                <div className="space-y-3">
+                  <Field
+                    label="Start Date" id="bal-start-date" type="date"
+                    max={toDateInput(new Date())}
+                    value={startDate}
+                    onChange={e => { setStartDate(e.target.value); setActivePreset(null); clearResolvedRange() }}
+                    disabled={isLoading}
+                    controlClassName="font-mono"
+                  />
+                  <Field
+                    label="End Date" id="bal-end-date" type="date"
+                    max={toDateInput(new Date())}
+                    value={endDate}
+                    onChange={e => { setEndDate(e.target.value); setActivePreset(null); clearResolvedRange() }}
+                    disabled={isLoading}
+                    controlClassName="font-mono"
+                  />
+                  <Field
+                    label={stepLabel} id="bal-step-date" type="number"
+                    min={stepMin} max={999} step={1} placeholder={stepPlaceholder}
+                    value={step}
+                    onChange={e => setStep(e.target.value)}
+                    disabled={isLoading}
+                    controlClassName="font-mono"
+                  />
                 </div>
 
                 {dateValidErr && (
@@ -1215,20 +1099,23 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
 
               {/* Action row */}
               <div className="flex flex-col items-center gap-3">
+                {/* Distinct keys: Stop and Reset share this slot, and without
+                    them the charge earned on Stop would carry straight over to
+                    Reset on a double click. */}
                 {isLoading ? (
-                  <button onClick={cancel} className="btn-stop w-full sm:w-auto sm:min-w-[200px]">
+                  <HoldButton key="stop" onActivate={cancel} className="btn-stop w-full sm:w-auto sm:min-w-[200px]">
                     <Square size={14} />
                     STOP
-                  </button>
+                  </HoldButton>
                 ) : hasResults ? (
-                  <button onClick={() => { reset(); setQueriedAddress('') }} className="btn-primary w-full sm:w-auto sm:min-w-[200px]">
+                  <HoldButton key="reset" onActivate={() => { reset(); setQueriedAddress('') }} className="btn-primary w-full sm:w-auto sm:min-w-[200px]">
                     <RotateCcw size={14} />
                     RESET
-                  </button>
+                  </HoldButton>
                 ) : (
                   <button
                     onClick={handleFetch}
-                    className="btn-primary w-full sm:w-auto sm:min-w-[200px]"
+                    className="btn-primary btn-push w-full sm:w-auto sm:min-w-[200px]"
                     disabled={
                       !address.trim() ||
                       addressNote?.type === 'error' ||
@@ -1344,9 +1231,18 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
         </div>
       )}
 
-      {/* ── Results (shown for any data source; also visible DURING query) ── */}
-      {(hasResults || isLoading) && (!simpleMode || balanceSimpleStep !== 3) && (
+      {/* ── Results (any data source, and live during a query — guided mode
+             included, where a spinner panel used to stand in for them) ── */}
+      {(hasResults || isLoading) && (
         <section ref={resultsRef} className="space-y-4">
+          {isLoading && (
+            <ScanStatusBar
+              label={activePhase?.label ?? 'Querying archive…'}
+              meta={displayMeta}
+              onStop={cancel}
+            />
+          )}
+
           {/* Records summary bar */}
           {hasResults && (
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3 data-panel">

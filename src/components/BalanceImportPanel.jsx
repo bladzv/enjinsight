@@ -12,6 +12,8 @@
 import { useState, useRef, useCallback } from 'react'
 import { Upload, FolderOpen, XCircle, CheckCircle } from 'lucide-react'
 import { MAX_IMPORT_MB } from '../constants.js'
+import Spinner from './Spinner.jsx'
+import Field from './Field.jsx'
 
 const SUPPORTED_EXTS = ['json', 'csv', 'xml']
 
@@ -203,7 +205,7 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
       >
         {isPending ? (
           <div className="flex flex-col items-center gap-2">
-            <span className="h-7 w-7 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+            <Spinner size={28} />
             <p className="text-sm text-text-secondary">Reading file…</p>
           </div>
         ) : (
@@ -233,10 +235,8 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
           </div>
           <div className="flex gap-3 items-end">
             <div className="flex-1">
-              <label htmlFor="dec-pwd" className="block text-xs font-bold tracking-widest uppercase text-muted mb-1.5">
-                Decryption Password
-              </label>
-              <input
+              <Field
+                label="Decryption Password"
                 id="dec-pwd"
                 type="password"
                 placeholder="Enter password…"
@@ -244,7 +244,7 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
                 value={decPwd}
                 onChange={e => setDecPwd(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleDecrypt()}
-                className="w-full input-field font-mono"
+                controlClassName="font-mono"
               />
             </div>
             <button
@@ -253,7 +253,7 @@ export default function BalanceImportPanel({ onImport, onImportEncrypted, bare =
               className="btn-primary py-2 px-4 disabled:opacity-40"
             >
               {isPending
-                ? <span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                ? <Spinner size={16} tone="on-primary" />
                 : <Upload size={14} />}
               Decrypt &amp; Import
             </button>

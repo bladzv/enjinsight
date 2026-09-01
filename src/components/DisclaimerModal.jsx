@@ -1,4 +1,5 @@
 import { useState, useEffect, useId, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { AlertTriangle, CheckCircle2, ChevronDown, Database, Eye, X } from 'lucide-react'
 import { useFocusTrap } from '../hooks/useFocusTrap.js'
 
@@ -89,8 +90,8 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
     return () => clearTimeout(t)
   }, [seconds, isFirstVisit])
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden p-2 sm:p-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-hidden p-2 sm:p-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
       <div
         className="absolute inset-0 bg-ink/80 backdrop-blur-sm"
         onClick={isFirstVisit ? undefined : onClose}
@@ -146,7 +147,8 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

@@ -64,7 +64,12 @@
     --skeleton-highlight-rgb: 255 255 255;
     --theme-transition-ms: 620ms;
     --rail-w: 240px;
-    --status-h: 44px;
+    /* Mobile sticky header's real rendered height (py-2.5 padding + the
+       34px .btn-icon inside it, AppHeader.jsx:110) — measured, not assumed,
+       since the header's own markup has no min-height tying it to this
+       token. Used to offset ScanStatusBar so it doesn't tuck under the
+       header when both are stuck at the top simultaneously. */
+    --status-h: 55px;
 
     /* ── Motion tokens ──────────────────────────────────────────────────
        Every new motion rule reads one of these rather than a literal ms,
@@ -110,6 +115,23 @@
     /* generic loop control for future indeterminate-progress-style work */
     --m-loop-iter: infinite;
     --m-loop-dur: 1600ms;
+
+    /* ── Adopted motion patterns (docs/motion-examples-full.md) ─────────
+       press  — push-button depress; the edge is 1px taller than the travel
+                so a pressed button still shows a hairline of its own edge.
+       glide  — symmetric in-out curve for positional moves (pill, width).
+                Distinct from --m-ease-out, which decelerates only; a pill
+                that eases out looks like it was thrown rather than moved.
+       intent — hover-charge duration before a guarded control arms. */
+    --m-press: 60ms;
+    --m-press-depth: 5px;
+    --m-press-edge: 6px;
+    --m-press-edge-active: 1px;
+    --m-glide: 400ms;
+    --m-glide-ease: cubic-bezier(0.65, 0, 0.35, 1);
+    --m-intent: 700ms;
+    --m-search-w: 230px;
+    --m-search-w-collapsed: 56px;
   }
 
   :root[data-theme='light'] {
@@ -187,7 +209,19 @@
     @apply text-text font-sans antialiased;
     min-height: 100dvh;
     width: 100%;
-    overflow-x: hidden;
+    /* No overflow-x here, on purpose — html's own overflow-x: hidden above
+       already clips horizontal overflow for the whole page, since a
+       non-visible overflow-x on html isn't propagated from body regardless
+       of what body sets. Setting it here too used to double up: per the
+       CSS Overflow spec, pairing an explicit overflow-x with the default
+       overflow-y: visible forces the *used* value of overflow-y to auto,
+       so both html and body became independent scroll containers. Any
+       `position: sticky` descendant then resolved against the nearer one
+       (body), which never itself scrolls — only html does — so sticky
+       elements silently never engaged, including the existing mobile
+       header (AppHeader.jsx) and every ScanStatusBar in this codebase.
+       Verified: this one-line removal fixes it; no horizontal scroll
+       regression, since html's rule already does the clipping. */
     font-feature-settings: "ss01", "cv11";
     background-color: var(--ink);
     /* Subtle grid backdrop for "engineering" feel */
@@ -776,7 +810,7 @@
   .skeleton {
     position: relative;
     overflow: hidden;
-    background: rgba(var(--skeleton-base-rgb), 0.18);
+    background: rgb(var(--skeleton-base-rgb) / 0.18);
     border-radius: 0.5rem;
   }
 
@@ -785,7 +819,7 @@
     position: absolute;
     inset: 0;
     transform: translateX(-100%);
-    background: linear-gradient(90deg, transparent 0%, rgba(var(--skeleton-highlight-rgb), 0.28) 45%, transparent 100%);
+    background: linear-gradient(90deg, transparent 0%, rgb(var(--skeleton-highlight-rgb) / 0.28) 45%, transparent 100%);
     animation: skeleton-shimmer var(--m-shimmer-dur) ease-in-out infinite;
   }
 
@@ -852,15 +886,21 @@
     100% { stroke-dashoffset: 0;    opacity: 0; }
   }
 
+  /* The push edge is restated in both frames. An animation on box-shadow
+     replaces the property outright for as long as it runs, so omitting the
+     edge here would make the staking button visibly shed its 3D edge the
+     moment the pointer touched it. */
   @keyframes staking-scan-hover-glow {
     0% {
       box-shadow:
         inset 0 0 0 1px rgba(124, 58, 237, 0.40),
+        0 var(--m-press-edge) 0 theme('colors.primary-dim'),
         0 0 0 rgba(124, 58, 237, 0);
     }
     100% {
       box-shadow:
         inset 0 0 0 1px rgba(124, 58, 237, 0.80),
+        0 var(--m-press-edge) 0 theme('colors.primary-dim'),
         0 0 18px rgba(124, 58, 237, 0.30);
     }
   }
@@ -1085,6 +1125,24 @@
     transition: transform var(--m-slow) var(--m-standard);
   }
 
+  /* ── Stepper value — scale-pop on +/- change ──────────────────────────
+     font-variant-numeric comes from the .tabular utility on the input
+     itself; this rule only owns the bump transform so digit width changes
+     (1 → 10) don't visually jitter the +/- buttons beside it. */
+  .step-val {
+    display: inline-block;
+    min-width: 2ch;
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .step-val.bump {
+    transform: scale(1.3);
+  }
+
+  .step-btn:active:not(:disabled) {
+    transform: scale(0.9);
+  }
+
   /* ── Success check — stroke-draw ──────────────────────────────────────
      pathLength="1" (set on the <path> in SuccessCheck.jsx) normalizes the
      dash units, so this one rule works at any icon size with no
@@ -1166,6 +1224,407 @@
     opacity: 1;
     transform: scale(1);
   }
+
+  /* ══ Motion primitives ═══════════════════════════════════════════════
+     Shared CSS for the components in src/components/ that adopt patterns
+     from docs/motion-examples-full.md. Every rule reads an --m-* token so
+     the reduced-motion block at the bottom of this file zeroes it without
+     a second set of overrides here. Exceptions are marked inline. */
+
+  /* ── Push button (Interaction #13) ────────────────────────────────
+     A solid, zero-blur bottom shadow is the "edge"; :active drops the
+     button onto it. The edge lives on .btn-push rather than .btn-primary
+     so a button can opt in without inheriting it from every variant —
+     it marks "this commits work", which is why the wizard's Next buttons
+     do not get it.
+
+     No margin reserves the edge, deliberately. Neither box-shadow nor
+     transform affects layout, so pressing shifts nothing; adding the 6px
+     as margin would instead misalign the button against plain siblings in
+     the same `items-center` flex row. The edge simply draws into the
+     padding already below every action row. */
+  .btn-push {
+    box-shadow: 0 var(--m-press-edge) 0 theme('colors.primary-dim');
+    /* The colour properties are restated because this shorthand replaces
+       .btn-primary's `transition` utility wholesale; without them the hover
+       background would snap instead of fading. Press timing is deliberately
+       much faster than the colour fade — a depress that eases feels soft. */
+    transition: transform var(--m-press) ease,
+                box-shadow var(--m-press) ease,
+                background-color var(--m-fast) ease,
+                border-color var(--m-fast) ease;
+  }
+
+  .btn-push:active:not(:disabled) {
+    transform: translateY(var(--m-press-depth));
+    box-shadow: 0 var(--m-press-edge-active) 0 theme('colors.primary-dim');
+  }
+
+  .btn-push:disabled {
+    box-shadow: 0 var(--m-press-edge) 0 rgba(var(--primary-dim-rgb) / 0.35);
+  }
+
+  /* The staking Run button carries an inset accent ring on top of the edge.
+     Restated here because .btn-push's own box-shadow would otherwise
+     replace it, and again on :active — where the hover glow animation is
+     switched off, since a running animation outranks any :active rule and
+     would hold the button up while it was being pressed. */
+  .staking-scan-button.btn-push {
+    box-shadow:
+      inset 0 0 0 1px rgba(124, 58, 237, 0.40),
+      0 var(--m-press-edge) 0 theme('colors.primary-dim');
+  }
+
+  .staking-scan-button.btn-push:active:not(:disabled) {
+    animation: none;
+    box-shadow:
+      inset 0 0 0 1px rgba(124, 58, 237, 0.40),
+      0 var(--m-press-edge-active) 0 theme('colors.primary-dim');
+  }
+
+  /* ── Pill switch (Interaction #5) ─────────────────────────────────
+     The pill is absolutely positioned and driven by inline left/width that
+     PillSwitch.jsx measures off the active button. data-init="false" holds
+     the transition off for the first paint so the pill doesn't fly in from
+     the left edge on mount. */
+  .pill-switch {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .pill-switch__pill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 0;
+    border-radius: 0.125rem;
+    background: rgba(var(--primary-rgb) / 0.15);
+    transition: left var(--m-glide) var(--m-glide-ease),
+                width var(--m-glide) var(--m-glide-ease);
+  }
+
+  .pill-switch[data-init='false'] .pill-switch__pill {
+    transition: none;
+  }
+
+  .pill-switch__option {
+    position: relative;
+    z-index: 1;
+    /* Same duration as the pill's travel, so the label finishes changing
+       colour exactly as the pill lands rather than ahead of it. */
+    transition: color var(--m-glide) var(--m-glide-ease);
+  }
+
+  /* ── Floating label (Interaction #15) ─────────────────────────────
+     The control comes before the label in the DOM so `+` can reach it.
+     Resting state sits where a placeholder would; the lifted state is the
+     app's existing .input-label treatment (10px mono, uppercase, tracked),
+     so a focused field matches the rest of the design system exactly. */
+  .field {
+    position: relative;
+  }
+
+  /* Positioning context for the floating label: wraps the control (and its
+     icon) but never the error message, so the label's anchor cannot move
+     when a message appears below it. */
+  .field__box {
+    position: relative;
+  }
+
+  .field .input-field,
+  .field .select-field {
+    width: 100%;
+    padding-top: 1.15rem;
+    padding-bottom: 0.4rem;
+  }
+
+  .field__label {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    transform-origin: left top;
+    max-width: calc(100% - 1.5rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
+    color: theme('colors.muted');
+    font-family: theme('fontFamily.mono');
+    /* A line box no taller than the glyphs, so the lifted label sits fully
+       inside the control's top padding instead of reaching into the value. */
+    line-height: 1;
+    font-size: 0.75rem;
+    letter-spacing: 0;
+    text-transform: none;
+    transition: transform var(--m-base) var(--m-ease-out),
+                font-size var(--m-base) var(--m-ease-out),
+                letter-spacing var(--m-base) var(--m-ease-out),
+                color var(--m-base) var(--m-ease-out);
+  }
+
+  /* Lifted. `data-filled` is the fallback for controls that never report
+     :placeholder-shown reliably — date/time inputs with a native picker,
+     number inputs with a spinner, and every <select>. */
+  /* A real placeholder (an example value, not filler) sits at the same
+     resting position as the unlifted label, so it stays invisible until
+     the field is focused and the label has floated clear. Once filled,
+     :placeholder-shown stops matching and the browser stops painting it
+     regardless — this rule only has to cover the empty+unfocused frame. */
+  .field .input-field::placeholder {
+    color: transparent;
+  }
+
+  .field .input-field:focus::placeholder {
+    color: theme('colors.muted');
+  }
+
+  .field .input-field:focus + .field__label,
+  .field .input-field:not(:placeholder-shown) + .field__label,
+  .field[data-filled='true'] .field__label {
+    transform: translateY(-1.15rem);
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.20em;
+    text-transform: uppercase;
+    color: theme('colors.primary');
+  }
+
+  .field[data-invalid='true'] .input-field:focus + .field__label,
+  .field[data-invalid='true'] .input-field:not(:placeholder-shown) + .field__label,
+  .field[data-invalid='true'][data-filled='true'] .field__label {
+    color: theme('colors.danger');
+  }
+
+  .field[data-invalid='true'] .input-field {
+    border-color: theme('colors.danger');
+  }
+
+  .field__message {
+    @apply mt-1 text-[11px] leading-snug;
+  }
+
+  /* Icon slot — used by the search variant, indents the control and pins
+     the label clear of the icon. */
+  .field[data-icon='true'] .input-field {
+    padding-left: 2.25rem;
+  }
+
+  .field[data-icon='true'] .field__label {
+    left: 2.25rem;
+    max-width: calc(100% - 3rem);
+  }
+
+  .field__icon {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: theme('colors.muted');
+  }
+
+  /* ── Expanding search (Interaction #25) ───────────────────────────
+     Collapse only where width is actually scarce. On desktop a 56px search
+     puck costs more in discoverability than it saves in space, so the
+     collapsed state is scoped to narrow viewports. */
+  .field[data-variant='search'] {
+    transition: width var(--m-glide) var(--m-ease-out);
+  }
+
+  @media (max-width: 767px) {
+    .field[data-variant='search'] {
+      width: var(--m-search-w-collapsed);
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    .field[data-variant='search']:focus-within,
+    .field[data-variant='search'][data-filled='true'] {
+      width: var(--m-search-w);
+    }
+
+    /* The label would be clipped mid-word in the collapsed state, which
+       reads as a rendering bug rather than a deliberate collapse. */
+    .field[data-variant='search']:not(:focus-within):not([data-filled='true']) .field__label {
+      opacity: 0;
+    }
+  }
+
+  /* ── Hover intent gate (Interaction #38) ──────────────────────────
+     The charge is pure CSS off :hover so it stays frame-smooth; the JS
+     timer in HoldButton.jsx only decides when the click is honoured. Both
+     start on pointerenter and both last --m-intent, so they stay in sync.
+     The button is never `disabled` while charging — a disabled button
+     stops emitting pointer events in some engines, which would freeze the
+     charge, and it would read as "broken" rather than "guarded". */
+  .hold-btn {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hold-btn__charge {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    transform: scaleX(0);
+    transform-origin: left center;
+    background: rgba(255 255 255 / 0.24);
+    pointer-events: none;
+    transition: transform var(--m-intent) linear;
+  }
+
+  /* Hover only — not :focus-visible. A keyboard user's Enter fires
+     immediately, so drawing a 700ms charge on focus would advertise a
+     wait that does not apply to them. */
+  .hold-btn:hover:not(:disabled) .hold-btn__charge {
+    transform: scaleX(1);
+  }
+
+  /* Armed. The sweeping fill already reads as "wait"; without this, the
+     instant the button becomes clickable looks identical to the instant
+     before it, so the one moment the user is waiting for goes unmarked.
+
+     Driven by CSS off :hover rather than by the component's `armed` state,
+     for the same reason the click itself is decided from the clock: the
+     arming setTimeout runs late on a saturated main thread, and a scan busy
+     enough to make someone reach for Stop is exactly when it is busiest —
+     measured >300ms late mid-scan. The charge sweep is compositor-driven and
+     lands on time, so timing this off the same :hover keeps the "ready" cue
+     in step with the fill instead of trailing it.
+
+     step-end holds the resting look for the whole sweep then snaps at 100%,
+     so this reads as an arrival rather than a second slow fade. It lives on
+     __charge, not the button, to stay clear of the nudge animation. */
+  .hold-btn:hover:not(:disabled) .hold-btn__charge {
+    animation: hold-arm var(--m-intent) step-end forwards;
+  }
+
+  @keyframes hold-arm {
+    from {
+      background: rgba(255 255 255 / 0.24);
+      box-shadow: none;
+    }
+    to {
+      background: rgba(255 255 255 / 0.34);
+      box-shadow: inset 0 0 0 1px rgba(255 255 255 / 0.45);
+    }
+  }
+
+  .hold-btn__body {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* Clicked before the charge finished: pulse rather than reset, so the
+     user learns the control is guarded instead of assuming it is dead. */
+  .hold-btn[data-nudge='true'] {
+    animation: hold-nudge var(--m-base) var(--m-ease-out);
+  }
+
+  /* The word that goes with the pulse. Overlaid rather than swapped into
+     the label so the button cannot change width — these sit in flex rows
+     next to other controls, and the smallest of them (StepProgress's
+     Reset) has no room to grow. Kept to one word for the same reason. */
+  .hold-btn__hint {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    background: rgba(0 0 0 / 0.55);
+    color: #fff;
+    font-family: theme('fontFamily.mono');
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    pointer-events: none;
+    animation: hold-hint-in var(--m-fast) var(--m-ease-out);
+  }
+
+  @keyframes hold-hint-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  @keyframes hold-nudge {
+    0%   { transform: scale(1); }
+    45%  { transform: scale(1.04); }
+    100% { transform: scale(1); }
+  }
+
+  /* No hover means no charge: on touch the control arms immediately (see
+     HoldButton.jsx), so painting a charge that never completes would lie. */
+  @media (hover: none) {
+    .hold-btn__charge { display: none; }
+  }
+
+  /* ── Indeterminate bar (Feedback #25) ─────────────────────────────── */
+  .indeterminate-bar {
+    position: relative;
+    overflow: hidden;
+    height: 3px;
+    border-radius: 999px;
+    background: rgba(var(--primary-rgb) / 0.12);
+  }
+
+  .indeterminate-bar__seg {
+    position: absolute;
+    inset: 0;
+    width: 40%;
+    border-radius: 999px;
+    background: theme('colors.primary');
+    animation: indeterminate-slide var(--m-shimmer-dur) var(--m-ease-out) infinite;
+  }
+
+  /* -100% → 320% so the segment fully clears both ends of a 40%-wide track
+     rather than appearing to bounce off them. */
+  @keyframes indeterminate-slide {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(320%); }
+  }
+
+  /* ── Skeleton → content crossfade (Feedback #23) ──────────────────
+     Both layers stay mounted and share one grid cell, so the container is
+     sized by whichever is taller and nothing reflows at the swap. The
+     doc's version unmounts the skeleton *and* fades it, which cannot both
+     happen — unmounting wins and the crossfade never renders. */
+  .skel-swap {
+    display: grid;
+  }
+
+  .skel-swap > * {
+    grid-area: 1 / 1;
+    transition: opacity var(--m-base) var(--m-ease-out),
+                transform var(--m-base) var(--m-ease-out);
+  }
+
+  .skel-swap__skeleton {
+    opacity: 1;
+  }
+
+  .skel-swap__content {
+    opacity: 0;
+    transform: translateY(var(--m-rise-sm));
+    pointer-events: none;
+  }
+
+  .skel-swap[data-loading='false'] .skel-swap__skeleton {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .skel-swap[data-loading='false'] .skel-swap__content {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
 }
 
 @layer utilities {
@@ -1234,6 +1693,20 @@
     --m-stagger-cap: 0;
     --m-loop-iter: 1;
     --m-loop-dur: 0.01ms;
+    --m-press: 0.01ms;
+    /* Only the travel is suppressed. --m-press-edge is a static visual
+       affordance, not motion, so it keeps its full height — zeroing it
+       would strip the button's shape rather than its animation. The
+       pressed edge is held at the resting height for the same reason: a
+       button that flattens without moving reads as broken. */
+    --m-press-depth: 0px;
+    --m-press-edge-active: var(--m-press-edge);
+    --m-glide: 0.01ms;
+    --m-glide-ease: linear;
+    --m-intent: 0.01ms;
+    /* Search renders permanently expanded rather than animating open — the
+       collapsed state only exists to justify the width transition. */
+    --m-search-w-collapsed: var(--m-search-w);
   }
 
   /* Backstop for anything not (yet) built on the tokens above: Tailwind's

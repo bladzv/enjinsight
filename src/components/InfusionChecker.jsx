@@ -6,6 +6,9 @@ import StepProgress from './StepProgress.jsx'
 import TerminalLog from './TerminalLog.jsx'
 import ToolInfoSection from './ToolInfoSection.jsx'
 import { derivePhases } from '../utils/infusionPhases.js'
+import Field from './Field.jsx'
+import HoldButton from './HoldButton.jsx'
+import ScanStatusBar from './ScanStatusBar.jsx'
 
 const CONTRACT_ADDRESS = '0xfaafdc07907ff5120a76b34b731b278c38d6043c'
 const ETHERSCAN_NFT_HOLDINGS_URL = import.meta.env.DEV
@@ -406,6 +409,14 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
   const infusionSimpleStep = (isLoading && infusionSimpleRunning) ? 3
     : ((singleStarted || bulkStarted) && infusionSimpleRunning) ? 4
     : infusionPage
+  // 'empty' ran to the end and honestly reported nothing infused, so it counts
+  // as finished; 'canceled' and 'error' must leave Results un-checked. The
+  // mode guard mirrors derivePhases — a settled single-mode run must not mark
+  // the wallet stepper complete after a tab switch.
+  const infusionScanSucceeded = !!scanOutcome && scanOutcome.mode === mode
+    && (scanOutcome.kind === 'done' || scanOutcome.kind === 'empty')
+  const infusionSimpleComplete = infusionSimpleStep === INFUSION_SIMPLE_STEPS.length
+    && infusionSimpleRunning && !isLoading && infusionScanSucceeded
 
   function handleSimpleReset() {
     scanAbortRef.current?.abort()
@@ -912,6 +923,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
         <StepProgress
           steps={INFUSION_SIMPLE_STEPS}
           currentStep={infusionSimpleStep}
+          complete={infusionSimpleComplete}
           onReset={infusionSimpleStep > 1 ? handleSimpleReset : undefined}
           infoOpen={simpleInfoOpen}
           onInfoOpenChange={setSimpleInfoOpen}
@@ -989,8 +1001,10 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
           </div>
           {mode === 'single' ? (
             <form className="space-y-4" onSubmit={handleSingleCheck}>
-              <input
-                className="input-field w-full font-mono"
+              <Field
+                label="Token ID"
+                id="infusion-simple-token-id"
+                controlClassName="font-mono"
                 value={tokenId}
                 onChange={e => setTokenId(e.target.value)}
                 inputMode="text"
@@ -1003,15 +1017,17 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
                 <button type="button" onClick={() => { setSimpleInfoOpen(false); setInfusionPage(1) }} className="btn-secondary flex items-center gap-2">
                   <span aria-hidden="true">←</span> Back
                 </button>
-                <button type="submit" className="btn-primary flex items-center gap-2">
+                <button type="submit" className="btn-primary btn-push flex items-center gap-2">
                   <Search size={14} /> Check
                 </button>
               </div>
             </form>
           ) : (
             <form className="space-y-4" onSubmit={handleBulkCheck}>
-              <input
-                className="input-field w-full font-mono"
+              <Field
+                label="Wallet Address"
+                id="infusion-simple-wallet"
+                controlClassName="font-mono"
                 value={walletAddress}
                 onChange={e => setWalletAddress(e.target.value)}
                 inputMode="text"
@@ -1024,24 +1040,12 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
                 <button type="button" onClick={() => { setSimpleInfoOpen(false); setInfusionPage(1) }} className="btn-secondary flex items-center gap-2">
                   <span aria-hidden="true">←</span> Back
                 </button>
-                <button type="submit" className="btn-primary flex items-center gap-2">
+                <button type="submit" className="btn-primary btn-push flex items-center gap-2">
                   <Wallet size={14} /> Bulk Check
                 </button>
               </div>
             </form>
           )}
-        </div>
-      )}
-
-      {/* ── Simple step 3: running screen ── */}
-      {simpleMode && infusionSimpleStep === 3 && !simpleInfoOpen && (
-        <div className="mx-auto w-full max-w-md rounded-sm border border-white/[0.06] bg-surface px-6 py-14 text-center shadow-ambient">
-          <div className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
-          <h2 className="mb-1 text-base font-semibold text-text">Scanning…</h2>
-          <button onClick={handleStopScan} className="btn-stop mx-auto flex items-center gap-2">
-            <Square size={14} />
-            Stop
-          </button>
         </div>
       )}
 
@@ -1065,7 +1069,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
         <code className="mt-1 block break-all rounded-sm border border-[var(--hairline)] bg-term/80 px-2 py-1 font-mono text-[11px] text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>
       </ToolInfoSection>}
 
-      {(!simpleMode || infusionSimpleStep === 4) && (
+      {(!simpleMode || infusionSimpleStep >= 3) && (
       <section className={`grid gap-4 ${!simpleMode ? 'xl:grid-cols-3 xl:items-stretch' : ''}`}>
         <div className={`space-y-4 ${!simpleMode ? 'xl:col-span-2' : ''}`}>
           {!simpleMode && (
@@ -1102,9 +1106,11 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
 
             {mode === 'single' ? (
               <form className="flex flex-col gap-3 sm:flex-row" onSubmit={handleSingleCheck}>
-                <input
+                <Field
+                  label="Token ID"
                   id="infusion-token-id"
-                  className="input-field min-w-0 flex-1 font-mono"
+                  className="min-w-0 flex-1"
+                  controlClassName="font-mono"
                   value={tokenId}
                   onChange={event => setTokenId(event.target.value)}
                   inputMode="text"
@@ -1113,20 +1119,32 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
                   placeholder="Enter token ID or Etherscan NFT URL"
                   required
                 />
-                <button
-                  type={isLoading ? 'button' : 'submit'}
-                  onClick={isLoading ? handleStopScan : undefined}
-                  className={`${isLoading ? 'btn-stop' : 'btn-primary'} whitespace-nowrap`}
-                >
-                  {isLoading ? <Square size={14} /> : <Search size={16} />}
-                  {isLoading ? 'Stop' : 'Check'}
-                </button>
+                {/* Split rather than switched by `type`: the guarded Stop
+                    must be a plain button, while Check stays a submit so the
+                    form still responds to Enter in the field above. */}
+                {isLoading ? (
+                  <HoldButton
+                    key="stop"
+                    onActivate={handleStopScan}
+                    className="btn-stop whitespace-nowrap"
+                  >
+                    <Square size={14} />
+                    Stop
+                  </HoldButton>
+                ) : (
+                  <button key="run" type="submit" className="btn-primary btn-push whitespace-nowrap">
+                    <Search size={16} />
+                    Check
+                  </button>
+                )}
               </form>
             ) : (
               <form className="flex flex-col gap-3 sm:flex-row" onSubmit={handleBulkCheck}>
-                <input
+                <Field
+                  label="Wallet Address"
                   id="infusion-wallet-address"
-                  className="input-field min-w-0 flex-1 font-mono"
+                  className="min-w-0 flex-1"
+                  controlClassName="font-mono"
                   value={walletAddress}
                   onChange={event => setWalletAddress(event.target.value)}
                   inputMode="text"
@@ -1135,21 +1153,35 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
                   placeholder="Enter Ethereum wallet address"
                   required
                 />
-                <button
-                  type={isLoading ? 'button' : 'submit'}
-                  onClick={isLoading ? handleStopScan : undefined}
-                  className={`${isLoading ? 'btn-stop' : 'btn-primary'} whitespace-nowrap`}
-                >
-                  {isLoading ? <Square size={14} /> : <Wallet size={16} />}
-                  {isLoading ? 'Stop' : 'Bulk Check'}
-                </button>
+                {/* Split rather than switched by `type`: the guarded Stop
+                    must be a plain button, while Bulk Check stays a submit so the
+                    form still responds to Enter in the field above. */}
+                {isLoading ? (
+                  <HoldButton
+                    key="stop"
+                    onActivate={handleStopScan}
+                    className="btn-stop whitespace-nowrap"
+                  >
+                    <Square size={14} />
+                    Stop
+                  </HoldButton>
+                ) : (
+                  <button key="run" type="submit" className="btn-primary btn-push whitespace-nowrap">
+                    <Wallet size={16} />
+                    Bulk Check
+                  </button>
+                )}
               </form>
             )}
           </div>
           )}
 
-          {(!simpleMode || infusionSimpleStep === 4) && (
+          {(!simpleMode || infusionSimpleStep >= 3) && (
           <div ref={singleResultRef} className="data-panel space-y-4" aria-live="polite">
+            {mode === 'single' && isLoading && (
+              <ScanStatusBar label="Checking token…" onStop={handleStopScan} />
+            )}
+
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="section-title">Infusion value</h2>
@@ -1187,8 +1219,12 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
       </section>
       )}
 
-      {mode === 'wallet' && bulkStarted && (!simpleMode || infusionSimpleStep === 4) && (
+      {mode === 'wallet' && bulkStarted && (!simpleMode || infusionSimpleStep >= 3) && (
       <section ref={bulkResultRef} className="data-panel space-y-4">
+        {isLoading && (
+          <ScanStatusBar label="Scanning wallet…" meta={bulkStatus} onStop={handleStopScan} />
+        )}
+
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="section-label">Bulk Results</p>
@@ -1206,24 +1242,22 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
         </div>
 
         <div className="data-toolbar">
-          <label className="w-full min-w-0 sm:min-w-[14rem] sm:flex-1 sm:max-w-sm">
-            <span className="input-label mb-1">Search token name or ID</span>
-            <div className="relative">
-              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
-              <input
-                className="input-field w-full pl-9"
-                value={bulkSearch}
-                onChange={event => {
-                  setBulkSearch(event.target.value)
-                  setBulkPage(1)
-                }}
-                type="search"
-                autoComplete="off"
-                spellCheck="false"
-                placeholder="Filter wallet results"
-              />
-            </div>
-          </label>
+          <Field
+            label="Search token name or ID"
+            id="infusion-bulk-search"
+            type="search"
+            variant="search"
+            icon={<Search size={14} />}
+            className="min-w-0 md:min-w-[14rem] md:flex-1 md:max-w-sm"
+            value={bulkSearch}
+            onChange={event => {
+              setBulkSearch(event.target.value)
+              setBulkPage(1)
+            }}
+            autoComplete="off"
+            spellCheck="false"
+            placeholder="Filter wallet results"
+          />
 
           <label className="flex items-center gap-2 text-xs text-text-secondary">
             Rows per page
