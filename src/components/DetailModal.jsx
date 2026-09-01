@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useFocusTrap } from '../hooks/useFocusTrap.js'
 
@@ -35,8 +36,8 @@ export default function DetailModal({
 
   if (!open) return null
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-end justify-center overflow-hidden sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby={titleId}>
       <button
         type="button"
         className="absolute inset-0 bg-ink/85 backdrop-blur-sm"
@@ -74,6 +75,7 @@ export default function DetailModal({
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react'
-import { ChevronDown, ChevronUp, Square } from 'lucide-react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { DEFAULT_ERA_COUNT } from './constants.js'
 import { useValidatorChecker } from './hooks/useValidatorChecker.js'
 import { usePoolChecker }      from './hooks/usePoolChecker.js'
@@ -19,17 +19,20 @@ import TerminalLog         from './components/TerminalLog.jsx'
 import SummarySection      from './components/SummarySection.jsx'
 import PoolSummarySection  from './components/PoolSummarySection.jsx'
 import PhaseProgressCards  from './components/PhaseProgressCards.jsx'
+import Spinner from './components/Spinner.jsx'
+import ScanStatusBar from './components/ScanStatusBar.jsx'
+import { isNavigationLocked } from './utils/navigationLock.js'
 
 const BalanceExplorer     = lazy(() => import('./components/BalanceExplorer.jsx'))
 const RewardHistoryViewer = lazy(() => import('./components/RewardHistoryViewer.jsx'))
 const EraBlockExplorer    = lazy(() => import('./components/EraBlockExplorer.jsx'))
 const InfusionChecker     = lazy(() => import('./components/InfusionChecker.jsx'))
 
-/** Suspense fallback for a lazy-loaded tool view — mirrors the spinner used elsewhere. */
+/** Suspense fallback for a lazy-loaded tool view. */
 function ViewLoadingFallback() {
   return (
     <div className="flex min-h-[40vh] items-center justify-center">
-      <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+      <Spinner size={40} />
     </div>
   )
 }
@@ -148,7 +151,6 @@ export default function App() {
   const status    = isValidatorMode ? vStatus   : pStatus
   const logs      = isValidatorMode ? vLogs     : pLogs
   const isLoading = status === 'loading'
-  const isDone    = status === 'done'
   const activeProgress = isValidatorMode ? vProgress : pProgress
   const previewPhases = isValidatorMode ? VALIDATOR_PREVIEW_PHASES : POOL_PREVIEW_PHASES
   const phases = activeProgress?.phases ?? []
@@ -175,14 +177,14 @@ export default function App() {
     : null
 
   const validatorLatestEra = resolveLatestEra(validators)
-  const isNavigationLocked = isLoading || balanceScanActive || rewardScanActive || infusionScanActive
+  const navigationLocked = isNavigationLocked({ isLoading, balanceScanActive, rewardScanActive, infusionScanActive })
 
   // Browser Back/Forward. If a scan is in progress, cancel the navigation by
   // re-pushing the current entry (there is no way to preventDefault a
   // popstate) and show the same lock toast a blocked click gets.
   useEffect(() => {
     function onPopState() {
-      if (isNavigationLocked) {
+      if (navigationLocked) {
         showScanLockToast()
         isPopStateRef.current = true
         window.history.pushState(
@@ -211,9 +213,9 @@ export default function App() {
     }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
-  }, [view, isNavigationLocked, isValidatorMode, vReset, pReset, showScanLockToast])
+  }, [view, navigationLocked, isValidatorMode, vReset, pReset, showScanLockToast])
 
-  const headerStatus = isNavigationLocked ? 'loading' : status
+  const headerStatus = navigationLocked ? 'loading' : status
   const activeRecords = isValidatorMode ? validators : pools
   const validatorPages = Math.max(1, Math.ceil(validators.length / STAKING_RESULTS_PAGE_SIZE))
   const safeValidatorPage = Math.min(validatorPage, validatorPages)
@@ -229,11 +231,11 @@ export default function App() {
   )
 
   useEffect(() => {
-    if (isNavigationLocked && !previousNavigationLockRef.current) {
+    if (navigationLocked && !previousNavigationLockRef.current) {
       showScanLockToast()
     }
-    previousNavigationLockRef.current = isNavigationLocked
-  }, [isNavigationLocked, showScanLockToast])
+    previousNavigationLockRef.current = navigationLocked
+  }, [navigationLocked, showScanLockToast])
 
   async function handleRun(eraCount) {
     setLastEraCount(eraCount)
@@ -258,7 +260,7 @@ export default function App() {
   }
 
   function handleModeChange(newMode) {
-    if (isNavigationLocked) {
+    if (navigationLocked) {
       showScanLockToast()
       return
     }
@@ -267,7 +269,7 @@ export default function App() {
   }
 
   function handleNavigate(dest) {
-    if (isNavigationLocked) {
+    if (navigationLocked) {
       showScanLockToast()
       return
     }
@@ -277,7 +279,7 @@ export default function App() {
   }
 
   function handleBack() {
-    if (isNavigationLocked) {
+    if (navigationLocked) {
       showScanLockToast()
       return
     }
@@ -311,6 +313,10 @@ export default function App() {
   const stakingSimpleStep = (status === 'loading' && stakingSimpleRunning) ? 3
     : ((status === 'done' || status === 'error' || status === 'stopped') && stakingSimpleRunning) ? 4
     : stakingPage
+  // The step above lands on 4 for 'error' and 'stopped' too, so completion has
+  // to be re-derived from the success status alone — a stopped scan sits on
+  // Results without having earned its check.
+  const stakingSimpleComplete = stakingSimpleStep === STAKING_SIMPLE_STEPS.length && status === 'done'
 
   // safeValidatorPage/safePoolPage already clamp on every render (see their
   // definitions above) — this used to also write the clamped value back into
@@ -427,6 +433,7 @@ export default function App() {
           <StepProgress
             steps={STAKING_SIMPLE_STEPS}
             currentStep={stakingSimpleStep}
+            complete={stakingSimpleComplete}
             onReset={stakingSimpleStep > 1 ? handleReset : undefined}
           />
         )}
@@ -484,24 +491,21 @@ export default function App() {
           </div>
         )}
 
-        {/* Simple mode step 3: running screen */}
-        {simpleMode && stakingSimpleStep === 3 && (
-          <div className="mx-auto w-full max-w-md rounded-sm border border-white/[0.06] bg-surface px-6 py-14 text-center shadow-ambient">
-            <div className="mx-auto mb-5 h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
-            <h2 className="mb-1 text-base font-semibold text-text">{activePhase?.label ?? 'Running scan…'}</h2>
-            {displayProgressMeta && (
-              <p className="mb-6 text-sm text-text-secondary">{displayProgressMeta}</p>
-            )}
-            <button onClick={handleStop} className="btn-stop mx-auto flex items-center gap-2">
-              <Square size={14} />
-              Stop
-            </button>
-          </div>
-        )}
-
-        {/* Results — hidden during simple step 3 (running) */}
-        {(!simpleMode || stakingSimpleStep !== 3) && (
+        {/* Results. Guided mode used to swap these out for a spinner panel
+            while a scan ran; they now stay mounted and fill in underneath the
+            ScanStatusBar, which carries the phase label and Stop that panel
+            used to own. */}
         <>
+
+        {/* Independent of validators.length/pools.length so it appears from
+            the first instant of a scan, not only once a record has landed. */}
+        {isLoading && (
+          <ScanStatusBar
+            label={activePhase?.label ?? 'Scanning…'}
+            meta={displayProgressMeta}
+            onStop={handleStop}
+          />
+        )}
 
         {/* ── Validator mode content ──────────────────────────────── */}
         {isValidatorMode && validators.length > 0 && (
@@ -533,13 +537,18 @@ export default function App() {
           </ResultsPanel>
         )}
 
-        {isValidatorMode && isDone && validators.length > 0 && (
+        {/* No longer gated on isDone: the summary fills in alongside the
+            result cards. Its figures are aggregates over what has loaded so
+            far, so it labels itself provisional until the scan settles. */}
+        {isValidatorMode && validators.length > 0 && (
           <section id="staking-validator-summary">
             <SummarySection
               validators={validators}
               eraCount={lastEraCount}
               latestEra={validatorLatestEra}
               onRetry={vRetryValidator}
+              provisional={isLoading}
+              progressLabel={isLoading ? `${validators.filter(v => v.fetchStatus === 'done').length} / ${validators.length} scanned` : null}
             />
           </section>
         )}
@@ -576,12 +585,14 @@ export default function App() {
           </ResultsPanel>
         )}
 
-        {!isValidatorMode && isDone && pools.length > 0 && (
+        {!isValidatorMode && pools.length > 0 && (
           <section id="staking-pool-summary">
             <PoolSummarySection
               pools={pools}
               eraCount={lastEraCount}
               onPoolSelect={handleSelectPool}
+              provisional={isLoading}
+              progressLabel={isLoading ? `${pools.filter(p => p.fetchStatus === 'done').length} / ${pools.length} scanned` : null}
             />
           </section>
         )}
@@ -615,14 +626,13 @@ export default function App() {
             <p className="text-xs text-text-secondary mb-4">
               Verify network connectivity and retry the same era window.
             </p>
-            <button onClick={() => handleRun(lastEraCount)} className="btn-primary">
+            <button onClick={() => handleRun(lastEraCount)} className="btn-primary btn-push">
               Retry Scan
             </button>
           </div>
         )}
 
-        </> /* /results fragment */
-        )}
+        </>{/* /results fragment */}
       </main>
       )}
 

@@ -9,6 +9,7 @@ import CopyButton from './CopyButton.jsx'
 import PoolValidatorsTable from './PoolValidatorsTable.jsx'
 import PoolRewardTable from './PoolRewardTable.jsx'
 import { formatENJ, poolExplorerUrl, poolLabel } from '../utils/format.js'
+import Skeleton, { SkeletonSwap } from './Skeleton.jsx'
 
 export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: controlledOpen, onOpenChange }) {
   const [internalOpen, setInternalOpen] = useState(false)
@@ -95,7 +96,9 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
       >
         <div className="flex min-w-0 items-start gap-2.5">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm bg-surface-high font-mono text-[11px] font-bold text-primary">
-            {loading ? <span className="skeleton h-4 w-4" aria-hidden="true" /> : `#${poolId}`}
+            <SkeletonSwap loading={loading} skeleton={<Skeleton.Block width="1rem" height="1rem" />}>
+              {`#${poolId}`}
+            </SkeletonSwap>
           </div>
 
           <div className="min-w-0 flex-1">
@@ -209,10 +212,9 @@ function MetricCell({ label, value, accent = 'text-text', loading = false }) {
   return (
     <div className="min-w-0 rounded-sm border border-[var(--hairline)] bg-surface-high px-2 py-1.5">
       <p className="truncate text-[9px] font-bold uppercase tracking-[0.16em] text-muted" style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace' }}>{label}</p>
-      {loading
-        ? <span className="skeleton mt-1 block h-4 w-12" aria-hidden="true" />
-        : <p className={`mt-0.5 truncate font-mono text-xs font-bold ${accent}`} title={value}>{value}</p>
-      }
+      <SkeletonSwap loading={loading} skeleton={<Skeleton.Block width="3rem" height="1rem" className="mt-1" />}>
+        <p className={`mt-0.5 truncate font-mono text-xs font-bold ${accent}`} title={value}>{value}</p>
+      </SkeletonSwap>
     </div>
   )
 }
@@ -254,9 +256,9 @@ function LoadingPlaceholder({ label }) {
   return (
     <div className="space-y-2 py-2">
       <p className="text-xs text-text-secondary">{label}</p>
-      <div className="skeleton skeleton-line" aria-hidden="true" />
-      <div className="skeleton skeleton-line w-11/12" aria-hidden="true" />
-      <div className="skeleton skeleton-line w-4/5" aria-hidden="true" />
+      <Skeleton.Line />
+      <Skeleton.Line width="91.666667%" />
+      <Skeleton.Line width="80%" />
     </div>
   )
 }

@@ -5,12 +5,15 @@
  * with an EKG canvas, an era progress bar, and a past-era lookup tool.
  * Network: Enjin Relaychain only.
  */
-import { useState, useRef, useEffect, useCallback, useId } from 'react'
-import { AlertTriangle, ChevronDown, ChevronUp, Search, Globe, Clock } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { ChevronDown, ChevronUp, Search, Globe, Clock } from 'lucide-react'
 import { useEraExplorer, ERA_STATUS } from '../hooks/useEraExplorer.js'
 import { useCountUp } from '../hooks/useCountUp.js'
 import TerminalLog from './TerminalLog.jsx'
 import CopyButton from './CopyButton.jsx'
+import Field from './Field.jsx'
+import ScanStatusBar from './ScanStatusBar.jsx'
+import Skeleton, { SkeletonSwap } from './Skeleton.jsx'
 
 const HEARTBEAT_PATH = 'M0 20 L20 20 L25 10 L30 30 L35 20 L100 20'
 
@@ -90,10 +93,12 @@ function StatCard({ label, value, accent = false, sub = null, loading = false })
   return (
     <div className="metric-card text-left">
       <p className="metric-label">{label}</p>
-      {loading
-        ? <div className="skeleton mt-2 h-7 w-20" aria-hidden="true" />
-        : <p className={`metric-value break-all ${accent ? 'text-cyan' : 'text-text'}`}>{value}</p>
-      }
+      <SkeletonSwap
+        loading={loading}
+        skeleton={<Skeleton.Block width="5rem" height="1.75rem" className="mt-2" />}
+      >
+        <p className={`metric-value break-all ${accent ? 'text-cyan' : 'text-text'}`}>{value}</p>
+      </SkeletonSwap>
       {sub ? <p className="mt-2 whitespace-normal break-all font-mono text-[10px] leading-tight text-muted" title={sub}>{sub}</p> : null}
     </div>
   )
@@ -111,7 +116,6 @@ export default function EraBlockExplorer() {
   const [localTime, setLocalTime] = useState(false)
   const [pulseKey, setPulseKey] = useState(0)
   const lastSeenBlock = useRef(null)
-  const eraInputErrorId = useId()
 
   const eraEnd = eraStart != null ? eraStart + ERA_LEN - 1 : null
   const remaining = eraEnd != null && block != null ? Math.max(0, eraEnd - block) : null
@@ -180,15 +184,15 @@ export default function EraBlockExplorer() {
               <span className="mini-chip">
                 <span className="hero-dot" /> Relaychain
               </span>
-              {csvCount > 0 ? (
-                <span className="mini-chip text-success">
-                  {csvCount} eras cached
-                </span>
-              ) : (
-                <span className="mini-chip">
-                  <span className="skeleton inline-block h-2 w-12" aria-hidden="true" />
-                </span>
-              )}
+              <span className="mini-chip text-success">
+                <SkeletonSwap
+                  loading={csvCount === 0}
+                  skeleton={<Skeleton.Block width="3rem" height="0.5rem" className="inline-block" />}
+                  className="inline-grid"
+                >
+                  <span>{csvCount} eras cached</span>
+                </SkeletonSwap>
+              </span>
             </div>
           </div>
         </div>
@@ -269,34 +273,28 @@ export default function EraBlockExplorer() {
         </div>
 
         <form onSubmit={onLookup} className="mt-4 space-y-2">
-          <div className="flex flex-wrap gap-2">
-            <input
+          <div className="flex flex-wrap items-start gap-2">
+            <Field
+              label="Era number"
+              id="era-lookup-input"
+              className="w-32 sm:w-40"
+              controlClassName={`font-mono ${eraInputErr ? 'error-shake ring-1 ring-danger' : ''}`}
               type="number"
               min="0"
               step="1"
               value={eraInput}
               onChange={event => { setEraInput(event.target.value); resetLookup() }}
-              placeholder="Era number"
-              className={`w-32 input-field font-mono sm:w-40 ${eraInputErr ? 'error-shake ring-1 ring-danger' : ''}`}
-              aria-label="Era number to look up"
-              aria-invalid={!!eraInputErr}
-              aria-describedby={eraInputErr ? eraInputErrorId : undefined}
+              error={eraInputErr}
             />
             <button
               type="submit"
-              className="btn-primary gap-1.5"
+              className="btn-primary btn-push gap-1.5"
               disabled={lookupLoading || !eraInput || !!eraInputErr}
               aria-label="Look up era"
             >
               {lookupLoading ? <span className="animate-pulse">Searching…</span> : <><Search size={14} />Look Up</>}
             </button>
           </div>
-          {eraInputErr ? (
-            <p id={eraInputErrorId} className="flex items-center gap-1 text-xs text-danger">
-              <AlertTriangle size={11} className="flex-shrink-0" />
-              {eraInputErr}
-            </p>
-          ) : null}
         </form>
 
         {lookupError ? (
@@ -305,67 +303,93 @@ export default function EraBlockExplorer() {
           </p>
         ) : null}
 
-        {lookupLoading ? (
-          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="metric-card">
-              <p className="metric-label">Start Block</p>
-              <div className="skeleton mt-2 h-6 w-20" aria-hidden="true" />
-            </div>
-            <div className="metric-card">
-              <p className="metric-label">End Block</p>
-              <div className="skeleton mt-2 h-6 w-20" aria-hidden="true" />
-            </div>
-          </div>
-        ) : lookup ? (
-          <div className="mt-4 grid animate-fade-in grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="metric-card">
-              <p className="metric-label">Start Block</p>
-              <p className="metric-value text-base">
-                <span className="sr-only">{lookup.startBlock.toLocaleString()}</span>
-                <span aria-hidden="true">{startBlockCount}</span>
-              </p>
-            </div>
-            <div className="metric-card">
-              <p className="metric-label">End Block</p>
-              <p className="metric-value text-base">
-                <span className="sr-only">{lookup.endBlock.toLocaleString()}</span>
-                <span aria-hidden="true">{endBlockCount}</span>
-              </p>
-            </div>
+        {lookupLoading && (
+          <ScanStatusBar label="Looking up era…" sticky={false} className="mt-4" />
+        )}
 
-            {lookup.startDateUtc ? (() => {
-              const raw = lookup.startDateUtc
-              const display = localTime ? (fmtDateLocal(raw) ?? raw) : (fmtDateUtc(raw) ?? raw)
-              return (
+        {(lookupLoading || lookup) && (
+          /* The skeleton represents the steady-state shape (2 block tiles +
+             2 date tiles) rather than whatever the previous 2-tile skeleton
+             happened to hardcode — the loaded state can show up to 5 tiles
+             (block hash included), so a 2-tile skeleton visibly grew once
+             data landed. Date/hash tiles are still genuinely conditional on
+             what the lookup returns, so the skeleton covers the common case
+             rather than every possible combination. */
+          <SkeletonSwap
+            loading={lookupLoading}
+            skeleton={
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="metric-card">
+                  <p className="metric-label">Start Block</p>
+                  <Skeleton.Block width="5rem" height="1.5rem" className="mt-2" />
+                </div>
+                <div className="metric-card">
+                  <p className="metric-label">End Block</p>
+                  <Skeleton.Block width="5rem" height="1.5rem" className="mt-2" />
+                </div>
                 <div className="metric-card col-span-2 sm:col-span-1">
                   <p className="metric-label">Start ({localTime ? 'Local' : 'UTC'})</p>
-                  <p className="mt-1.5 text-xs leading-snug text-text font-mono break-all">{display}</p>
+                  <Skeleton.Line width="80%" className="mt-2" />
                 </div>
-              )
-            })() : null}
-
-            {lookup.endDateUtc ? (() => {
-              const raw = lookup.endDateUtc
-              const display = localTime ? (fmtDateLocal(raw) ?? raw) : (fmtDateUtc(raw) ?? raw)
-              return (
                 <div className="metric-card col-span-2 sm:col-span-1">
                   <p className="metric-label">End ({localTime ? 'Local' : 'UTC'})</p>
-                  <p className="mt-1.5 text-xs leading-snug text-text font-mono break-all">{display}</p>
+                  <Skeleton.Line width="80%" className="mt-2" />
                 </div>
-              )
-            })() : null}
-
-            {lookup.startBlockHash ? (
-              <div className="metric-card col-span-2 sm:col-span-2 lg:col-span-4">
-                <div className="flex items-center gap-2">
-                  <p className="metric-label">Start Block Hash</p>
-                  <CopyButton value={lookup.startBlockHash} label="Copy start block hash" size={12} />
-                </div>
-                <p className="mt-1.5 break-all font-mono text-xs text-text">{lookup.startBlockHash}</p>
               </div>
-            ) : null}
-          </div>
-        ) : null}
+            }
+          >
+            {lookup && (
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="metric-card">
+                <p className="metric-label">Start Block</p>
+                <p className="metric-value text-base">
+                  <span className="sr-only">{lookup.startBlock.toLocaleString()}</span>
+                  <span aria-hidden="true">{startBlockCount}</span>
+                </p>
+              </div>
+              <div className="metric-card">
+                <p className="metric-label">End Block</p>
+                <p className="metric-value text-base">
+                  <span className="sr-only">{lookup.endBlock.toLocaleString()}</span>
+                  <span aria-hidden="true">{endBlockCount}</span>
+                </p>
+              </div>
+
+              {lookup.startDateUtc ? (() => {
+                const raw = lookup.startDateUtc
+                const display = localTime ? (fmtDateLocal(raw) ?? raw) : (fmtDateUtc(raw) ?? raw)
+                return (
+                  <div className="metric-card col-span-2 sm:col-span-1">
+                    <p className="metric-label">Start ({localTime ? 'Local' : 'UTC'})</p>
+                    <p className="mt-1.5 text-xs leading-snug text-text font-mono break-all">{display}</p>
+                  </div>
+                )
+              })() : null}
+
+              {lookup.endDateUtc ? (() => {
+                const raw = lookup.endDateUtc
+                const display = localTime ? (fmtDateLocal(raw) ?? raw) : (fmtDateUtc(raw) ?? raw)
+                return (
+                  <div className="metric-card col-span-2 sm:col-span-1">
+                    <p className="metric-label">End ({localTime ? 'Local' : 'UTC'})</p>
+                    <p className="mt-1.5 text-xs leading-snug text-text font-mono break-all">{display}</p>
+                  </div>
+                )
+              })() : null}
+
+              {lookup.startBlockHash ? (
+                <div className="metric-card col-span-2 sm:col-span-2 lg:col-span-4">
+                  <div className="flex items-center gap-2">
+                    <p className="metric-label">Start Block Hash</p>
+                    <CopyButton value={lookup.startBlockHash} label="Copy start block hash" size={12} />
+                  </div>
+                  <p className="mt-1.5 break-all font-mono text-xs text-text">{lookup.startBlockHash}</p>
+                </div>
+              ) : null}
+            </div>
+            )}
+          </SkeletonSwap>
+        )}
       </section>
 
       {/* Debug */}

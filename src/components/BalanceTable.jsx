@@ -9,11 +9,17 @@ import { useState, useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { fmtENJ } from '../utils/balanceExport.js'
 import { isValidBlockHash } from '../utils/substrate.js'
+import Skeleton from './Skeleton.jsx'
 
 const ZOOM_SIZES = ['text-xs', 'text-sm', 'text-base']
 const DEFAULT_ZOOM = 0
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 250]
+
+// Rows shown while the table is empty and a query is in flight. Capped —
+// a 500-block scan has no business rendering 500 shimmering placeholder
+// rows before the first real one lands.
+const SKELETON_ROW_COUNT = 6
 
 const COLS = [
   { key: 'block',      label: 'Block',              align: 'left'  },
@@ -148,10 +154,28 @@ export default function BalanceTable({ records, isLoading = false }) {
             </tr>
           </thead>
           <tbody>
-            {records.length === 0 ? (
+            {records.length === 0 && isLoading ? (
+              Array.from({ length: SKELETON_ROW_COUNT }, (_, i) => (
+                <tr key={`skel-${i}`} className={`data-table-row ${i % 2 ? 'data-table-row-alt' : ''}`} aria-hidden="true">
+                  {COLS.map(col => (
+                    <td key={col.key} className="px-3 py-2">
+                      {/* Matched to the real cell's line-height at the default
+                          zoom (text-xs: 1rem), not the skeleton's own 0.8rem
+                          default — otherwise every skeleton row sits ~3px
+                          shorter than the real rows underneath it, and the
+                          table visibly shrinks as each one resolves. Zoomed-in
+                          tables (text-sm/text-base) are a few px off from
+                          this; not worth a per-zoom lookup for a state that's
+                          on screen for well under a second. */}
+                      <Skeleton.Line width={col.key === 'blockHash' ? '5.5rem' : '4rem'} height="1rem" />
+                    </td>
+                  ))}
+                </tr>
+              ))
+            ) : records.length === 0 ? (
               <tr>
                 <td colSpan={COLS.length} className="px-3 py-8 text-center text-dim text-sm">
-                  {isLoading ? 'Fetching balance data…' : 'No records yet.'}
+                  No records yet.
                 </td>
               </tr>
             ) : pageSlice.map((d, idx) => {

@@ -10,9 +10,10 @@ import { computePoolMissedEras } from '../utils/eraAnalysis.js'
 import { nowHHMMSS, safeInt, truncateAddress, poolLabel, parseCommission } from '../utils/format.js'
 import {
   ERA_VALIDATORS_SAMPLE, API_DELAY_MS, SUBSCAN_MAX_ROW,
-  DEFAULT_ERA_COUNT, MAX_RETRY_ATTEMPTS,
+  DEFAULT_ERA_COUNT, MIN_ERA_COUNT, MAX_ERA_COUNT, MAX_RETRY_ATTEMPTS,
   POOL_ENDPOINTS_TO_PROBE, ENDPOINTS,
 } from '../constants.js'
+import { clampInt } from '../utils/substrate.js'
 
 // Offline era boundary reference, shipped in public/ and shared with the other
 // era-aware tools. Loaded through the same localStorage-cached helper they use.
@@ -181,7 +182,9 @@ export function usePoolChecker() {
     return false
   }, [])
 
-  const runCheck = useCallback(async (eraCount) => {
+  const runCheck = useCallback(async (requestedEraCount) => {
+    // See useValidatorChecker.runCheck — the UI bound alone is not enforcement.
+    const eraCount = clampInt(Number(requestedEraCount) || DEFAULT_ERA_COUNT, MIN_ERA_COUNT, MAX_ERA_COUNT)
     abortControllerRef.current = new AbortController()
     dispatch({ type: 'START' })
     resetSubscanRequestCount()

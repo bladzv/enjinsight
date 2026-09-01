@@ -224,10 +224,10 @@ Scan all active validators **or** all nomination pools for missing reward payout
      - **Validators** (`Shield` icon) — "Scan active validators, nominators, and era reward gaps."
      - **Nomination Pools** (`Users` icon) — "Scan pool payouts, validator participation, and missed eras."
      - The active card has primary border + primary glow, plus a small "Selected" chip.
-   - **Cadence Controls** (`<ControlPanel>`):
-     - Title: "Cadence Controls", helper "Set how many recent eras to check."
-     - Helpful meta: "Range: 1–100 eras", "Approximate Length: 1 era ≈ 24h".
-     - A single **giant numeric input** (Space Grotesk 4xl) labelled "Scan Range (Eras)". Default `2`. Validation: integer 1–100. If > 30, show amber warning "Longer range selected. Expect a slower scan."
+   - **Scan Range** (`<ControlPanel>`):
+     - Title: "Scan Range", helper "Set how many recent eras to check."
+     - Helpful meta: "Range: 1–7", "~ 1 era ≈ 24h".
+     - A **stepper** (`<Stepper>`): −/+ buttons flanking a still-typeable numeric input (Space Grotesk 4xl, centered), no visible field label (the label is screen-reader-only). Default `2`. Validation: integer 1–7.
      - One large **action button** that morphs by status:
        - `idle` / `loading=false`: **Run Scan** (primary, glowing border, "staking-scan-button" hover animation).
        - `loading`: **Stop Scan** (danger, square icon).
@@ -317,7 +317,12 @@ PoolCard detail modal:
 
 ### 8.6 SummarySection (validators)
 
-After `status === 'done'`. Top row of three stat chips: **Total Scanned**, **Clean Record** (success), **Has Gaps** (danger or success).
+Renders as soon as any validator has data — not gated on scan completion.
+While `status === 'loading'` its heading carries a "N / M scanned ·
+provisional" chip, since the figures are aggregates over whatever has loaded
+so far and climb as the scan proceeds; the chip disappears once the scan
+settles. Top row of three stat chips: **Total Scanned**, **Clean Record**
+(success), **Has Gaps** (danger or success).
 
 If any group has `≥ CONSECUTIVE_MISS_THRESHOLD = 3` consecutive misses, show **Critical Alerts** — one card per affected validator with severity, validator label, and a Subscan link.
 
@@ -628,20 +633,39 @@ All modals use `role="dialog"`, `aria-modal="true"`, lock body scroll while open
 | Class name | Style |
 |------------|-------|
 | `.btn-primary` | Linear gradient `primary-dim → primary`, white text, drop shadow. Active scale 0.97. |
+| `.btn-push` | Opt-in add-on for `.btn-primary`, used on every scan-start action. Solid bottom edge (`box-shadow: 0 6px 0 primary-dim`); `:active` drops the button onto it instead of scaling. Not applied to plain navigation buttons (e.g. wizard "Next") — the depress means "this commits work." |
 | `.btn-secondary` | `surface-highest` fill, ghost border. |
-| `.btn-stop` / `.btn-danger` | Red gradient. |
+| `.btn-stop` / `.btn-danger` | Red gradient. Every Stop and every result-discarding Reset renders via `<HoldButton>`: the click is refused until the pointer has rested on the button for 700ms (drawn as a fill sweeping across it), which guards against an accidental click on a long scan. The gate is bypassed — the click fires immediately — for keyboard activation, touch, and `prefers-reduced-motion`. |
 | `.btn-ghost` | Transparent, hover surface-bright. |
 | `.btn-icon` | 38×38 ghost square, used for header chrome. |
-| `.staking-scan-button` | Variant of primary with a hover-glow keyframe animation. |
+| `.staking-scan-button` | Variant of primary with a hover-glow keyframe animation; the glow restates `.btn-push`'s edge in its own keyframes so the button doesn't shed its 3D edge on hover. |
 
 ### 12.4 Inputs
 
+The default text/number/date/password input across all five tools is
+`<Field>` (`src/components/Field.jsx`): a floating label that sits centered
+in the control at rest and lifts to a 10px uppercase tracked caption on
+focus or once filled — the same visual treatment `.input-label` used to
+render above the field, now living inside it. A caller-supplied
+`placeholder` is treated as example text (e.g. "1000"), invisible until the
+field is focused, so it never collides with the resting label. Two
+exceptions keep the older pattern deliberately: `<Stepper>` (its own
+scale-pop bump animation and centered numeric display don't suit a floating
+label) and the small `w-20` era-range filter pills, which have no room for
+one.
+
+`variant="search"` (used once, the Infusion Checker's results filter)
+collapses the field to a 56px icon-only puck below 768px, expanding to
+230px on focus or once it holds a value; it stays full-width above that
+breakpoint, since a collapsed puck costs more in discoverability than it
+saves in space on a desktop-width panel.
+
 | Class | Use |
 |-------|-----|
-| `.input-field` | Standard text/number/date input (px-3 py-2.5, surface-highest). |
-| `.select-field` | Standard select. |
+| `.input-field` | The control `<Field>` wraps (px-3 py-2.5, surface-highest). Still used directly by the couple of exceptions above. |
+| `.select-field` | Standard select; `<Field as="select">` wraps it the same way. |
 | `.select-compact` | Small select for table toolbars. |
-| `.input-label` | 10px uppercase tracked label above an input. |
+| `.input-label` | 10px uppercase tracked label — now `<Field>`'s own lifted-label style; used standalone only by the two exceptions. |
 
 ### 12.5 Pagination
 
@@ -675,7 +699,23 @@ Each button is a `.btn-ghost`; disabled buttons get `opacity-30`.
 Every tool has all three:
 
 - **Empty / pre-action**: a centered card with an icon, headline, sentence-long description, optional button.
-- **Loading**: phase progress cards + sticky terminal log + per-section "loading…" labels (e.g., "Populating…", "Fetching balance data…").
+- **Loading**: `<ScanStatusBar>` — an indeterminate progress bar, the current
+  phase label, and a guarded Stop — sticks above the results area for the
+  full duration of a scan, in guided mode as well as advanced (guided mode
+  used to swap results out for a standalone spinner panel instead; it no
+  longer does — see below). Phase progress cards + sticky terminal log
+  remain alongside it. Results and summaries populate live underneath the
+  bar rather than only appearing once the scan completes: result cards,
+  tables, and rows stream in as each item resolves, and the two staking
+  summaries (§8.6, §8.7) render provisionally with a "N / M scanned" chip
+  that clears on completion. Cells whose value cannot be computed until
+  every row has landed (e.g. Reward History's rolling APY, a 15-era window
+  per pool) show a skeleton rather than a blank or a stale value. Rows and
+  tiles still loading use `<Skeleton>` / `<SkeletonSwap>`
+  (`src/components/Skeleton.jsx`) — a shimmer block sized to match the real
+  content's height exactly, crossfading into it once data arrives; row
+  counts are capped (e.g. 6–8) rather than rendering one skeleton per
+  eventual result.
 - **Error**: a danger banner with a one-line message + a "Retry" button.
 
 ### 12.9 Keyboard
@@ -806,6 +846,23 @@ Reusable headline scales:
 - `heartbeat-burst` — single 2s SVG dash burst on each new block (Era Explorer)
 - `staking-scan-hover-glow` — alternating 1.7s glow when hovering "Run Scan"
 
+Every rule below reads a `--m-*` custom property (`src/index.css`) rather
+than a literal duration/easing/distance, which is what lets one
+`@media (prefers-reduced-motion: reduce)` block collapse all of them to
+near-zero in a single place instead of hunting each one down individually:
+
+- **Push button** (`.btn-push`, §12.3) — a solid bottom edge the button
+  drops onto on `:active` (60ms) instead of scaling.
+- **Pill glide** (`<PillSwitch>`, theme switch + UI mode switch) — the
+  indicator pill's `left`/`width` are measured off the active button's own
+  `offsetLeft`/`offsetWidth` (not derived from an index, so options of
+  different widths don't drift) and glide there over 400ms. Re-measures on
+  resize/drawer-open via `ResizeObserver`; the first paint suppresses the
+  transition so the pill doesn't fly in from the left edge on mount.
+- **Floating label** / **expanding search** — see §12.4.
+- **Hover-intent gate** / **indeterminate bar** / **skeleton crossfade** —
+  see §12.3 and §12.8.
+
 ---
 
 ## 15. Hooks and state contracts (binding surface for the new UI)
@@ -907,7 +964,7 @@ A redesign is "complete" only when **all** of the following hold:
 - [ ] First-visit disclaimer fires on first load and cannot be dismissed before the 5-second countdown.
 - [ ] Era Explorer connects to live + archive nodes, shows all six metric cards, an EKG that pulses on every block, an era progress bar, a debug panel, and a Past Era Lookup with UTC/Local toggle.
 - [ ] Past-era lookup resolves via CSV → live RPC → binary search, in that order.
-- [ ] Staking page lets the user toggle Validators ↔ Pools, set a 1–100 era window, and run / stop / reset a scan whose 4–5 phases are all visualized in the Phase Progress card.
+- [ ] Staking page lets the user toggle Validators ↔ Pools, set a 1–7 era window, and run / stop / reset a scan whose 4–5 phases are all visualized in the Phase Progress card.
 - [ ] Validator and Pool grids paginate at 10 per page, each card opens a modal with two tabs and the right tables.
 - [ ] Severity badges follow the §8.8 thresholds; `≥ 3` consecutive misses raise a Critical Alert section.
 - [ ] Balance Viewer supports all five preset networks (with SS58 prefix validation), three range modes (Block / Era / Date — Date and Era only on relay & canary-relay), six date presets, decimated chart with five modes, sortable + paginated table, and JSON / CSV / XML export with optional AES-256-GCM encryption.
@@ -918,7 +975,8 @@ A redesign is "complete" only when **all** of the following hold:
 - [ ] ENJ Infusion checker supports both Token ID and Wallet modes, RPC fallback chain (Alchemy → Etherscan → public RPC), per-token retry, "Retry All Failed", a sortable bulk results table with image previews, and a token detail modal.
 - [ ] All hook contracts in §15 are honored without modification.
 - [ ] Sticky terminal log appears on every tool view with level-colored entries and works as a drawer.
-- [ ] All `.btn-stop` / Stop buttons abort cleanly via `AbortController`.
+- [ ] All `.btn-stop` / Stop buttons abort cleanly via `AbortController`, and are reachable via keyboard/touch even though a mouse click is gated behind a 700ms hover-hold.
+- [ ] Results and the two staking summaries populate live during a scan (not only once it completes), in guided mode as well as advanced.
 - [ ] No API key is reachable from the bundle or any client request.
 - [ ] No `innerHTML` / `dangerouslySetInnerHTML`.
 - [ ] All BigInt balance math uses BigInt; never floats.
