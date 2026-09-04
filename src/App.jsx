@@ -541,7 +541,7 @@ export default function App() {
         {/* No longer gated on isDone: the summary fills in alongside the
             result cards. Its figures are aggregates over what has loaded so
             far, so it labels itself provisional until the scan settles. */}
-        {isValidatorMode && validators.length > 0 && (
+        {isValidatorMode && (isLoading || validators.length > 0) && (
           <section id="staking-validator-summary">
             <SummarySection
               validators={validators}
@@ -587,7 +587,7 @@ export default function App() {
           </ResultsPanel>
         )}
 
-        {!isValidatorMode && pools.length > 0 && (
+        {!isValidatorMode && (isLoading || pools.length > 0) && (
           <section id="staking-pool-summary">
             <PoolSummarySection
               pools={pools}
