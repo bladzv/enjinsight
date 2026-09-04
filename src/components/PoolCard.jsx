@@ -200,7 +200,7 @@ export default function PoolCard({ pool, eraCount, latestEra, provisionalEra = n
                 ? <LoadingPlaceholder label="Fetching nominated validators…" />
                 : hasError && !nominatedValidators
                   ? <ErrorPlaceholder label="Validator list fetch failed." />
-                  : <PoolValidatorsTable validators={nominatedValidators} onRetry={addr => onRetry?.(pool.poolId, addr)} />
+                  : <PoolValidatorsTable validators={nominatedValidators} onRetry={onRetry && (addr => onRetry(pool.poolId, addr))} />
             )}
           </div>
         </div>

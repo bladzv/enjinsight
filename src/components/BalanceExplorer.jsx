@@ -15,7 +15,7 @@
  */
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { fetchLiveChainInfo } from '../utils/chainInfo.js'
-import { Activity, AlertTriangle, ChevronDown, Info, RotateCcw, Server, Sparkles, Square, Upload } from 'lucide-react'
+import { Activity, AlertTriangle, ChevronDown, FileDown, Info, RotateCcw, Sparkles, Square } from 'lucide-react'
 import { fmtENJ } from '../utils/balanceExport.js'
 import useBalanceExplorer, { STATUS } from '../hooks/useBalanceExplorer.js'
 import { ENJIN_NETWORKS, MAX_RPC_CALLS, MAX_SCAN_DAYS } from '../constants.js'
@@ -24,6 +24,8 @@ import BalanceChart       from './BalanceChart.jsx'
 import BalanceTable       from './BalanceTable.jsx'
 import BalanceExportPanel from './BalanceExportPanel.jsx'
 import BalanceImportPanel from './BalanceImportPanel.jsx'
+import ToolModeStrip from './ToolModeStrip.jsx'
+import { formatExportedAtUTC } from '../utils/format.js'
 import PhaseProgressCards from './PhaseProgressCards.jsx'
 import StepProgress       from './StepProgress.jsx'
 import TerminalLog        from './TerminalLog.jsx'
@@ -209,11 +211,6 @@ const DATE_PRESETS = [
   { label: '1 week',   days: 7 },
 ]
 
-const TABS = [
-  { key: 'query',  label: 'Query Node',  icon: Server },
-  { key: 'import', label: 'Import Data', icon: Upload },
-]
-
 function buildEstimateMeta(calls) {
   if (!Number.isFinite(calls) || calls <= 0) return { estCalls: null, estTimeLabel: null }
   const secs = Math.round(calls * 0.6 + 2.5)
@@ -265,7 +262,8 @@ const BALANCE_SIMPLE_STEPS = [
 
 export default function BalanceExplorer({ onScanStateChange, simpleMode = false }) {
   const [tab, setTab] = useState('query')
-  const [showImportResults, setShowImportResults] = useState(false)
+  // { fileName, exportedAt, appVersion } for imported data, else null.
+  const [importMeta, setImportMeta] = useState(null)
 
   // Network selection state — no custom endpoint
   const [networkKey, setNetworkKey] = useState(PRESET_NETWORKS[0].key)
@@ -509,24 +507,30 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
     clearResolvedRange()
   }
 
-  function handleImport(text, ext, fname) {
-    const { rpcConfig } = importData(text, ext, fname)
+  /**
+   * Apply an import result. `importData` reports its own failures (log +
+   * ERROR) rather than throwing, so the `ok` flag is the only way to avoid
+   * recording provenance for an import that did not happen.
+   */
+  function applyImport({ ok, rpcConfig, header }, fname) {
+    if (!ok) { setImportMeta(null); return }
     if (rpcConfig?.address) {
       setAddress(rpcConfig.address)
       setQueriedAddress(rpcConfig.address)
     }
-    // Stay on import tab to show results, don't auto-switch
-    setShowImportResults(true)
+    setImportMeta({
+      fileName: fname ?? '',
+      exportedAt: header?.exportedAt || rpcConfig?.exportedAt || '',
+      appVersion: header?.appVersion ?? null,
+    })
+  }
+
+  function handleImport(text, ext, fname) {
+    applyImport(importData(text, ext, fname), fname)
   }
 
   async function handleImportEncrypted(encText, pwd, ext, fname) {
-    const { rpcConfig } = await importEncrypted(encText, pwd, ext, fname)
-    if (rpcConfig?.address) {
-      setAddress(rpcConfig.address)
-      setQueriedAddress(rpcConfig.address)
-    }
-    // Stay on import tab to show results, don't auto-switch
-    setShowImportResults(true)
+    applyImport(await importEncrypted(encText, pwd, ext, fname), fname)
   }
 
   // Estimate RPC calls
@@ -634,7 +638,8 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
         </div>
       </section>
 
-      {simpleMode && (
+      {/* The stepper describes the Query flow, so it hides in Import mode. */}
+      {simpleMode && tab === 'query' && (
         <StepProgress
           steps={BALANCE_SIMPLE_STEPS}
           currentStep={balanceSimpleStep}
@@ -648,27 +653,15 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
         />
       )}
 
-      {!simpleMode && <div className="flex w-full gap-1 rounded-sm border border-[var(--hairline)] bg-card p-1 overflow-x-auto">
-        {TABS.map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => { setTab(key); if (key === 'query') setShowImportResults(false) }}
-            className={`flex flex-1 min-w-[6rem] items-center justify-center gap-1.5 rounded-sm px-2 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors sm:gap-2 sm:px-3 sm:text-[13px] ${
-              tab === key
-                ? 'bg-primary/15 text-primary-glow'
-                : 'text-text-secondary hover:bg-surface-high hover:text-text'
-            }`}
-            style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace', ...(tab === key ? { boxShadow: 'inset 0 0 0 1px rgba(124, 58, 237, 0.35)' } : {}) }}
-          >
-            <Icon size={13} />
-            <span className="truncate">{label}</span>
-          </button>
-        ))}
-      </div>}
+      <ToolModeStrip
+        queryLabel="Query Node"
+        value={tab}
+        onChange={setTab}
+        idPrefix="balance"
+      />
 
       {/* ── Simple page 1: Address + Network ── */}
-      {simpleMode && balanceSimpleStep === 1 && !simpleInfoOpen && (
+      {simpleMode && tab === 'query' && balanceSimpleStep === 1 && !simpleInfoOpen && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="section-title">Select network &amp; enter address</h2>
@@ -719,7 +712,7 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
       )}
 
       {/* ── Simple page 2: Range parameters ── */}
-      {simpleMode && balanceSimpleStep === 2 && !simpleInfoOpen && (
+      {simpleMode && tab === 'query' && balanceSimpleStep === 2 && !simpleInfoOpen && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="section-title">Set the query window</h2>
@@ -1183,50 +1176,33 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
       )}
 
       {/* ── Import pane — advanced only ── */}
-      {!simpleMode && tab === 'import' && (
+      {/* ── Import pane — both UI modes ──
+             The drop zone stays put after a successful import rather than
+             being swapped for a summary card: the results and their
+             provenance banner render below, so the card said little, and the
+             swap fired on *failed* imports too — leaving an "Imported Data"
+             heading over nothing, with the reason only in the log. */}
+      {tab === 'import' && (
         <div className="overflow-hidden rounded-sm border border-[var(--hairline)] bg-surface">
-          <div role="tabpanel" className="p-4 sm:p-6">
-              {!showImportResults ? (
-                <div className="space-y-3">
-                <div>
-                  <p className="section-label">Import</p>
-                </div>
-                <div className="flex gap-2.5 p-3 rounded-lg bg-card border border-surface-bright text-[11px] leading-relaxed">
-                  <Info size={13} className="text-text-secondary flex-shrink-0 mt-0.5" />
-                  <p className="text-text-secondary">
-                    Only files previously exported by this tool{' '}
-                    <span className="font-mono text-muted">(JSON, CSV, or XML)</span>{' '}
-                    can be imported. Files from other sources or tools are not supported.
-                  </p>
-                </div>
-                <BalanceImportPanel
-                  bare
-                  onImport={handleImport}
-                  onImportEncrypted={handleImportEncrypted}
-                />
-                </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div>
-                    <p className="section-label">Import</p>
-                    <h3 className="mt-2 font-headline text-2xl font-bold text-text">Imported Data</h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowImportResults(false)}
-                    className="text-xs text-text-secondary hover:text-text transition-colors"
-                  >
-                    ← Import another file
-                  </button>
-                </div>
-                {hasResults && (
-                  <p className="text-xs text-text-secondary">
-                    {records.length.toLocaleString('en')} records loaded. Switch to the <strong className="text-text">Query Node</strong> tab to run a new query.
-                  </p>
-                )}
+          <div role="tabpanel" id="balance-panel-import" aria-labelledby="balance-tab-import" className="p-4 sm:p-6">
+            <div className="space-y-3">
+              <div>
+                <p className="section-label">Import</p>
               </div>
-            )}
+              <div className="flex gap-2.5 p-3 rounded-lg bg-card border border-surface-bright text-[11px] leading-relaxed">
+                <Info size={13} className="text-text-secondary flex-shrink-0 mt-0.5" />
+                <p className="text-text-secondary">
+                  Only files previously exported by this tool{' '}
+                  <span className="font-mono text-muted">(JSON, CSV, or XML)</span>{' '}
+                  can be imported. Files from other sources or tools are not supported.
+                </p>
+              </div>
+              <BalanceImportPanel
+                bare
+                onImport={handleImport}
+                onImportEncrypted={handleImportEncrypted}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -1241,6 +1217,28 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
               meta={displayMeta}
               onStop={cancel}
             />
+          )}
+
+          {/* Provenance, adjacent to the results it describes. */}
+          {dataSource === 'import' && importMeta && (
+            <div className="flex items-start gap-2 rounded-sm border border-cyan/30 bg-cyan/10 px-3 py-2 text-xs text-cyan">
+              <FileDown size={14} className="mt-0.5 flex-shrink-0" />
+              <p className="min-w-0 flex-1">
+                Showing imported data
+                {importMeta.fileName && <> from <span className="break-all font-mono">{importMeta.fileName}</span></>}
+                {importMeta.exportedAt && <> · exported {formatExportedAtUTC(importMeta.exportedAt)}</>}
+                {importMeta.appVersion && <> · EnjinSight v{importMeta.appVersion}</>}
+                {' '}· {records.length.toLocaleString('en')} record{records.length === 1 ? '' : 's'}.
+                {' '}Nothing was queried.
+              </p>
+              <button
+                type="button"
+                onClick={() => { reset(); setImportMeta(null); setQueriedAddress('') }}
+                className="btn-secondary shrink-0 px-3 py-1 text-xs"
+              >
+                Clear
+              </button>
+            </div>
           )}
 
           {/* Records summary bar */}

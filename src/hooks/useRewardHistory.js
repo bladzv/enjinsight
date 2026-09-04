@@ -38,7 +38,6 @@ const COLLECTION_ID  = 1n          // sENJ multi-token collection
 const ERAS_PER_YEAR  = 365
 const EVENT_SCAN_AFTER = 40        // python parity: scan_start..(scan_start+40) inclusive
 const CSV_PATHS      = ['/relay-era-reference.csv']
-const LOG_CAP        = 500
 
 // Rate-delta watchdog thresholds.
 // A single era diverges legitimately when the pool's sENJ supply churns mid-era (members
@@ -138,10 +137,9 @@ function reducer(state, action) {
       return { ...state, progress: action.payload }
     case 'SET_RESULTS':
       return { ...state, results: action.results }
-    case 'LOG': {
-      const next = [...state.logs, action.payload]
-      return { ...state, logs: next.length > LOG_CAP ? next.slice(-LOG_CAP) : next }
-    }
+    case 'LOG':
+      // Uncapped — see TerminalLog, which windows what it renders.
+      return { ...state, logs: [...state.logs, action.payload] }
     case 'DONE':
       return { ...state, status: RH_STATUS.DONE, results: action.results, progress: action.progress ?? state.progress }
     case 'STOP':

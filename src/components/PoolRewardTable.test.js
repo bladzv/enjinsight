@@ -26,11 +26,11 @@ describe('buildEraRows', () => {
 
   // The three provisional states. Getting these wrong either invents a missed
   // payout or shows a green all-clear for a window that is still filling.
-  it('marks the provisional era and never calls it missed', () => {
+  it('marks an unpaid provisional era as both provisional and missed', () => {
     const rows = buildEraRows({
       eraRewards: [], missedEras: [1171], eraCount: 2, latestEra: 1171, provisionalEra: 1171,
     })
-    expect(rows[0]).toMatchObject({ era: 1171, provisional: true, missed: false, pending: true })
+    expect(rows[0]).toMatchObject({ era: 1171, provisional: true, missed: true, pending: false })
   })
 
   it('shows a provisional era that has already paid as not pending', () => {
@@ -42,6 +42,24 @@ describe('buildEraRows', () => {
     expect(rows[0].rewardTotal).toBe(500n)
   })
 
+  // `pending` is what survives the change: provisional, present in the reward
+  // list so not missed, but summing to zero. Also covers the window where
+  // missedEras has not been computed yet.
+  it('marks a provisional era with a zero-amount reward as pending, not missed', () => {
+    const rows = buildEraRows({
+      eraRewards: rewards({ 1171: '0' }), missedEras: [], eraCount: 1,
+      latestEra: 1171, provisionalEra: 1171,
+    })
+    expect(rows[0]).toMatchObject({ provisional: true, pending: true, missed: false })
+  })
+
+  it('marks a provisional era as pending while missedEras is still unset', () => {
+    const rows = buildEraRows({
+      eraRewards: [], missedEras: null, eraCount: 1, latestEra: 1171, provisionalEra: 1171,
+    })
+    expect(rows[0]).toMatchObject({ provisional: true, pending: true, missed: false })
+  })
+
   it('leaves non-provisional eras in the window unaffected', () => {
     const rows = buildEraRows({
       eraRewards: rewards({ 1171: '500' }), missedEras: [1169], eraCount: 3,
@@ -49,6 +67,7 @@ describe('buildEraRows', () => {
     })
     expect(rows.map(r => r.provisional)).toEqual([true, false, false])
     expect(rows.find(r => r.era === 1169).missed).toBe(true)
+    expect(rows.find(r => r.era === 1171).missed).toBe(false)
   })
 
   it('returns nothing without a latest era or era count', () => {

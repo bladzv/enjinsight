@@ -45,7 +45,7 @@ EnjinSight is a **read-only, static-frontend** React/Vite web application for mo
 - API key never exposed to the browser
 - All user content rendered via JSX (no `innerHTML`)
 - BigInt used for all ENJ/Planck values
-- Log arrays capped at 500 entries
+- Log arrays uncapped; the terminal drawer virtualizes its rows instead
 - Every async scan is abortable via `AbortController`
 - Every WebSocket is closed in a `finally` block
 
@@ -78,7 +78,9 @@ enjinsight/
 │   ├── utils/
 │   │   ├── api.js                 # Subscan HTTP client, RequestQueue, typed helpers
 │   │   ├── substrate.js           # SS58 decode, SCALE decoders, storage key builders
-│   │   ├── balanceExport.js       # Serialize/parse JSON/CSV/XML, AES-256-GCM
+│   │   ├── balanceExport.js       # Balance/Reward serialize/parse JSON/CSV/XML, AES-256-GCM
+│   │   ├── scanEnvelope.js        # Leaf module: shared {tool,schema,schemaVersion,appVersion} header
+│   │   ├── scanExport.js          # Staking Cadence + Infusion JSON export/import (on scanEnvelope.js)
 │   │   ├── eraAnalysis.js         # Missed-era detection, severity classification
 │   │   ├── format.js              # ENJ formatting, address truncation, timestamps
 │   │   ├── eraRpc.js              # Minimal WS-RPC for era boundary binary-search
@@ -101,10 +103,15 @@ enjinsight/
 │       ├── BalanceChart.jsx       # Stacked bar / line chart (Chart.js)
 │       ├── BalanceTable.jsx       # Paginated sortable table
 │       ├── PoolRewardTable.jsx    # Pool reward summary table
-│       ├── TerminalLog.jsx        # Sticky activity log panel
+│       ├── TerminalLog.jsx        # Sticky activity log panel (virtualized, uncapped)
 │       ├── ModeSelector.jsx       # Validators ↔ Pools tab switcher
 │       ├── SummarySection.jsx     # Validator scan aggregate stats
-│       └── PoolSummarySection.jsx # Pool scan aggregate stats
+│       ├── PoolSummarySection.jsx # Pool scan aggregate stats
+│       ├── ToolModeStrip.jsx      # Shared Query|Import tab strip (all 4 importing tools)
+│       ├── ImportDropPanel.jsx    # Shared drop-zone/decrypt shell behind every import panel
+│       ├── BalanceImportPanel.jsx / RewardImportPanel.jsx / ScanImportPanel.jsx
+│       │                         # Tool-specific inspect/parse wired onto ImportDropPanel
+│       └── ScanExportPanel.jsx    # Export panel for Staking Cadence + Infusion Checker
 ├── api/
 │   └── [...proxy].js             # Vercel proxy: allowlist + API key injection
 ├── public/
@@ -219,7 +226,8 @@ The Vercel proxy additionally enforces `PROXY_ALLOWLIST` (default: `enjin.api.su
 | Block numbers | `clampInt()` — safe integer range |
 | WebSocket endpoints | `validateWsEndpoint()` — `wss://` only (or `ws://` in dev) |
 | Content-Type | JSON only (proxy rejects other types) |
-| File imports | max `MAX_IMPORT_MB` (10 MB) |
+| File imports (Balance, Reward History) | max `MAX_IMPORT_MB` (10 MB) |
+| File imports (Staking Cadence, Infusion) | max `MAX_SCAN_IMPORT_MB` (64 MB) — nested payloads scale with real usage |
 
 ### XSS Prevention
 
@@ -230,7 +238,7 @@ The Vercel proxy additionally enforces `PROXY_ALLOWLIST` (default: `enjin.api.su
 
 ### Memory Limits
 
-- All log arrays capped at 500 entries via slice in reducers
+- Log arrays are uncapped. `TerminalLog` mounts only the rows in view (plus overscan), so DOM size is bounded by the viewport rather than by discarding history; the entries themselves cost roughly 110 bytes each (~11 MB at 100,000 lines)
 - Chart decimation: max 250 rendered points
 - Max RPC block queries: 2 000
 
@@ -570,7 +578,7 @@ Connects to an Enjin Blockchain archive node via WebSocket and queries `System.A
 
 **Quick presets:** 1 week / 1 month / 3 months / 6 months / 1 year (from current date, backwards)
 
-**Import tab:** JSON / CSV / XML file upload. Optionally decrypt AES-256-GCM encrypted exports. Re-populates the chart and table with previously exported data.
+**Import pane:** JSON / CSV / XML file upload via the shared `Query | Import` strip. Optionally decrypt AES-256-GCM encrypted exports. Populates the same results section below the strip as a live query would, with a provenance banner; the export panel is hidden for imported data.
 
 ### Query flow (`useBalanceExplorer`)
 
@@ -736,8 +744,8 @@ A new pool starts at rate ≈ 1.0. As the pool earns rewards and compounds, the 
   - Number of pools
   - Best APY era + value
   - Best pool (by total reward)
-- **Export controls**: JSON / CSV / XML + optional AES-256-GCM password
-- **Import**: accepts previously exported reward JSON/CSV
+- **Export controls**: JSON / CSV / XML + optional AES-256-GCM password — shown only for computed data, hidden for imported data (imported data cannot be re-exported)
+- **Import**: accepts previously exported reward JSON / CSV / XML via the shared `Compute Rewards | Import Data` strip
 - **Sticky terminal log**
 
 ### Reinvested accuracy notes
@@ -816,7 +824,30 @@ Aggregate stats panels rendered after scan completion:
 
 ## 14. Data Export & Import
 
-### `utils/balanceExport.js` — Balance Viewer formats
+Every export, across all five tools, carries a shared identifying header from
+`utils/scanEnvelope.js` — a leaf module (imports nothing) so both
+`balanceExport.js` and `scanExport.js` can depend on it without a circular
+import:
+
+```js
+{ tool: 'enjinsight', schema, schemaVersion, appVersion, exportedAt }
+```
+
+`schema` names the owning tool/mode (`balance-viewer`, `reward-history`,
+`staking-cadence-validator`, `staking-cadence-pool`, `infusion-checker`).
+`schemaVersion` gates compatibility (a newer version than the running build
+understands is refused); `appVersion` is informational only, read from
+`package.json` via a Vite `define` (`__APP_VERSION__`) at build time.
+
+Two implementations sit on top of this header:
+
+### `utils/balanceExport.js` — Balance Viewer + Reward History formats
+
+Reward History's own JSON/CSV/XML builders (inline in `RewardHistoryViewer.jsx`)
+mirror this module's shape and reuse its `parseBigInt`, `splitCsvRow` and
+`aesEncryptLabelled` rather than duplicating them — a change from the module's
+original scope, made because Reward History's own coercion silently mangled
+negative/decimal input and its CSV split broke on a comma inside a quoted field.
 
 **Export:**
 
@@ -826,42 +857,68 @@ Aggregate stats panels rendered after scan completion:
 | CSV | `toCSV(data, rpcMeta)` | RFC 4180, header comment lines with `# key: value` |
 | XML | `toXML(data, rpcMeta)` | Manual entity escaping, no library used |
 
-**Import (`parseImport(text, ext)`):**
+The header fields above are **spread across** this existing flat shape rather
+than wrapping it — `_rpcConfig`/`records` (or `_meta`/`records` for Reward
+History) stay exactly where they were, so a build predating the header still
+reads a new file.
+
+**Import (`parseImport(text, ext)` / `parseRewardImport(text, ext)`):**
 - Detects format by `ext` (`json`/`csv`/`xml`)
 - Normalises all numeric fields to correct types (BigInt for balances, Number for block numbers)
 - Validates block hashes against `0x[0-9a-fA-F]{64}` regex
+- Reads the header when present (`readLegacyHeader` in `scanEnvelope.js`), validating it and throwing a message naming the actual owning tool if it belongs to the other one; returns `null` for an export written before the header existed, in which case the caller falls back to its own content sniff (`sniffBalance` / `sniffReward`) — this is the only path that still accepts a pre-header file
 
-**Encryption (`aesEncrypt` / `aesDecrypt`):**
+**Encryption (`aesEncrypt` / `aesDecrypt` / `aesEncryptLabelled`):**
 - AES-256-GCM mode
-- Key derivation: PBKDF2-SHA-256 with 100 000 iterations, random 16-byte salt
+- Key derivation: PBKDF2-SHA-256 with 600 000 iterations (raised from 100 000; files encrypted before the change record their own count in `kdf` and remain readable), random 16-byte salt
 - Random 12-byte IV per export
-- Authentication tag included — tamper detection
-- Encrypted payload stored as JSON: `{salt, iv, ciphertext, tag}` (all hex-encoded)
+- Additional authenticated data binds the recorded `algorithm`/`kdf` to the ciphertext (v2 payloads) — tamper-evident, not just tamper-detected
+- Encrypted payload stored as JSON: `{encrypted: true, v, algorithm, kdf, data}` (`data` is base64-encoded `salt || iv || ciphertext+tag`)
+- `aesEncryptLabelled(plain, password, schema)` additionally spreads the `scanEnvelope.js` header alongside those fields (not inside the ciphertext), so an importer can identify — and refuse — another tool's encrypted export before ever prompting for a password. The label is a routing hint only, outside the AEAD; the authoritative header is the one inside the decrypted plaintext.
 - Uses Web Crypto API (`window.crypto.subtle`) — no third-party crypto library
 
 **Utilities:**
 - `safeFilename(s)` — replaces unsafe characters, caps at 160 chars
-- `defaultFilename()` — `enjin_balance_<unix-timestamp>`
-- `downloadFile(content, filename, type)` — creates `<a>` element, triggers download, immediately revokes object URL
+- `defaultFilename(s)` — `enjin_balance_<unix-timestamp>`
+- `downloadFile(content, filename, type)` — creates `<a>` element, triggers download, revokes the object URL after 60 s
 - `planckToFloat(p)` — BigInt → Number for chart rendering
 - `fmtENJ(v)` — Planck → localized decimal string (display only)
 
-### `RewardHistoryViewer.jsx` — Reward History formats
+### `utils/scanExport.js` — Staking Cadence + Infusion Checker formats
 
-Uses its own inline export functions (not `balanceExport.js`):
+JSON only — these payloads are nested (per-validator/per-pool era arrays, or
+per-token metadata), so CSV/XML would flatten lossily or need a bespoke parser.
 
-**Export object per row:**
-```
-era, pool_id, pool_label, era_start_block, era_date_utc,
-member_senj, pool_supply_senj, reinvested_enj, reward_enj,
-cumulative_enj, apy_pct, rolling_apy_pct
-```
+**Export:** `exportValidatorScan` / `exportPoolScan` / `exportInfusionScan`, each
+`{ ...header, meta: {...}, data: {...} }`. What is *not* stored: values the
+hook re-derives on import (validator `missedEras`, pool `latestEra`), and the
+pool's `eraValidatorBreakdown` — a `Map` of BigInt amounts, not
+JSON-representable, rebuilt on import from `eraRewards` + `nominatedValidators`
++ the exported `completedEras`.
 
-**Import (`parseRewardImport(text, ext)`):**
-- Accepts JSON with `records: []` or bare array
-- Accepts CSV with `# address:` comment header
-- Coerces BigInt fields from strings
-- `rollingApy` field is optional
+**Import:** `importValidatorScan` / `importPoolScan` / `importInfusionScan`,
+via the shared `parseEnvelope(text, expectedSchema)`, which throws
+`ScanImportError` for: invalid JSON, a missing/foreign `tool` marker, an
+unrecognised or mismatched `schema` (naming the actual owning tool), a missing
+or too-new `schemaVersion`, or a missing `data` section. Every BigInt field
+round-trips through `parseBigInt` (from `balanceExport.js`), which rejects
+negative or decimal input rather than silently coercing it.
+
+**Encryption:** same `aesEncryptLabelled`/`aesDecrypt` as above; only the
+Infusion Checker exposes it in the UI (Staking Cadence exports are plaintext).
+
+### Shared import/export UI
+
+All four tools that support import — Balance Viewer, Reward History, Staking
+Cadence, Infusion Checker — share:
+- `<ToolModeStrip>` — the `Query | Import` tab strip (labelled per tool: "Query Node", "Compute Rewards", "Scan", "Check").
+- `<ImportDropPanel>` — the drop zone, size/extension checks, file-status card, and decrypt block. A tool-specific panel (`BalanceImportPanel`, `RewardImportPanel`, `ScanImportPanel`) supplies only an `inspect`/`onFile`/`onDecrypt` trio.
+
+Export is always hidden while the active data source is `'import'` — an
+imported scan is a snapshot of a past run, and a re-export would be
+indistinguishable from an original. Staking Cadence's single Import pane
+accepts either the validator or the pool schema and switches its mode selector
+to match the imported file's own `schema` field.
 
 ---
 

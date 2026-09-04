@@ -39,7 +39,7 @@ The redesign is **frontend only**. These rules are non-negotiable:
 3. **Path allowlist enforced.** Only the endpoints in `src/constants.js → ENDPOINTS` are accepted by the proxy.
 4. **No `innerHTML` / `dangerouslySetInnerHTML`.** All user-controlled content rendered via JSX or escaped manually (XML export).
 5. **BigInt for balances.** ENJ amounts are `BigInt` Planck units (1 ENJ = 10^18 Planck), formatted only at display time.
-6. **Log cap 500** (Era Explorer caps at 200) — circular trim to prevent memory growth.
+6. **Logs uncapped** — no circular trim. `TerminalLog` virtualizes its drawer instead, so DOM size is bounded by the viewport rather than by discarding history.
 7. **AbortController** must back every cancellable async chain. Every "Stop" button must abort cleanly.
 8. **WebSocket cleanup**: every WS instance must `.close()` in `finally`, with timers cleared.
 9. **Hash-based routing.** The active view persists in `window.location.hash` (`#era`, `#staking`, `#balance`, `#reward-history`, `#infusion`, or empty for home).
@@ -145,7 +145,7 @@ A glass panel fixed to the bottom of the viewport.
 - Lines containing `Retry N/M` render the message in yellow-bold.
 - Empty state: italic "No output yet." in muted text.
 - The drawer's height must be reflected in `document.body.paddingBottom` so other content is never hidden.
-- Logs are **append-only**, **capped at 500 entries** (Era Explorer caps at 200). New lines auto-scroll into view if the body is already at the bottom.
+- Logs are **append-only** and **uncapped**. The drawer renders only the rows in view (plus a small overscan), measuring each row's real height so long wrapped messages stay readable; the scrollbar reflects the full history. New lines auto-scroll into view if the body is already at the bottom, and a deliberate scroll up is never yanked back down.
 
 ---
 
@@ -219,7 +219,8 @@ Scan all active validators **or** all nomination pools for missing reward payout
 ### 8.2 Page layout
 
 1. **Hero** — kicker "STAKING DIAGNOSTICS" + headline "Staking rewards cadence with live operator context." + subhead.
-2. A 3-column grid (collapses to stacked on smaller screens):
+2. The shared `Scan | Import` tab strip (`<ToolModeStrip>`). The Validators/Pools mode selector lives *inside* the Scan pane, not the strip — the Import pane accepts either schema and switches the selector itself from the imported file, so there is no separate mode choice to make there.
+3. **Scan pane** — a 3-column grid (collapses to stacked on smaller screens):
    - **Mode selector** (`<ModeSelector>`): two large radio cards stacked vertically at xl, side-by-side at sm:
      - **Validators** (`Shield` icon) — "Scan active validators, nominators, and era reward gaps."
      - **Nomination Pools** (`Users` icon) — "Scan pool payouts, validator participation, and missed eras."
@@ -235,18 +236,24 @@ Scan all active validators **or** all nomination pools for missing reward payout
      - Pressing Enter inside the input triggers the action.
    - **Phase Progress** (`<PhaseProgressCards>`): a card grid where each phase is a 64×64 ring-progress with status label.
 
-3. **Validator panel** (when mode = validators and ≥1 validator returned): collapsible "Results · Validators" header showing:
+4. **Import pane** — a single `<ScanImportPanel>` (built on `<ImportDropPanel>`) accepting either the validator-mode or pool-mode schema; the file's own `schema` field decides which and switches the Scan pane's mode selector to match. Retry is not offered on rows in an imported scan — retry fetches live data, and an imported scan is a snapshot.
+
+5. **Validator panel** (when mode = validators and ≥1 validator returned): collapsible "Results · Validators" header showing:
    - "{X} / {Y} loaded" while loading.
    - "{N} validators scanned" pill.
    - Pagination if > 10.
    - Body: 2-column (lg) / 4-column (2xl) grid of `<ValidatorCard>`s — see §8.4.
    - Followed by `<SummarySection>` once `status === 'done'`.
 
-4. **Pool panel** (when mode = pools and ≥1 pool returned): same structure as validator panel, using `<PoolCard>` and `<PoolSummarySection>`.
+6. **Pool panel** (when mode = pools and ≥1 pool returned): same structure as validator panel, using `<PoolCard>` and `<PoolSummarySection>`.
 
-5. **Empty state** ("Ready to Scan") shows a stylized EKG-cross icon + "Choose a mode, set how many recent eras to check, then run the scan…".
+7. **Export panel** (`<ScanExportPanel>`), attached below the results — shown only for scanned data, hidden for imported data.
 
-6. **Error state** ("Failed to fetch validator/pool list") with a "Retry Scan" button.
+8. **Provenance banner** for imported data — filename, UTC export time, app version, validator/pool count, Clear button.
+
+9. **Empty state** ("Ready to Scan") shows a stylized EKG-cross icon + "Choose a mode, set how many recent eras to check, then run the scan…".
+
+10. **Error state** ("Failed to fetch validator/pool list") with a "Retry Scan" button.
 
 ### 8.3 Phases
 
@@ -312,16 +319,22 @@ PoolCard detail modal:
     - **Rewarded validators**: address (truncated, copy + Subscan link) + reward share.
     - **Unrewarded but active**: address only.
     - **Inactive validators**: greyed.
-    Missed eras render with danger tint and XCircle status.
+    Missed eras render with danger tint and XCircle status. The era whose
+    payout window is the era currently in progress carries an "i" info tip
+    (hover on pointer devices, click/focus elsewhere) explaining that it is
+    *provisional*; the label is informational only — a provisional era with no
+    reward is still counted as missed, and feeds the severity badge and the
+    consecutive-miss Critical alert like any other gap. A provisional era that
+    has a reward event summing to zero shows a Clock "Pending" status instead.
   - **Validators** (`<PoolValidatorsTable>`): columns # / Address (copy + Subscan) / Display Name / Bonded / Status (Active / Inactive badge, "Queued" indicator, retry button on failure).
 
 ### 8.6 SummarySection (validators)
 
 Renders as soon as any validator has data — not gated on scan completion.
-While `status === 'loading'` its heading carries a "N / M scanned ·
-provisional" chip, since the figures are aggregates over whatever has loaded
-so far and climb as the scan proceeds; the chip disappears once the scan
-settles. Top row of three stat chips: **Total Scanned**, **Clean Record**
+While `status === 'loading'` its heading carries a "N / M scanned" chip, since
+the figures are aggregates over whatever has loaded so far and climb as the
+scan proceeds; the chip disappears once the scan settles (and is omitted
+entirely until a progress label exists). Top row of three stat chips: **Total Scanned**, **Clean Record**
 (success), **Has Gaps** (danger or success).
 
 If any group has `≥ CONSECUTIVE_MISS_THRESHOLD = 3` consecutive misses, show **Critical Alerts** — one card per affected validator with severity, validator label, and a Subscan link.
@@ -355,18 +368,19 @@ Query and visualize any wallet's free / reserved / frozen balances over a block,
 
 ### 9.2 Page layout
 
-1. **Hero** with two large tab buttons in a pill container: **Query Node** | **Import Data**.
+1. **Hero** with the shared `Query | Import` tab strip (`<ToolModeStrip>`, also used by Reward History, Staking Cadence, and Infusion Checker).
 2. **Query pane** (3-column grid at xl):
    - Col 1: **Scan Configuration** — network selector + address input + range parameter card (varies).
    - Col 2: **Live chain snapshot** (two metric cards), **Range Mode** picker, action buttons, error banner.
    - Col 3: **Phase Progress** card.
-3. **Import pane** — file dropzone or, if data was just imported, the same results view as a query.
-4. **Results section** (any time records exist or are streaming):
+3. **Import pane** — just the file dropzone (`<BalanceImportPanel>`, built on the shared `<ImportDropPanel>`). It does not show its own results view; a successful import stays visible here as a drop zone rather than swapping in a summary card, since that swap previously fired on *failed* imports too.
+4. **Results section**, below both panes (any time records exist or are streaming, from either source):
    - Records summary bar (Wallet / Records / Block Range / Format).
+   - **Provenance banner** for imported data — filename, UTC export time, app version, record count; a Clear button.
    - **Balance chart** (`<BalanceChart>`) — see §9.4.
    - **Smart Insights**: two metric cards — Max Free Balance, Balance Utilization %.
    - **Balance table** (`<BalanceTable>`) — see §9.5.
-   - **Export panel** (only for query-sourced data).
+   - **Export panel** — only for query-sourced data; hidden while `dataSource === 'import'`.
 
 ### 9.3 Inputs
 
@@ -455,14 +469,15 @@ Controls:
 - **Filename** field (max 200 chars; default `balance-history-{address}-{date}`). Sanitized by `safeFilename()`.
 - **Format** dropdown: `JSON` / `CSV` / `XML`.
 - **Export** primary button (disabled if no records or processing). On success/error shows colored banner.
-- Implementation: AES-256-GCM with PBKDF2-SHA-256, **100 000 iterations**, random 16-byte salt and 12-byte IV. The encrypted file shape is `{ encrypted: true, algorithm, kdf, data: <base64> }`.
+- Implementation: AES-256-GCM with PBKDF2-SHA-256, **600 000 iterations** (files encrypted before this count was raised recorded 100 000 and remain readable), random 16-byte salt and 12-byte IV. The encrypted file shape is `{ encrypted: true, v, algorithm, kdf, data: <base64> }`, additionally labelled with the shared `{tool, schema, ...}` header alongside those fields (`aesEncryptLabelled`) so an importer can identify — and refuse — another tool's encrypted export before prompting for a password.
 
 ### 9.8 Import panel
 
-- A drag-and-drop zone (also click to pick a file). Accepts `.json`, `.csv`, `.xml`. Max 10 MB.
-- Shows file status card: filename, extension badge, size, status icon, rejection reason.
+- A drag-and-drop zone (also click to pick a file), built on the shared `<ImportDropPanel>`. Accepts `.json`, `.csv`, `.xml`. Max 10 MB (`MAX_IMPORT_MB`).
+- Shows file status card: filename, extension badge, size, status icon, rejection reason. A parse failure (e.g. a CSV missing a required column) surfaces its precise message on this card rather than only in the terminal log.
 - Encrypted files prompt for password and show a **Decrypt & Import** primary button.
-- After successful import, **stays on the Import tab** but renders the same results section (chart, smart insights, table). Export panel is **not** shown for imported data.
+- Recognises its own files by a content sniff (`sniffBalance`) when the file predates the shared header, and by the header itself (`{tool: 'enjinsight', schema: 'balance-viewer', ...}`, spread across the existing flat shape) when present — the latter also names the actual owning tool when a Reward History or scan export is dropped here.
+- After a successful import, the drop zone stays visible; the results section below the strip (chart, smart insights, table) picks up the imported records with a provenance banner. Export panel is **not** shown for imported data.
 
 ### 9.9 Status state machine
 
@@ -494,8 +509,9 @@ Compute per-era staking-pool rewards for one Enjin Relaychain address (prefix `e
    - **Reward ENJ by Pool** chart.
    - **Ledger Data** table (see §10.3).
    - **Reward Overview** stats card: total reward (ENJ), avg APY, era range, eras with reward, pool count, best APY era, best pool.
-   - **Save reward dataset** export panel (same encryption + format options as Balance Export — JSON / CSV / XML).
-4. **Import pane** — same dropzone behavior as Balance Import, with optional decryption and identical result rendering on the Import tab.
+   - **Save reward dataset** export panel (same encryption + format options as Balance Export — JSON / CSV / XML) — shown only for computed data. Imported data does **not** offer re-export: an import is a snapshot of a past computation, and a re-export would be indistinguishable from an original.
+   - **Provenance banner** for imported data, matching Balance Viewer's — filename, UTC export time, app version, row count, Clear button.
+4. **Import pane** — the shared `Query | Import` strip (`<ToolModeStrip>`) plus `<RewardImportPanel>`, built on `<ImportDropPanel>` like Balance Import. Recognises its own files the same two ways: a content sniff (`sniffReward`) for pre-header exports, or the shared header for current ones — which also lets it name a Balance Viewer export dropped here by mistake. Results render below the strip, not inside the Import pane itself.
 
 ### 10.3 Ledger Data table — columns
 
@@ -565,17 +581,22 @@ Read ERC-20 ENJ infusion values for Ethereum ERC-1155 token IDs from contract `0
 
 ### 11.2 Page layout
 
-1. **Hero** + four info cards: contract address (with copy + Etherscan link), RPC endpoint, scope ("Mainnet ENJ"), wallet-scan-incomplete note.
-2. **Scan card** with a pill-tab toggle in its header: **Token ID** | **Wallet**.
-3. **Single mode form**: one text input "Enter token ID or Etherscan NFT URL" + **Check** primary submit.
-4. **Wallet mode form**: one text input "Enter Ethereum wallet address" (validated as `0x` + 40 hex chars) + **Bulk Check** primary submit.
-5. **Infusion value panel** (single mode): label + formatted ENJ value + raw hex value + "Database" data-source pill.
-6. **Phase Progress** card on the right (3 phases for either mode).
-7. **Wallet results section** (after a bulk scan starts):
+1. The shared `Check | Import` tab strip (`<ToolModeStrip>`).
+2. **Check pane**:
+   - **Hero** + four info cards: contract address (with copy + Etherscan link), RPC endpoint, scope ("Mainnet ENJ"), wallet-scan-incomplete note.
+   - **Scan card** with a pill-tab toggle in its header: **Token ID** | **Wallet**.
+   - **Single mode form**: one text input "Enter token ID or Etherscan NFT URL" + **Check** primary submit.
+   - **Wallet mode form**: one text input "Enter Ethereum wallet address" (validated as `0x` + 40 hex chars) + **Bulk Check** primary submit.
+   - **Infusion value panel** (single mode): label + formatted ENJ value + raw hex value + "Database" data-source pill.
+   - **Phase Progress** card on the right (3 phases for either mode).
+3. **Import pane** — `<ScanImportPanel>` for the `infusion-checker` schema, the one importer of the four with `allowEncryption`. Imported `previewImage` URLs are validated to `https:` at parse time and gated behind an explicit "Load images" click even then, since loading a remote image the moment a file is opened tells whoever authored it that it was opened.
+4. **Wallet results section** (after a bulk scan starts, or after an import — rendered below both panes):
    - Status bar ("Checked X of Y", "Y failed", etc.).
+   - **Provenance banner** for imported data — filename, UTC export time, app version, row count, Clear button.
    - Toolbar: search (`type=search`, "Filter wallet results"), page size dropdown (10 / 25 / 50), **Retry All Failed** secondary button.
    - **Bulk results table** (see §11.4).
    - **Pagination** (« / ‹ / pills / › / »).
+   - **Export panel** (`<ScanExportPanel>`, encryption available) — shown only for scanned data, hidden for imported data.
 
 ### 11.3 Phases
 
@@ -921,17 +942,28 @@ Pool shape: `{ poolId, metadata, state, stashAddress, stashDisplay, rewardAddres
 - `resolveLatestEra(validators)`.
 - `computePoolMissedEras(eraRewards, latestEra, eraCount)`.
 
-### 15.7 Export / import (`src/utils/balanceExport.js`)
+### 15.7 Export / import
 
-Used by both Balance and Reward History tools.
+Every export, across all five tools, carries the shared header from `src/utils/scanEnvelope.js`: `{tool: 'enjinsight', schema, schemaVersion, appVersion, exportedAt}`. Two implementations sit on top of it:
 
+**Balance and Reward History** (`src/utils/balanceExport.js`, used by both tools; Reward History's own JSON/CSV/XML builders in `RewardHistoryViewer.jsx` mirror the same shape):
 - Formats: JSON / CSV / XML.
-- JSON: `{ _rpcConfig, records: [...] }` (records include both BigInt-serialized strings and parallel `_enj` floats for convenience).
-- CSV: header row + comment lines (`# endpoint:`, `# address:`, `# exportedAt:`).
-- XML: `<enjinBalanceHistory>…</enjinBalanceHistory>`.
-- Encryption: AES-256-GCM, PBKDF2-SHA-256 with 100 000 iterations.
+- The header is *spread across* the existing flat shape rather than wrapping it — `records` and `_rpcConfig` (or `_meta`) stay exactly where they were — so a build predating the header still reads a new file, and an export written before the header still imports today via a content-sniff fallback (`sniffBalance` / `sniffReward`).
+- JSON: `{ tool, schema, schemaVersion, appVersion, exportedAt, _rpcConfig, records: [...] }` (records include both BigInt-serialized strings and parallel `_enj` floats for convenience).
+- CSV: header row + comment lines (`# endpoint:`, `# address:`, `# exportedAt:`, plus `# tool:`/`# schema:`/`# schemaVersion:`/`# appVersion:`).
+- XML: `<enjinBalanceHistory>…</enjinBalanceHistory>`, header fields inside `<rpcConfig>`.
+- Encryption: AES-256-GCM, PBKDF2-SHA-256 with 600 000 iterations (100 000-iteration files from before that change remain readable). `aesEncryptLabelled` adds the header alongside the ciphertext fields, so an importer can refuse another tool's encrypted export before prompting for a password.
 - File downloads use a Blob URL, revoked after 60 s.
 - Filenames sanitized via `safeFilename()`.
+
+**Staking Cadence and Infusion Checker** (`src/utils/scanExport.js`):
+- JSON only — these payloads are nested (per-validator/per-pool era arrays, or per-token metadata), so CSV/XML would flatten lossily.
+- Nests the payload: `{ tool, schema, schemaVersion, appVersion, exportedAt, meta: {...}, data: {...} }`.
+- Import cap `MAX_SCAN_IMPORT_MB` (64 MB) rather than the legacy `MAX_IMPORT_MB` (10 MB) — these scans scale with real usage (a large validator scan measured ~9 MB).
+- Cross-schema rejection names the actual owning tool (`"This is a Staking Cadence (pool mode) export. Import it from that tool, not ..."`), including when encrypted, before any password prompt.
+- Staking Cadence's single Import pane accepts either of its two schemas and switches its Validators/Pools selector to match the imported file.
+
+**Shared UI** (all four importing tools): `<ToolModeStrip>` (the `Query | Import` tabs) + `<ImportDropPanel>` (drop zone, size/extension checks, file-status card, decrypt flow). Export is always hidden while `dataSource === 'import'`.
 
 ---
 
@@ -969,7 +1001,7 @@ A redesign is "complete" only when **all** of the following hold:
 - [ ] Severity badges follow the §8.8 thresholds; `≥ 3` consecutive misses raise a Critical Alert section.
 - [ ] Balance Viewer supports all five preset networks (with SS58 prefix validation), three range modes (Block / Era / Date — Date and Era only on relay & canary-relay), six date presets, decimated chart with five modes, sortable + paginated table, and JSON / CSV / XML export with optional AES-256-GCM encryption.
 - [ ] BalanceTable renders `newFormat` rows correctly ("frozen" / "n/a" labels).
-- [ ] Reward History Viewer supports Era and Date range modes, optional "include past pool interactions", three charts, a filterable / paginated Ledger table with all 10 columns including APY*, summary stats, and the same export/import flow.
+- [ ] Reward History Viewer supports Era and Date range modes, optional "include past pool interactions", three charts, a filterable / paginated Ledger table with all 10 columns including APY*, summary stats, and the same import flow as Balance Viewer (export is **not** offered for imported data).
 - [ ] APY column keeps the `*` and the disclaimer card linking to `docs/reward-history-computation.md`.
 - [ ] Reward figures are net of operator commission (`netReinvested()` from `src/utils/rewardMath.js`); the "Historical figures corrected" note remains in the tool info panel.
 - [ ] ENJ Infusion checker supports both Token ID and Wallet modes, RPC fallback chain (Alchemy → Etherscan → public RPC), per-token retry, "Retry All Failed", a sortable bulk results table with image previews, and a token detail modal.
@@ -980,10 +1012,15 @@ A redesign is "complete" only when **all** of the following hold:
 - [ ] No API key is reachable from the bundle or any client request.
 - [ ] No `innerHTML` / `dangerouslySetInnerHTML`.
 - [ ] All BigInt balance math uses BigInt; never floats.
-- [ ] Log arrays are capped (200 for Era Explorer, 500 elsewhere).
+- [ ] Log entries carry a stable `id` assigned at creation (never an array index) — the drawer's virtual window and row memoization key on it.
 - [ ] Charts decimate to ≤ 250 points and destroy on unmount.
 - [ ] WCAG AA color contrast and visible focus rings throughout.
 - [ ] Pointer aura is suppressed on coarse pointer / `prefers-reduced-motion`.
 - [ ] All four field colors in the Balance chart match §9.5 exactly.
+- [ ] All four importing tools (Balance, Reward History, Staking Cadence, Infusion) share one `Query | Import` strip and one import shell; export is hidden whenever the active data source is `import`.
+- [ ] Staking Cadence's Import pane accepts either the validator or the pool schema and switches its mode selector to match the file — no separate "pick a mode first" step.
+- [ ] Every export carries the shared `{tool, schema, schemaVersion, appVersion, exportedAt}` header; an export from before the header existed still imports via the legacy content sniff.
+- [ ] A cross-tool or cross-schema import (including encrypted) is refused by name before any password prompt, not after a failed decrypt.
+- [ ] Retry controls are not reachable on an imported scan (Staking Cadence validator/pool cards).
 - [ ] Vitest tests in `src/**/*.test.js` still pass (`npm run test`).
 - [ ] `npm run build` produces a static bundle that boots from a hard reload.

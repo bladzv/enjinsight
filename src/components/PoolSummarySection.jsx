@@ -22,7 +22,7 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect, prov
           <p className="section-label">Summary</p>
           <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 id="pool-summary-heading" className="font-headline text-lg font-bold text-text sm:text-xl">Pool Overview</h2>
-            <span className="mini-chip text-warning">{progressLabel ? `${progressLabel} · provisional` : 'Provisional'}</span>
+            {progressLabel && <span className="mini-chip text-warning">{progressLabel}</span>}
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2 sm:gap-3">
@@ -59,13 +59,12 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect, prov
         <p className="section-label">Summary</p>
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 id="pool-summary-heading" className="font-headline text-lg font-bold text-text sm:text-xl">Pool Overview</h2>
-          {provisional && (
+          {provisional && progressLabel && (
             /* These figures are aggregates over whatever has loaded so far, so
-               they climb as the scan proceeds. Said plainly rather than left
-               for the reader to infer from numbers that keep moving. */
-            <span className="mini-chip text-warning">
-              {progressLabel ? `${progressLabel} · provisional` : 'Provisional'}
-            </span>
+               they climb as the scan proceeds. The scan-in-progress chip says
+               so directly rather than leaving the reader to infer it from
+               numbers that keep moving. */
+            <span className="mini-chip text-warning">{progressLabel}</span>
           )}
         </div>
       </div>

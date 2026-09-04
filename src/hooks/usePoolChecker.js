@@ -32,9 +32,41 @@ const initialState = {
   logs:    [],
   proxyUrl: '',
   progress: null,
-  // Era whose payout window is the era in progress: reported, but its rewards
-  // are still landing, so it is never counted as a missed payout.
+  // Era whose payout window is the era in progress. Its rewards may still be
+  // landing, but an absent one still counts as missed — the era carries an
+  // informational label in the table rather than an exemption.
   provisionalEra: null,
+  // The N the user asked for, pinned at START. Needed on import so the
+  // "Checked N" figures mean the same thing as they did during the scan.
+  requestedEraCount: 0,
+  // Eras the scan actually queried, newest-first. Kept because
+  // buildEraValidatorBreakdown is keyed by it and cannot be rebuilt without it.
+  completedEras: [],
+  // 'scan' for data this session fetched, 'import' for data read from a file.
+  dataSource: 'scan',
+  // { fileName, exportedAt } for an imported scan, else null.
+  importMeta: null,
+}
+
+/**
+ * A completed-looking progress object for an imported scan, so the phase cards
+ * do not render an import as a scan that never ran.
+ */
+function importedProgress(poolCount) {
+  return {
+    phases: [
+      { key: 'probe',      label: 'Check API Endpoints',        total: POOL_ENDPOINTS_TO_PROBE.length, completed: POOL_ENDPOINTS_TO_PROBE.length, status: 'completed' },
+      { key: 'list',       label: 'Fetch Pools',                total: 1, completed: 1, status: 'completed' },
+      { key: 'validators', label: 'Fetch Nominated Validators', total: poolCount, completed: poolCount, status: 'completed' },
+      { key: 'ranges',     label: 'Resolve Era Ranges',         total: 1, completed: 1, status: 'completed' },
+      { key: 'rewards',    label: 'Confirm Rewards',            total: poolCount, completed: poolCount, status: 'completed' },
+    ],
+  }
+}
+
+/** One log entry, in the shape the LOG action builds. */
+function logEntry(level, message) {
+  return { id: Date.now() + Math.random(), ts: nowHHMMSS(), level, message }
 }
 
 // ── Reducer ────────────────────────────────────────────────────────────────
@@ -49,6 +81,11 @@ function reducer(state, action) {
         pools: [],
         logs: [],
         provisionalEra: null,
+        requestedEraCount: action.requestedEraCount ?? 0,
+        completedEras: [],
+        // A fresh scan replaces imported data; its provenance must not linger.
+        dataSource: 'scan',
+        importMeta: null,
         progress: {
           phases: [
             { key: 'probe',      label: 'Check API Endpoints',        total: POOL_ENDPOINTS_TO_PROBE.length, completed: 0, status: 'in_progress' },
@@ -67,8 +104,7 @@ function reducer(state, action) {
       return {
         ...state,
         logs: (() => {
-          const next = [...state.logs, { id: Date.now() + Math.random(), ts: nowHHMMSS(), level: action.level, message: action.message }]
-          return next.length > 500 ? next.slice(-500) : next
+          return [...state.logs, { id: Date.now() + Math.random(), ts: nowHHMMSS(), level: action.level, message: action.message }]
         })(),
       }
 
@@ -77,6 +113,9 @@ function reducer(state, action) {
 
     case 'SET_PROVISIONAL_ERA':
       return { ...state, provisionalEra: action.payload }
+
+    case 'SET_COMPLETED_ERAS':
+      return { ...state, completedEras: action.payload }
 
     case 'PATCH_POOL': {
       const pools = state.pools.map(p =>
@@ -87,6 +126,28 @@ function reducer(state, action) {
 
     case 'SET_PROGRESS':
       return { ...state, progress: action.payload }
+
+    /**
+     * Load a scan read from a file, in one dispatch.
+     *
+     * Atomic for the same reason as the validator side: the pool table and both
+     * summaries read `pools`, `provisionalEra` and the era count together, so a
+     * multi-dispatch import would render at least one frame with a new pool list
+     * measured against a stale window.
+     */
+    case 'IMPORT':
+      return {
+        ...state,
+        status: 'done',
+        pools: action.pools,
+        requestedEraCount: action.requestedEraCount,
+        provisionalEra: action.provisionalEra,
+        completedEras: action.completedEras,
+        dataSource: 'import',
+        importMeta: action.importMeta,
+        progress: importedProgress(action.pools.length),
+        logs: [logEntry('INFO', action.logMessage)],
+      }
 
     case 'DONE':
       return { ...state, status: 'done' }
@@ -141,10 +202,11 @@ export function buildEraRangeMap(rows) {
  * era into its own category. Subscan reports an `end_block_num` for the live era
  * too — the current chain head, not a real era boundary — so a range carrying
  * `partial: true` is known but still filling. The era whose payout window is
- * that partial range is *provisional*: worth reporting, because most payouts
- * land early in the window, but its absence of a reward is not yet evidence of
- * a miss. It is returned at the head of `completedEras` and named separately as
- * `provisionalEra` so callers can label it and exclude it from miss detection.
+ * that partial range is *provisional*: most payouts land early in the window,
+ * so it is worth checking, but it may not have been paid yet. It is returned at
+ * the head of `completedEras` and named separately as `provisionalEra` so
+ * callers can label it. The label is informational only — a provisional era
+ * with no reward still counts as missed.
  *
  * Pass `liveEra` as null when the live era genuinely could not be determined;
  * the function then falls back to closed ranges only, and reports no
@@ -219,7 +281,7 @@ export function usePoolChecker() {
     // See useValidatorChecker.runCheck — the UI bound alone is not enforcement.
     const eraCount = clampInt(Number(requestedEraCount) || DEFAULT_ERA_COUNT, MIN_ERA_COUNT, MAX_ERA_COUNT)
     abortControllerRef.current = new AbortController()
-    dispatch({ type: 'START' })
+    dispatch({ type: 'START', requestedEraCount: eraCount })
     resetSubscanRequestCount()
     const proxy  = state.proxyUrl
     const signal = abortControllerRef.current.signal
@@ -601,8 +663,11 @@ export function usePoolChecker() {
     const erasAscending = [...completedEras].sort((a, b) => a - b).join(', ')
     log('OK', `Era block ranges resolved: live era ${liveEra ?? `${currentEra} (inferred)`}. ${completedEras.length} era(s) to check: ${erasAscending}. Step 3 completed in ${elapsed(s3)}s.`)
     dispatch({ type: 'SET_PROVISIONAL_ERA', payload: provisionalEra })
+    // Stored so an export can carry it: eraValidatorBreakdown is keyed by these
+    // eras and is rebuilt from them on import rather than being serialised.
+    dispatch({ type: 'SET_COMPLETED_ERAS', payload: completedEras })
     if (provisionalEra != null) {
-      log('WARN', `Era ${provisionalEra} is PROVISIONAL: its payout window is era ${currentEra}, which is still in progress. Rewards for it are still landing, so a pool showing none yet is not necessarily missing a payout — it is excluded from missed-era detection until era ${currentEra} closes.`)
+      log('WARN', `Era ${provisionalEra} is PROVISIONAL: its payout window is era ${currentEra}, which is still in progress. Rewards for it are still landing, so a pool showing none yet is counted as missed but may still be paid before era ${currentEra} closes.`)
     }
     phases[3] = { ...phases[3], completed: 1, status: 'completed' }
     phases[4] = { ...phases[4], total: pools.length, completed: 0, status: 'in_progress' }
@@ -658,7 +723,7 @@ export function usePoolChecker() {
 
         const poolVals = poolValidatorsMap.get(p.poolId) ?? []
         const eraValidatorBreakdown = buildEraValidatorBreakdown(allRewards, poolVals, completedEras)
-        const missedEras = computePoolMissedEras(allRewards, latestCompletedEra, completedEras.length, provisionalEra)
+        const missedEras = computePoolMissedEras(allRewards, latestCompletedEra, completedEras.length)
         dispatch({
           type: 'PATCH_POOL',
           poolId: p.poolId,
@@ -747,6 +812,48 @@ export function usePoolChecker() {
     log('WARN', 'Pool scan stopped by user.')
   }, [log])
 
+  /**
+   * Load a scan parsed by `importPoolScan`.
+   *
+   * `eraValidatorBreakdown` is rebuilt here rather than restored from the file:
+   * it is a Map of BigInt amounts, so it is not JSON-representable, and it is
+   * fully derivable from `eraRewards` + `nominatedValidators` + `completedEras`.
+   * Rebuilding also means the breakdown can never disagree with the rewards it
+   * summarises. Doing it in this module keeps `buildEraValidatorBreakdown` where
+   * it lives — a util that reached for it would have to import a hook.
+   *
+   * Aborts any in-flight scan first, so a running scan cannot keep dispatching
+   * PATCH_POOL over the imported rows.
+   */
+  const importScan = useCallback((parsed, fileName = '') => {
+    try { abortControllerRef.current?.abort() } catch { /* noop */ }
+    abortControllerRef.current = null
+
+    const {
+      pools = [], requestedEraCount = 0, provisionalEra = null,
+      completedEras = [], exportedAt = '', appVersion = null,
+    } = parsed ?? {}
+
+    const rebuilt = pools.map(p => ({
+      ...p,
+      eraValidatorBreakdown: (Array.isArray(p.eraRewards) && Array.isArray(p.nominatedValidators))
+        ? buildEraValidatorBreakdown(p.eraRewards, p.nominatedValidators, completedEras)
+        : null,
+    }))
+
+    const from = fileName ? ` from ${fileName}` : ''
+    const when = exportedAt ? `, exported ${exportedAt}` : ''
+    dispatch({
+      type: 'IMPORT',
+      pools: rebuilt,
+      requestedEraCount,
+      provisionalEra,
+      completedEras,
+      importMeta: { fileName, exportedAt, appVersion },
+      logMessage: `Imported ${rebuilt.length} pool(s)${from}${when}. This is file data — nothing was fetched.`,
+    })
+  }, [])
+
   // Derive latestEra from pools' eraRewards for enrichment. Previously
   // recomputed on every render regardless of whether state.pools had changed.
   const latestEra = useMemo(() => resolvePoolLatestEra(state.pools), [state.pools])
@@ -758,6 +865,7 @@ export function usePoolChecker() {
     runCheck,
     stop,
     reset,
+    importScan,
     retryPoolValidator,
   }
 }
@@ -768,7 +876,7 @@ export function usePoolChecker() {
  *
  * Returns Map<era, { rewarded: [{ address, display }], unrewarded: [{ address, display }] }>
  */
-function buildEraValidatorBreakdown(eraRewards, nominatedValidators, completedEras) {
+export function buildEraValidatorBreakdown(eraRewards, nominatedValidators, completedEras) {
   // Group reward events by era → Map of validator_stash -> BigInt(amount) summed
   const rewardsByEra = new Map()
   for (const r of eraRewards) {
