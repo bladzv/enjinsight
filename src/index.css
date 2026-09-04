@@ -226,8 +226,8 @@
     background-color: var(--ink);
     /* Subtle grid backdrop for "engineering" feel */
     background-image:
-      linear-gradient(to right, rgba(var(--grid-rgb), 0.035) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(var(--grid-rgb), 0.035) 1px, transparent 1px),
+      linear-gradient(to right, rgb(var(--grid-rgb) / 0.035) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--grid-rgb) / 0.035) 1px, transparent 1px),
       radial-gradient(800px 480px at 100% -10%, rgba(124, 58, 237, 0.05), transparent 60%);
     background-size: 32px 32px, 32px 32px, auto;
     background-attachment: fixed;
@@ -272,13 +272,13 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(var(--line-rgb), 0.16);
+    background: rgb(var(--line-rgb) / 0.16);
     border: 3px solid transparent;
     background-clip: content-box;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(var(--line-rgb), 0.32);
+    background: rgb(var(--line-rgb) / 0.32);
     background-clip: content-box;
   }
 
@@ -346,7 +346,7 @@
     position: fixed;
     inset: 0;
     z-index: 60;
-    background: rgba(var(--scrim-rgb), 0.56);
+    background: rgb(var(--scrim-rgb) / 0.56);
     backdrop-filter: blur(4px);
   }
 
@@ -385,7 +385,7 @@
     z-index: 30;
     height: var(--status-h);
     border-bottom: 1px solid var(--hairline);
-    background: rgba(var(--sheet-rgb), 0.88);
+    background: rgb(var(--sheet-rgb) / 0.88);
     backdrop-filter: blur(10px);
   }
 
@@ -401,7 +401,7 @@
   }
 
   .rail-item:hover {
-    background: rgba(var(--hover-rgb), 0.06);
+    background: rgb(var(--hover-rgb) / 0.06);
     color: theme('colors.text');
   }
 
@@ -431,7 +431,7 @@
   }
 
   .glass-panel {
-    background: rgba(var(--glass-rgb), 0.92);
+    background: rgb(var(--glass-rgb) / 0.92);
     backdrop-filter: blur(8px);
     border: 1px solid var(--hairline);
   }
@@ -669,11 +669,11 @@
   }
 
   .data-table-row:hover {
-    background: rgba(var(--hover-rgb), 0.06);
+    background: rgb(var(--hover-rgb) / 0.06);
   }
 
   .data-table-row-alt {
-    background: rgba(var(--hover-rgb), 0.03);
+    background: rgb(var(--hover-rgb) / 0.03);
   }
 
   .data-table-row-danger {
@@ -986,7 +986,7 @@
   }
 
   .btn-ghost:hover {
-    background: rgba(var(--hover-rgb), 0.07);
+    background: rgb(var(--hover-rgb) / 0.07);
     color: theme('colors.text');
   }
 
@@ -999,7 +999,7 @@
   }
 
   .btn-icon:hover {
-    background: rgba(var(--hover-rgb), 0.07);
+    background: rgb(var(--hover-rgb) / 0.07);
     color: theme('colors.text');
   }
 
@@ -1261,7 +1261,7 @@
   }
 
   .btn-push:disabled {
-    box-shadow: 0 var(--m-press-edge) 0 rgba(var(--primary-dim-rgb) / 0.35);
+    box-shadow: 0 var(--m-press-edge) 0 rgb(var(--primary-dim-rgb) / 0.35);
   }
 
   /* The staking Run button carries an inset accent ring on top of the edge.
@@ -1298,7 +1298,7 @@
     bottom: 0;
     z-index: 0;
     border-radius: 0.125rem;
-    background: rgba(var(--primary-rgb) / 0.15);
+    background: rgb(var(--primary-rgb) / 0.15);
     transition: left var(--m-glide) var(--m-glide-ease),
                 width var(--m-glide) var(--m-glide-ease);
   }
@@ -1570,7 +1570,7 @@
     overflow: hidden;
     height: 3px;
     border-radius: 999px;
-    background: rgba(var(--primary-rgb) / 0.12);
+    background: rgb(var(--primary-rgb) / 0.12);
   }
 
   .indeterminate-bar__seg {
