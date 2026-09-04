@@ -1,9 +1,15 @@
 import { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, FileDown } from 'lucide-react'
 import { DEFAULT_ERA_COUNT } from './constants.js'
 import { useValidatorChecker } from './hooks/useValidatorChecker.js'
 import { usePoolChecker }      from './hooks/usePoolChecker.js'
 import { resolveLatestEra }    from './utils/eraAnalysis.js'
+import { formatExportedAtUTC } from './utils/format.js'
+import {
+  SCAN_SCHEMAS,
+  exportValidatorScan, importValidatorScan,
+  exportPoolScan, importPoolScan,
+} from './utils/scanExport.js'
 import { useToast } from './hooks/useToast.jsx'
 
 import AppHeader           from './components/AppHeader.jsx'
@@ -21,6 +27,9 @@ import PoolSummarySection  from './components/PoolSummarySection.jsx'
 import PhaseProgressCards  from './components/PhaseProgressCards.jsx'
 import Spinner from './components/Spinner.jsx'
 import ScanStatusBar from './components/ScanStatusBar.jsx'
+import ScanExportPanel from './components/ScanExportPanel.jsx'
+import ScanImportPanel from './components/ScanImportPanel.jsx'
+import ToolModeStrip from './components/ToolModeStrip.jsx'
 import { isNavigationLocked } from './utils/navigationLock.js'
 
 const BalanceExplorer     = lazy(() => import('./components/BalanceExplorer.jsx'))
@@ -53,6 +62,14 @@ const POOL_PREVIEW_PHASES = [
 ]
 const STAKING_RESULTS_PAGE_SIZE = 10
 
+// Both staking schemas, so the single Import pane takes either and switches
+// the Validators/Pools selector to match the file rather than asking first.
+const STAKING_SCAN_ACCEPT = [
+  { schema: SCAN_SCHEMAS.VALIDATOR, importFn: importValidatorScan },
+  { schema: SCAN_SCHEMAS.POOL,      importFn: importPoolScan },
+]
+
+
 const STAKING_SIMPLE_STEPS = [
   { key: 'mode',    label: 'Mode'    },
   { key: 'options', label: 'Options' },
@@ -67,6 +84,10 @@ export default function App() {
     return ['home', 'staking', 'balance', 'era', 'reward-history', 'infusion'].includes(hash) ? hash : 'home'
   })
   const [mode,       setMode]       = useState('validators') // 'validators' | 'pools'
+  // Which side of the Query|Import strip is showing. The Validators/Pools
+  // selector lives inside the Query pane; the Import pane needs no mode of
+  // its own because a scan file names its own schema.
+  const [stakingTab, setStakingTab] = useState('query')
   const [lastEraCount, setLastEraCount] = useState(DEFAULT_ERA_COUNT)
   const [showAbout, setShowAbout] = useState(false)
   const [showValidatorResults, setShowValidatorResults] = useState(true)
@@ -136,6 +157,8 @@ export default function App() {
     status: vStatus, validators, logs: vLogs,
     runCheck: vRunCheck, stop: vStop, reset: vReset, retryValidator: vRetryValidator,
     progress: vProgress,
+    requestedEraCount: vRequestedEraCount,
+    dataSource: vDataSource, importMeta: vImportMeta, importScan: vImportScan,
   } = useValidatorChecker()
 
   // Pool hook
@@ -145,6 +168,9 @@ export default function App() {
     latestEra: poolLatestEra,
     provisionalEra: poolProvisionalEra,
     progress: pProgress,
+    requestedEraCount: pRequestedEraCount,
+    completedEras: pCompletedEras,
+    dataSource: pDataSource, importMeta: pImportMeta, importScan: pImportScan,
   } = usePoolChecker()
 
   // Derive active values based on current mode
@@ -152,6 +178,16 @@ export default function App() {
   const status    = isValidatorMode ? vStatus   : pStatus
   const logs      = isValidatorMode ? vLogs     : pLogs
   const isLoading = status === 'loading'
+  // Each mode's hook carries its own provenance, so switching modes shows the
+  // right banner (or none) without any extra bookkeeping here.
+  const activeDataSource = isValidatorMode ? vDataSource : pDataSource
+  const activeImportMeta = isValidatorMode ? vImportMeta : pImportMeta
+  const isImported = activeDataSource === 'import'
+  const hasActiveData = isValidatorMode ? validators.length > 0 : pools.length > 0
+  // No re-export of imported data, matching the Balance Viewer. Retrying a row
+  // on an imported scan does fetch live data, so an export here could mix file
+  // and network data under a filename that claims to be one scan.
+  const canExport = hasActiveData && !isImported
   const activeProgress = isValidatorMode ? vProgress : pProgress
   const previewPhases = isValidatorMode ? VALIDATOR_PREVIEW_PHASES : POOL_PREVIEW_PHASES
   const phases = activeProgress?.phases ?? []
@@ -253,6 +289,44 @@ export default function App() {
     else pReset()
     setStakingPage(1)
     setStakingSimpleRunning(false)
+  }
+
+  /**
+   * Load a scan from a file into the active mode's hook.
+   *
+   * `lastEraCount` is App-local state, not part of either hook, and it is what
+   * every "Checked N" figure in both summaries reads. Restoring it from the
+   * file is not optional: leave it at whatever the last scan used and the
+   * imported scan reports its gaps against the wrong window.
+   */
+  function handleImportScan(parsed, fileName, schema) {
+    if (parsed?.requestedEraCount > 0) setLastEraCount(parsed.requestedEraCount)
+    // The file decides the mode, not whatever was selected in the Query pane.
+    const intoValidators = schema === SCAN_SCHEMAS.VALIDATOR
+    setMode(intoValidators ? 'validators' : 'pools')
+    if (intoValidators) vImportScan(parsed, fileName)
+    else pImportScan(parsed, fileName)
+    // Paging and the open-pool selection refer to the replaced list.
+    setValidatorPage(1)
+    setPoolPage(1)
+    setSelectedPoolId(null)
+    setStakingPage(1)
+    setStakingSimpleRunning(false)
+    setShowValidatorResults(true)
+    setShowPoolResults(true)
+  }
+
+  /** Serialise the active mode's scan for ScanExportPanel. */
+  function buildScanExport() {
+    return isValidatorMode
+      ? exportValidatorScan({ validators, requestedEraCount: vRequestedEraCount })
+      : exportPoolScan({
+        pools,
+        requestedEraCount: pRequestedEraCount,
+        provisionalEra: poolProvisionalEra,
+        completedEras: pCompletedEras,
+        latestCompletedEra: pCompletedEras[0] ?? 0,
+      })
   }
 
   function handleStop() {
@@ -429,8 +503,16 @@ export default function App() {
           </div>
         </section>
 
-        {/* Simple mode: step progress bar */}
-        {simpleMode && (
+        <ToolModeStrip
+          queryLabel="Scan"
+          value={stakingTab}
+          onChange={setStakingTab}
+          idPrefix="staking"
+        />
+
+        {/* Simple mode: step progress bar. The stepper describes the Scan
+            flow, so it hides in Import mode. */}
+        {simpleMode && stakingTab === 'query' && (
           <StepProgress
             steps={STAKING_SIMPLE_STEPS}
             currentStep={stakingSimpleStep}
@@ -440,8 +522,13 @@ export default function App() {
         )}
 
         {/* Controls: advanced always; simple page 1 (Mode) and page 2 (Options) */}
-        {!simpleMode && (
-          <div className="grid gap-3 sm:gap-4 xl:grid-cols-3 xl:items-stretch">
+        {stakingTab === 'query' && !simpleMode && (
+          <div
+            role="tabpanel"
+            id="staking-panel-query"
+            aria-labelledby="staking-tab-query"
+            className="grid gap-3 sm:gap-4 xl:grid-cols-3 xl:items-stretch"
+          >
             <ModeSelector mode={mode} onModeChange={handleModeChange} disabled={isLoading} />
             <ControlPanel
               status={status}
@@ -461,9 +548,50 @@ export default function App() {
           </div>
         )}
 
+        {/* ── Import pane — both UI modes ──
+               One drop zone for both staking schemas: the envelope names the
+               file's own mode, so it switches the selector itself. */}
+        {stakingTab === 'import' && (
+          <div role="tabpanel" id="staking-panel-import" aria-labelledby="staking-tab-import">
+            <ScanImportPanel
+              accept={STAKING_SCAN_ACCEPT}
+              heading="Load a Staking Cadence scan"
+              onImport={handleImportScan}
+              disabled={isLoading}
+            />
+          </div>
+        )}
+
+        {/* Provenance. Rendered in both UI modes — the panels above are
+            advanced-only, but a user can switch to guided mode after importing
+            and the results on screen would otherwise look like a live scan. */}
+        {isImported && activeImportMeta && (
+          <div className="flex items-start gap-2 rounded-sm border border-cyan/30 bg-cyan/10 px-3 py-2 text-xs text-cyan">
+            <FileDown size={14} className="mt-0.5 flex-shrink-0" />
+            <p className="min-w-0 flex-1">
+              Showing imported data
+              {activeImportMeta.fileName && <> from <span className="break-all font-mono">{activeImportMeta.fileName}</span></>}
+              {activeImportMeta.exportedAt && <> · exported {formatExportedAtUTC(activeImportMeta.exportedAt)}</>}
+              {activeImportMeta.appVersion && <> · EnjinSight v{activeImportMeta.appVersion}</>}
+              {' '}· {isValidatorMode ? validators.length : pools.length} {isValidatorMode ? 'validator' : 'pool'}{(isValidatorMode ? validators.length : pools.length) === 1 ? '' : 's'}.
+              {' '}Nothing was fetched.
+            </p>
+            {/* The Query pane owns the only Reset, so from the Import pane the
+                banner would otherwise point at a control that is not on
+                screen. Matches the Clear in the other three tools. */}
+            <button
+              type="button"
+              onClick={handleReset}
+              className="btn-secondary shrink-0 px-3 py-1 text-xs"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
         {/* Simple page 1: Mode selection */}
         {/* Simple page 1: Mode — ModeSelector is already a data-panel, no wrapper needed */}
-        {simpleMode && stakingSimpleStep === 1 && (
+        {simpleMode && stakingTab === 'query' && stakingSimpleStep === 1 && (
           <div className="mx-auto w-full max-w-lg space-y-4">
             <ModeSelector mode={mode} onModeChange={handleModeChange} disabled={false} />
             <div className="flex justify-end">
@@ -475,7 +603,7 @@ export default function App() {
         )}
 
         {/* Simple page 2: Era count + Run */}
-        {simpleMode && stakingSimpleStep === 2 && (
+        {simpleMode && stakingTab === 'query' && stakingSimpleStep === 2 && (
           <div className="mx-auto w-full max-w-[360px] space-y-3">
             <ControlPanel
               status={status}
@@ -531,7 +659,7 @@ export default function App() {
                   validator={v}
                   eraCount={lastEraCount}
                   latestEra={validatorLatestEra}
-                  onRetry={vRetryValidator}
+                  onRetry={isImported ? undefined : vRetryValidator}
                 />
               ))}
             </div>
@@ -547,7 +675,7 @@ export default function App() {
               validators={validators}
               eraCount={lastEraCount}
               latestEra={validatorLatestEra}
-              onRetry={vRetryValidator}
+              onRetry={isImported ? undefined : vRetryValidator}
               provisional={isLoading}
               progressLabel={isLoading ? `${validators.filter(v => v.fetchStatus === 'done').length} / ${validators.length} scanned` : null}
             />
@@ -578,7 +706,7 @@ export default function App() {
                   eraCount={lastEraCount}
                   latestEra={poolLatestEra}
                   provisionalEra={poolProvisionalEra}
-                  onRetry={pRetryPoolValidator}
+                  onRetry={isImported ? undefined : pRetryPoolValidator}
                   open={selectedPoolId === p.poolId}
                   onOpenChange={next => setSelectedPoolId(next ? p.poolId : null)}
                 />
@@ -597,6 +725,19 @@ export default function App() {
               progressLabel={isLoading ? `${pools.filter(p => p.fetchStatus === 'done').length} / ${pools.length} scanned` : null}
             />
           </section>
+        )}
+
+        {/* Export, attached to the results it serialises. Hidden for imported
+            data: an import is a snapshot of a past scan, and a re-export
+            would be indistinguishable from an original. */}
+        {!simpleMode && canExport && (
+          <div className="lg:w-1/2">
+            <ScanExportPanel
+              schema={isValidatorMode ? SCAN_SCHEMAS.VALIDATOR : SCAN_SCHEMAS.POOL}
+              buildContent={buildScanExport}
+              disabled={isLoading}
+            />
+          </div>
         )}
 
         {/* ── Empty / error states ────────────────────────────────── */}

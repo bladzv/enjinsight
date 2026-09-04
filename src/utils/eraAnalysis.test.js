@@ -16,25 +16,22 @@ describe('computePoolMissedEras', () => {
     expect(computePoolMissedEras([], 1170, 3)).toEqual([1170, 1169, 1168])
   })
 
-  // The provisional era's payout window is still open, so a pool that has not
-  // been paid yet is not missing anything. Counting it raised a "missed payout"
-  // alert that cleared itself a few hours later.
-  it('never flags the provisional era as missed', () => {
-    const missed = computePoolMissedEras(rewards([1170, 1169]), 1171, 4, 1171)
-    expect(missed).not.toContain(1171)
-    expect(missed).toEqual([1168])
+  // A provisional era used to be exempt, which hid pools that genuinely were
+  // not being paid until the payout window closed. It is now reported like any
+  // other gap; the row is labelled provisional in the UI instead.
+  it('flags an unpaid provisional era as missed', () => {
+    const missed = computePoolMissedEras(rewards([1170, 1169]), 1171, 4)
+    expect(missed).toContain(1171)
+    expect(missed).toEqual([1171, 1168])
   })
 
-  it('still flags genuinely missed eras alongside a provisional one', () => {
-    const missed = computePoolMissedEras(rewards([1170]), 1171, 4, 1171)
-    expect(missed).toEqual([1169, 1168])
+  it('does not flag a provisional era that has already paid', () => {
+    const missed = computePoolMissedEras(rewards([1171, 1170]), 1171, 3)
+    expect(missed).toEqual([1169])
   })
 
-  it('flags the newest era when no provisional era is given', () => {
-    expect(computePoolMissedEras(rewards([1170, 1169]), 1171, 4)).toEqual([1171, 1168])
-  })
-
-  it('is unaffected by a provisional era outside the window', () => {
-    expect(computePoolMissedEras(rewards([1170]), 1170, 2, 1999)).toEqual([1169])
+  it('flags genuinely missed eras alongside an unpaid provisional one', () => {
+    const missed = computePoolMissedEras(rewards([1170]), 1171, 4)
+    expect(missed).toEqual([1171, 1169, 1168])
   })
 })

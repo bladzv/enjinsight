@@ -39,10 +39,10 @@ export default function ValidatorCard({ validator, eraCount, latestEra, onRetry 
   function renderActions() {
     return (
       <>
-        {hasError && (
+        {hasError && onRetry && (
           <button
             type="button"
-            onClick={event => { event.stopPropagation(); onRetry?.(address) }}
+            onClick={event => { event.stopPropagation(); onRetry(address) }}
             className="btn-icon"
             aria-label={`Retry fetching data for ${displayName}`}
           >
@@ -170,10 +170,10 @@ export function ValidatorDetailsModal({ open, onClose, validator, eraCount, late
   function renderActions() {
     return (
       <>
-        {hasError && (
+        {hasError && onRetry && (
           <button
             type="button"
-            onClick={() => onRetry?.(address)}
+            onClick={() => onRetry(address)}
             className="btn-icon"
             aria-label={`Retry fetching data for ${displayName}`}
           >
@@ -239,7 +239,7 @@ export function ValidatorDetailsModal({ open, onClose, validator, eraCount, late
             loading && !eraStat
               ? <LoadingPlaceholder label="Fetching era stats…" />
               : hasError && !eraStat
-                ? <ErrorPlaceholder label="Era stat fetch failed." onRetry={() => onRetry?.(address)} />
+                ? <ErrorPlaceholder label="Era stat fetch failed." onRetry={onRetry && (() => onRetry(address))} />
                 : (
                   <EraStatTable
                     eraStat={eraStat}
@@ -254,7 +254,7 @@ export function ValidatorDetailsModal({ open, onClose, validator, eraCount, late
             loading && !nominators
               ? <LoadingPlaceholder label="Fetching nominators…" />
               : hasError && !nominators
-                ? <ErrorPlaceholder label="Nominator fetch failed." onRetry={() => onRetry?.(address)} />
+                ? <ErrorPlaceholder label="Nominator fetch failed." onRetry={onRetry && (() => onRetry(address))} />
                 : (
                   <NominatorsTable
                     nominators={nominators}

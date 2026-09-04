@@ -8,9 +8,10 @@ import { useState } from 'react'
 import { Download, Lock, Unlock } from 'lucide-react'
 import {
   toJSON, toCSV, toXML,
-  aesEncrypt, downloadFile,
+  aesEncryptLabelled, downloadFile,
   safeFilename, defaultFilename,
 } from '../utils/balanceExport.js'
+import { SCAN_SCHEMAS } from '../utils/scanEnvelope.js'
 import Spinner from './Spinner.jsx'
 import Field from './Field.jsx'
 
@@ -36,7 +37,7 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
                   : format === 'csv'  ? toCSV(records, meta)
                   : toXML(records, meta)
       if (encOn) {
-        content = await aesEncrypt(content, password)
+        content = await aesEncryptLabelled(content, password, SCAN_SCHEMAS.BALANCE)
         downloadFile(content, `${fname}.enc.json`, 'application/json')
         setMessage({ type: 'ok', text: `Encrypted file saved: ${safeFilename(fname)}.enc.json` })
       } else {

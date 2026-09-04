@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react'
-import { CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, ExternalLink, Info } from 'lucide-react'
 import { formatENJ, truncateAddress, validatorExplorerUrl } from '../utils/format.js'
+import { useHoverCapable } from '../hooks/useHoverCapable.js'
 
 /**
  * Merge reward events with the expected era window into render-ready rows.
@@ -9,11 +10,15 @@ import { formatENJ, truncateAddress, validatorExplorerUrl } from '../utils/forma
  * this table, and getting them wrong either hides a real missed payout or
  * invents one.
  *
- *  - `missed`      — the payout window closed with no reward. A real gap.
- *  - `provisional` — the payout window is the era in progress. Reported, but
- *                    absence of a reward is not yet evidence of anything.
- *  - `pending`     — provisional *and* nothing has arrived yet. Must not read
- *                    as a green all-clear, and must not read as a miss either.
+ *  - `missed`      — no reward event for this era. A gap, whether or not the
+ *                    payout window has closed: a provisional era with nothing
+ *                    yet counts, and may fill in later.
+ *  - `provisional` — the payout window is the era in progress. A label only;
+ *                    it does not change whether the row counts as missed.
+ *  - `pending`     — provisional, not missed, but the summed reward is zero.
+ *                    Reachable while `missedEras` is still being computed, and
+ *                    for a zero-amount reward event. Must not read as a green
+ *                    all-clear.
  */
 export function buildEraRows({ eraRewards, missedEras, eraCount, latestEra, provisionalEra = null }) {
   const missedSet = new Set(missedEras ?? [])
@@ -34,18 +39,69 @@ export function buildEraRows({ eraRewards, missedEras, eraCount, latestEra, prov
   // All expected eras, newest first, with reward data or a gap marker.
   const allEras = latestEra && eraCount ? Array.from({ length: eraCount }, (_, i) => latestEra - i) : []
   return allEras.map(era => {
-    // Guarded here as well as upstream so a row can never render as a miss on a
-    // stale missedEras list.
     const provisional = provisionalEra != null && era === provisionalEra
     const rewardTotal = rewardTotals.get(era) ?? 0n
+    // A provisional era is no longer exempt: if it has no reward event it is
+    // missed like any other. `pending` is what is left over — provisional,
+    // present in the reward list (so not missed), but summing to zero.
+    const missed = missedSet.has(era)
     return {
       era,
       rewardTotal,
-      missed: missedSet.has(era) && !provisional,
+      missed,
       provisional,
-      pending: provisional && rewardTotal <= 0n,
+      pending: provisional && !missed && rewardTotal <= 0n,
     }
   })
+}
+
+const PROVISIONAL_COPY = "Provisional \u2014 this era's payout window (the era now in progress) is still open. A missing reward is counted as missed, but it may still be paid before the window closes."
+
+/**
+ * Small "i" affordance that reveals an explanation on hover (pointer devices)
+ * or on click/focus (touch and keyboard). Hover alone would be permanently
+ * unreachable on a touch screen, so the click/focus path is not optional.
+ */
+function InfoTip({ label, children, align = 'left' }) {
+  const [open, setOpen] = useState(false)
+  const hoverCapable = useHoverCapable()
+  const wrapRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onDocPointer(event) {
+      if (wrapRef.current && !wrapRef.current.contains(event.target)) setOpen(false)
+    }
+    function onKeyDown(event) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocPointer)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onDocPointer)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  return (
+    <span ref={wrapRef} className="relative inline-flex group align-middle">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-label={label}
+        aria-expanded={open}
+        className="ml-1.5 inline-flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning transition-colors hover:bg-warning/25"
+      >
+        <Info size={9} strokeWidth={2.5} />
+      </button>
+      <span
+        role="tooltip"
+        className={`pointer-events-none absolute z-50 top-full mt-1 w-56 whitespace-normal break-words rounded-lg border border-rim bg-ink p-2.5 text-left text-[10px] font-normal normal-case leading-relaxed tracking-normal text-text-secondary shadow-xl shadow-black/60 transition-opacity duration-150 ${align === 'right' ? 'right-0' : 'left-0'} ${open ? 'opacity-100' : hoverCapable ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}
+      >
+        {children}
+      </span>
+    </span>
+  )
 }
 
 /**
@@ -137,12 +193,7 @@ export default function PoolRewardTable({
                 <span className={`font-mono text-sm font-bold ${missed ? 'text-danger' : 'text-text'}`}>
                   Era {era}
                   {provisional && (
-                    <span
-                      className="ml-1.5 rounded-sm bg-warning/15 px-1 py-0.5 align-middle text-[9px] font-semibold uppercase tracking-wide text-warning"
-                      title="Payout window still open — rewards for this era are still landing"
-                    >
-                      Prov
-                    </span>
+                    <InfoTip label={`Era ${era} is provisional`}>{PROVISIONAL_COPY}</InfoTip>
                   )}
                 </span>
                 {missed
@@ -200,6 +251,7 @@ export default function PoolRewardTable({
                 <MissedRow
                   key={`miss-${era}`}
                   era={era}
+                  provisional={provisional}
                   bd={bd}
                   hasBreakdown={hasBreakdown}
                   isExpanded={isExpanded}
@@ -239,12 +291,7 @@ function RewardedRow({ era, rewardTotal, provisional = false, pending = false, b
         <td className="px-3 py-2.5 font-mono text-text-secondary text-center w-16">
           {era}
           {provisional && (
-            <span
-              className="ml-1.5 rounded-sm bg-warning/15 px-1 py-0.5 align-middle text-[9px] font-semibold uppercase tracking-wide text-warning"
-              title="Payout window still open — rewards for this era are still landing"
-            >
-              Prov
-            </span>
+            <InfoTip label={`Era ${era} is provisional`}>{PROVISIONAL_COPY}</InfoTip>
           )}
         </td>
         <td className="px-3 py-2.5 text-right font-mono text-text w-10">
@@ -293,7 +340,7 @@ function RewardedRow({ era, rewardTotal, provisional = false, pending = false, b
 }
 
 /** Missed era row with optional expansion showing all unrewarded validators. */
-function MissedRow({ era, bd, hasBreakdown, isExpanded, onToggle }) {
+function MissedRow({ era, provisional = false, bd, hasBreakdown, isExpanded, onToggle }) {
   // Exclude inactive validators from "no reward" count
   const activeUnrewarded = bd?.unrewarded?.filter(v => v.isActive) ?? []
   const noRewardCount = activeUnrewarded.length
@@ -301,7 +348,12 @@ function MissedRow({ era, bd, hasBreakdown, isExpanded, onToggle }) {
   return (
     <>
       <tr className="data-table-row-danger">
-        <td className="px-3 py-2.5 font-mono text-danger font-semibold text-center w-16">{era}</td>
+        <td className="px-3 py-2.5 font-mono text-danger font-semibold text-center w-16">
+          {era}
+          {provisional && (
+            <InfoTip label={`Era ${era} is provisional`}>{PROVISIONAL_COPY}</InfoTip>
+          )}
+        </td>
         <td className="px-3 py-2.5 text-right text-danger w-10">—</td>
         <td className="px-3 py-2.5 text-center hidden md:table-cell">
           <span className="font-mono text-xs text-dim">0</span>

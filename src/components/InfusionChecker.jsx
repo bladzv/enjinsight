@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Database, ExternalLink, ImageIcon, Loader2, RefreshCw, Search, Square, Wallet } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Database, ExternalLink, FileDown, ImageIcon, Loader2, RefreshCw, Search, Square, Wallet } from 'lucide-react'
 import DetailModal from './DetailModal.jsx'
 import PhaseProgressCards from './PhaseProgressCards.jsx'
 import StepProgress from './StepProgress.jsx'
 import TerminalLog from './TerminalLog.jsx'
 import ToolInfoSection from './ToolInfoSection.jsx'
 import { derivePhases } from '../utils/infusionPhases.js'
+import { formatExportedAtUTC } from '../utils/format.js'
 import Field from './Field.jsx'
 import HoldButton from './HoldButton.jsx'
 import ScanStatusBar from './ScanStatusBar.jsx'
+import ScanExportPanel from './ScanExportPanel.jsx'
+import ScanImportPanel from './ScanImportPanel.jsx'
+import ToolModeStrip from './ToolModeStrip.jsx'
+import { SCAN_SCHEMAS, exportInfusionScan, importInfusionScan } from '../utils/scanExport.js'
 
 const CONTRACT_ADDRESS = '0xfaafdc07907ff5120a76b34b731b278c38d6043c'
 const ETHERSCAN_NFT_HOLDINGS_URL = import.meta.env.DEV
@@ -288,6 +293,11 @@ async function fetchTokenDetails(owner, tokenId, signal) {
   return body
 }
 
+
+const INFUSION_SCAN_ACCEPT = [
+  { schema: SCAN_SCHEMAS.INFUSION, importFn: importInfusionScan },
+]
+
 const INFUSION_SIMPLE_STEPS = [
   { key: 'mode',     label: 'Mode'     },
   { key: 'input',    label: 'Input'    },
@@ -322,17 +332,26 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
   const [bulkFailureMessage, setBulkFailureMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [logs, setLogs] = useState([])
+  // 'scan' for data this session fetched, 'import' for data read from a file.
+  // Which side of the Query|Import strip is showing.
+  const [infusionTab, setInfusionTab] = useState('query')
+  const [dataSource, setDataSource] = useState('scan')
+  const [importMeta, setImportMeta] = useState(null)
+  // Imported preview images stay unloaded until the user asks for them: each
+  // one is a request to a host named by the file, which tells whoever wrote
+  // that file that the recipient opened it. The URLs are already restricted to
+  // https: by the importer — this is about *when* they are fetched, not whether
+  // they are well-formed.
+  const [showImportedImages, setShowImportedImages] = useState(false)
   const scanAbortRef = useRef(null)
   const rowsRef = useRef([])
   const singleResultRef = useRef(null)
   const bulkResultRef = useRef(null)
   const previousLoadingRef = useRef(false)
-  // Monotonic id assigned once per entry at creation. Deriving `id` from array
-  // position at render time (the previous approach) breaks down once the log
-  // hits its 500-entry cap: .slice(-500) shifts every remaining entry's index,
-  // so every row's "identity" changes on every append past the cap — which
-  // defeats memoizing the row component and rebuilds a fresh 500-element array
-  // into TerminalLog on every render regardless of whether logs had changed.
+  // Monotonic id assigned once per entry at creation, never derived from array
+  // position: the row component is memoized on it, and TerminalLog windows the
+  // list by it, so an id that shifted as the array grew would rebuild every
+  // visible row on every append.
   const nextLogIdRef = useRef(0)
 
   const log = useCallback((level, msg) => {
@@ -346,8 +365,8 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
           second: '2-digit', fractionalSecondDigits: 2,
         }),
       }
-      const next = [...prev, entry]
-      return next.length > 500 ? next.slice(-500) : next
+      // Uncapped — see TerminalLog, which windows what it renders.
+      return [...prev, entry]
     })
   }, [])
 
@@ -377,6 +396,14 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
     scanOutcome,
     singleStarted,
   ])
+  const isImported = dataSource === 'import'
+  // Imported previews load only once the user opts in; scanned data is
+  // unaffected. See showImportedImages for why.
+  const canShowImages = !isImported || showImportedImages
+  const importedImageCount = useMemo(
+    () => (isImported ? rows.filter(r => r.metadata?.previewImage).length : 0),
+    [isImported, rows],
+  )
   const progressTitle = 'Scan Progress'
   const progressSummary = null
   const filteredSortedRows = useMemo(() => {
@@ -418,8 +445,16 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
   const infusionSimpleComplete = infusionSimpleStep === INFUSION_SIMPLE_STEPS.length
     && infusionSimpleRunning && !isLoading && infusionScanSucceeded
 
+  /** A fresh scan (or a reset) replaces imported data — its banner must go. */
+  function clearImportProvenance() {
+    setDataSource('scan')
+    setImportMeta(null)
+    setShowImportedImages(false)
+  }
+
   function handleSimpleReset() {
     scanAbortRef.current?.abort()
+    clearImportProvenance()
     setIsLoading(false)
     setAmount('-')
     setRawValue('Raw infusion value will appear here.')
@@ -434,6 +469,82 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
     setInfusionPage(1)
     setInfusionSimpleRunning(false)
     setSimpleInfoOpen(false)
+  }
+
+  /**
+   * Load a scan parsed by `importInfusionScan`.
+   *
+   * This component has no reducer — ~22 useState values, several of which are
+   * read together by `derivePhases`. React batches these setters, so the render
+   * that follows sees all of them at once; setting them across several handlers
+   * would not be safe.
+   *
+   * Two of them are easy to miss and both matter:
+   *  - `metadataProgress` must read as complete, or `derivePhases` renders the
+   *    imported scan as stalled partway through fetching metadata.
+   *  - `bulkStarted` gates the whole results table, so a file whose flag is
+   *    absent but which carries rows still has to switch it on.
+   */
+  function applyImportedScan(parsed, fileName) {
+    scanAbortRef.current?.abort()
+    setIsLoading(false)
+
+    setMode(parsed.mode)
+    setWalletAddress(parsed.walletAddress)
+    setTokenId(parsed.tokenId)
+    setAmount(parsed.amount)
+    setRawValue(parsed.rawValue)
+    setBulkStatus(parsed.bulkStatus)
+    setBulkTotal(parsed.bulkTotal)
+    setBulkExpectedTotal(parsed.bulkExpectedTotal)
+    setScanOutcome(parsed.scanOutcome)
+    setRows(parsed.rows)
+    setBulkStarted(parsed.bulkStarted || parsed.rows.length > 0)
+
+    setMetadataProgress({ total: parsed.rows.length, completed: parsed.rows.length })
+    setRetryProgress({ total: 0, completed: 0, active: false })
+
+    // View-only state, all of it referring to the list just replaced.
+    setBulkPage(1)
+    setBulkSearch('')
+    setBulkSort({ key: '', direction: 'asc' })
+    setSelectedTokenDetails(null)
+    setRetryingTokenIds(new Set())
+    setIsRetryingAllFailed(false)
+    setBulkFailureMessage('')
+
+    // The guided stepper has no "imported" state. Landing on Results keeps an
+    // imported scan visible if the user switches to guided mode afterwards,
+    // rather than hiding it behind a step that never ran.
+    setInfusionPage(INFUSION_SIMPLE_STEPS.length)
+    setInfusionSimpleRunning(false)
+    setSimpleInfoOpen(false)
+
+    setDataSource('import')
+    setImportMeta({ fileName, exportedAt: parsed.exportedAt, appVersion: parsed.appVersion ?? null })
+    setShowImportedImages(false)
+
+    // The file's own log is not replayed — it would read as though these
+    // requests had just been made. One line of provenance instead.
+    const from = fileName ? ` from ${fileName}` : ''
+    const when = parsed.exportedAt ? `, exported ${parsed.exportedAt}` : ''
+    setLogs([{
+      id: nextLogIdRef.current++,
+      level: 'INFO',
+      message: `Imported ${parsed.rows.length} token row(s)${from}${when}. This is file data — nothing was fetched.`,
+      ts: new Date().toLocaleTimeString('en', {
+        hour12: false, hour: '2-digit', minute: '2-digit',
+        second: '2-digit', fractionalSecondDigits: 2,
+      }),
+    }])
+  }
+
+  /** Serialise the current scan for ScanExportPanel. */
+  function buildInfusionExport() {
+    return exportInfusionScan({
+      mode, walletAddress, tokenId, amount, rawValue,
+      bulkStatus, bulkTotal, bulkStarted, bulkExpectedTotal, scanOutcome, rows,
+    })
   }
 
   useEffect(() => {
@@ -526,6 +637,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
   async function handleSingleCheck(event) {
     event.preventDefault()
     const controller = createScanController()
+    clearImportProvenance()
     setInfusionSimpleRunning(true)
     // Tracks which phase card owns a thrown error. Advanced as each stage clears.
     let stage = 'input'
@@ -792,6 +904,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
   async function handleBulkCheck(event) {
     event.preventDefault()
     const controller = createScanController()
+    clearImportProvenance()
     setInfusionSimpleRunning(true)
     // Tracks which phase card owns a thrown error. Advanced as each stage clears.
     let stage = 'wallet'
@@ -919,7 +1032,15 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
         </div>
       </section>
 
-      {simpleMode && (
+      <ToolModeStrip
+        queryLabel="Check"
+        value={infusionTab}
+        onChange={setInfusionTab}
+        idPrefix="infusion"
+      />
+
+      {/* The stepper describes the Check flow, so it hides in Import mode. */}
+      {simpleMode && infusionTab === 'query' && (
         <StepProgress
           steps={INFUSION_SIMPLE_STEPS}
           currentStep={infusionSimpleStep}
@@ -952,7 +1073,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
       )}
 
       {/* ── Simple page 1: Mode selection ── */}
-      {simpleMode && infusionSimpleStep === 1 && !simpleInfoOpen && (
+      {simpleMode && infusionTab === 'query' && infusionSimpleStep === 1 && !simpleInfoOpen && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="section-title">What do you want to check?</h2>
@@ -994,7 +1115,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
       )}
 
       {/* ── Simple page 2: Input ── */}
-      {simpleMode && infusionSimpleStep === 2 && !simpleInfoOpen && (
+      {simpleMode && infusionTab === 'query' && infusionSimpleStep === 2 && !simpleInfoOpen && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="section-title">{mode === 'single' ? 'Enter a token ID or URL' : 'Enter a wallet address'}</h2>
@@ -1049,7 +1170,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
         </div>
       )}
 
-      {!simpleMode && <ToolInfoSection tone="warning">
+      {!simpleMode && infusionTab === 'query' && <ToolInfoSection tone="warning">
         <p>ERC-20 ENJ is different from native ENJ on the Enjin Blockchain.</p>
         <div className="mt-2 grid gap-2 sm:grid-cols-3">
           <div>
@@ -1069,8 +1190,13 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
         <code className="mt-1 block break-all rounded-sm border border-[var(--hairline)] bg-term/80 px-2 py-1 font-mono text-[11px] text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>
       </ToolInfoSection>}
 
-      {(!simpleMode || infusionSimpleStep >= 3) && (
-      <section className={`grid gap-4 ${!simpleMode ? 'xl:grid-cols-3 xl:items-stretch' : ''}`}>
+      {infusionTab === 'query' && (!simpleMode || infusionSimpleStep >= 3) && (
+      <section
+        role="tabpanel"
+        id="infusion-panel-query"
+        aria-labelledby="infusion-tab-query"
+        className={`grid gap-4 ${!simpleMode ? 'xl:grid-cols-3 xl:items-stretch' : ''}`}
+      >
         <div className={`space-y-4 ${!simpleMode ? 'xl:col-span-2' : ''}`}>
           {!simpleMode && (
           <div className="data-panel space-y-4">
@@ -1219,6 +1345,65 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
       </section>
       )}
 
+      {/* ── Import pane — both UI modes ── */}
+      {infusionTab === 'import' && (
+        <div role="tabpanel" id="infusion-panel-import" aria-labelledby="infusion-tab-import">
+          <ScanImportPanel
+            accept={INFUSION_SCAN_ACCEPT}
+            onImport={applyImportedScan}
+            allowEncryption
+            disabled={isLoading}
+          />
+        </div>
+      )}
+
+      {/* Provenance. Rendered in both UI modes — the panel above is
+          advanced-only, but a user can switch to guided mode after importing
+          and the results would otherwise look like a live scan. */}
+      {isImported && importMeta && (
+        <div className="space-y-2 rounded-sm border border-cyan/30 bg-cyan/10 px-3 py-2 text-xs text-cyan">
+          <div className="flex items-start gap-2">
+            <FileDown size={14} className="mt-0.5 flex-shrink-0" />
+            <p className="min-w-0 flex-1">
+              Showing imported data
+              {importMeta.fileName && <> from <span className="break-all font-mono">{importMeta.fileName}</span></>}
+              {importMeta.exportedAt && <> · exported {formatExportedAtUTC(importMeta.exportedAt)}</>}
+              {importMeta.appVersion && <> · EnjinSight v{importMeta.appVersion}</>}
+              {' '}· {rows.length} token row{rows.length === 1 ? '' : 's'}.
+              {' '}Nothing was fetched.
+            </p>
+            {/* Advanced mode has no Reset control of its own — the guided
+                stepper owns the only one — so without this the banner and the
+                imported rows could only be cleared by running a new scan. */}
+            <button
+              type="button"
+              onClick={handleSimpleReset}
+              className="btn-secondary shrink-0 px-3 py-1 text-xs"
+            >
+              Clear
+            </button>
+          </div>
+          {importedImageCount > 0 && !showImportedImages && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-cyan/20 pt-2">
+              <p className="min-w-0 flex-1">
+                {importedImageCount === 1
+                  ? '1 token preview image in this file is not loaded.'
+                  : `${importedImageCount} token preview images in this file are not loaded.`}
+                {' '}Loading {importedImageCount === 1 ? 'it' : 'them'} requests the image from
+                whoever the file names, which reveals that you opened it.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowImportedImages(true)}
+                className="btn-secondary shrink-0 px-3 py-1 text-xs"
+              >
+                Load images
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {mode === 'wallet' && bulkStarted && (!simpleMode || infusionSimpleStep >= 3) && (
       <section ref={bulkResultRef} className="data-panel space-y-4">
         {isLoading && (
@@ -1345,7 +1530,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
                     )}
                   </td>
                   <td className="px-3 py-3 text-center">
-                    {row.metadata?.previewImage ? (
+                    {row.metadata?.previewImage && canShowImages ? (
                       <img
                         src={row.metadata.previewImage}
                         alt={row.metadata.name ? `${row.metadata.name} preview` : 'Token preview'}
@@ -1445,8 +1630,20 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
       </section>
       )}
 
+      {/* No re-export of imported data, matching the Balance Viewer and the
+          Staking Cadence panels. */}
+      {!simpleMode && !isImported && rows.length > 0 && (
+        <ScanExportPanel
+          schema={SCAN_SCHEMAS.INFUSION}
+          buildContent={buildInfusionExport}
+          allowEncryption
+          disabled={isLoading}
+        />
+      )}
+
       <TokenDetailsModal
         row={selectedTokenDetails}
+        showImages={canShowImages}
         onClose={() => setSelectedTokenDetails(null)}
       />
 
@@ -1455,7 +1652,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
   )
 }
 
-function TokenDetailsModal({ row, onClose }) {
+function TokenDetailsModal({ row, showImages = true, onClose }) {
   const metadata = row?.metadata
 
   return (
@@ -1487,7 +1684,7 @@ function TokenDetailsModal({ row, onClose }) {
 
           <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
             <div className="rounded-sm bg-card p-3 border border-[var(--hairline)]">
-              {metadata?.previewImage ? (
+              {metadata?.previewImage && showImages ? (
                 <img
                   src={metadata.previewImage}
                   alt={metadata.name ? `${metadata.name} preview` : 'Token preview'}
