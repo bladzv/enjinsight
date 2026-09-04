@@ -77,12 +77,19 @@ export function resolveLatestEra(validators) {
  * Same logic as computeMissedEras but operates on reward events
  * (each with an `era` field) rather than era_stat records.
  *
- * @param {Array}  eraRewards - array of { era: number, ... } from reward_slash
- * @param {number} latestEra  - the global latest era
- * @param {number} eraCount   - user's requested N
+ * `provisionalEra`, when given, is the era whose payout window is the era
+ * currently in progress. Its rewards are still being distributed, so the absence
+ * of one is not evidence of a miss — counting it would raise an alert that
+ * clears itself a few hours later. It is reported in the table but never
+ * classified as missed.
+ *
+ * @param {Array}  eraRewards     - array of { era: number, ... } from reward_slash
+ * @param {number} latestEra      - the global latest era
+ * @param {number} eraCount       - user's requested N
+ * @param {number|null} provisionalEra - era with a still-open payout window
  * @returns {number[]} sorted descending list of missing era numbers
  */
-export function computePoolMissedEras(eraRewards, latestEra, eraCount) {
+export function computePoolMissedEras(eraRewards, latestEra, eraCount, provisionalEra = null) {
   if (!latestEra || !eraCount) return []
   const expected = new Set(
     Array.from({ length: eraCount }, (_, i) => latestEra - i)
@@ -92,6 +99,7 @@ export function computePoolMissedEras(eraRewards, latestEra, eraCount) {
   )
   return [...expected]
     .filter(era => !received.has(era))
+    .filter(era => era !== provisionalEra)
     .sort((a, b) => b - a)
 }
 

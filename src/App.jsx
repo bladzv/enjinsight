@@ -143,6 +143,7 @@ export default function App() {
     status: pStatus, pools, logs: pLogs,
     runCheck: pRunCheck, stop: pStop, reset: pReset, retryPoolValidator: pRetryPoolValidator,
     latestEra: poolLatestEra,
+    provisionalEra: poolProvisionalEra,
     progress: pProgress,
   } = usePoolChecker()
 
@@ -576,6 +577,7 @@ export default function App() {
                   pool={p}
                   eraCount={lastEraCount}
                   latestEra={poolLatestEra}
+                  provisionalEra={poolProvisionalEra}
                   onRetry={pRetryPoolValidator}
                   open={selectedPoolId === p.poolId}
                   onOpenChange={next => setSelectedPoolId(next ? p.poolId : null)}

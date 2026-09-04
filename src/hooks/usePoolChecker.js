@@ -6,18 +6,24 @@ import {
 } from '../utils/api.js'
 import { enqueueRequest } from '../utils/api.js'
 import { loadEraCsvRows } from '../utils/eraCache.js'
+import { fetchEraBoundariesFromRpc } from '../utils/eraRpc.js'
+import { fetchLiveChainInfo } from '../utils/chainInfo.js'
 import { computePoolMissedEras } from '../utils/eraAnalysis.js'
 import { nowHHMMSS, safeInt, truncateAddress, poolLabel, parseCommission } from '../utils/format.js'
 import {
   ERA_VALIDATORS_SAMPLE, API_DELAY_MS, SUBSCAN_MAX_ROW,
   DEFAULT_ERA_COUNT, MIN_ERA_COUNT, MAX_ERA_COUNT, MAX_RETRY_ATTEMPTS,
-  POOL_ENDPOINTS_TO_PROBE, ENDPOINTS,
+  MAX_ERA_RPC_TOPUP, POOL_ENDPOINTS_TO_PROBE, ENDPOINTS, ENJIN_NETWORKS,
 } from '../constants.js'
-import { clampInt } from '../utils/substrate.js'
+import { clampInt, validateWsEndpoint } from '../utils/substrate.js'
 
 // Offline era boundary reference, shipped in public/ and shared with the other
 // era-aware tools. Loaded through the same localStorage-cached helper they use.
 const RELAY_ERA_CSV = '/relay-era-reference.csv'
+
+// Archive node for the relay chain, taken from the shared network table rather
+// than hardcoded so it stays in step with the other era-aware tools.
+const RELAY_ARCHIVE_WSS = ENJIN_NETWORKS.find(n => n.key === 'relaychain')?.endpoint ?? ''
 
 // ── State shape ────────────────────────────────────────────────────────────
 const initialState = {
@@ -26,6 +32,9 @@ const initialState = {
   logs:    [],
   proxyUrl: '',
   progress: null,
+  // Era whose payout window is the era in progress: reported, but its rewards
+  // are still landing, so it is never counted as a missed payout.
+  provisionalEra: null,
 }
 
 // ── Reducer ────────────────────────────────────────────────────────────────
@@ -39,6 +48,7 @@ function reducer(state, action) {
         status: 'loading',
         pools: [],
         logs: [],
+        provisionalEra: null,
         progress: {
           phases: [
             { key: 'probe',      label: 'Check API Endpoints',        total: POOL_ENDPOINTS_TO_PROBE.length, completed: 0, status: 'in_progress' },
@@ -64,6 +74,9 @@ function reducer(state, action) {
 
     case 'SET_POOLS':
       return { ...state, pools: action.payload }
+
+    case 'SET_PROVISIONAL_ERA':
+      return { ...state, provisionalEra: action.payload }
 
     case 'PATCH_POOL': {
       const pools = state.pools.map(p =>
@@ -124,34 +137,54 @@ export function buildEraRangeMap(rows) {
  * era, so a gap in the reference data reduces the number of eras reported rather
  * than silently widening the window further into the past.
  *
- * @returns {{maxClosedEra:number, completedEras:number[], skipped:number[]}}
+ * `liveEra` is the era currently in progress on chain, and it splits the newest
+ * era into its own category. Subscan reports an `end_block_num` for the live era
+ * too — the current chain head, not a real era boundary — so a range carrying
+ * `partial: true` is known but still filling. The era whose payout window is
+ * that partial range is *provisional*: worth reporting, because most payouts
+ * land early in the window, but its absence of a reward is not yet evidence of
+ * a miss. It is returned at the head of `completedEras` and named separately as
+ * `provisionalEra` so callers can label it and exclude it from miss detection.
+ *
+ * Pass `liveEra` as null when the live era genuinely could not be determined;
+ * the function then falls back to closed ranges only, and reports no
+ * provisional era.
+ *
+ * @returns {{maxClosedEra:number, completedEras:number[], skipped:number[],
+ *            provisionalEra:number|null}}
  *          completedEras is newest-first; skipped lists in-window eras whose
  *          payout range is unknown.
  */
-export function selectCheckableEras(eraRangeMap, eraCount) {
+export function selectCheckableEras(eraRangeMap, eraCount, liveEra = null) {
+  // A range is usable as a payout window once its bounds are known; it is
+  // *closed* only when those bounds are final.
+  const isUsable = r => !!(r && r.start > 0 && r.end > 0)
+  const isClosed = r => isUsable(r) && r.partial !== true
+
   const closed = [...eraRangeMap.entries()]
-    .filter(([, r]) => r?.start > 0 && r?.end > 0)
+    .filter(([era, r]) => isClosed(r) && (liveEra == null || era < liveEra))
     .map(([era]) => era)
-  if (closed.length === 0) return { maxClosedEra: 0, completedEras: [], skipped: [] }
+  if (closed.length === 0) {
+    return { maxClosedEra: 0, completedEras: [], skipped: [], provisionalEra: null }
+  }
 
   const maxClosedEra = Math.max(...closed)
+
+  // Era N is provisional when its payout era N+1 is the one in progress.
+  let provisionalEra = null
+  if (liveEra != null) {
+    const livePayout = eraRangeMap.get(liveEra)
+    if (isUsable(livePayout) && !isClosed(livePayout)) provisionalEra = liveEra - 1
+  }
+
+  const newest = provisionalEra ?? (maxClosedEra - 1)
   const completedEras = []
   const skipped = []
-  for (let era = maxClosedEra - 1; era > 0 && era > maxClosedEra - 1 - eraCount; era--) {
-    const payout = eraRangeMap.get(era + 1)
-    if (payout && payout.start > 0 && payout.end > 0) completedEras.push(era)
+  for (let era = newest; era > 0 && era > newest - eraCount; era--) {
+    if (isUsable(eraRangeMap.get(era + 1))) completedEras.push(era)
     else skipped.push(era)
   }
-  return { maxClosedEra, completedEras, skipped }
-}
-
-/** Fisher-Yates shuffle (in-place) */
-function shuffle(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[arr[i], arr[j]] = [arr[j], arr[i]]
-  }
-  return arr
+  return { maxClosedEra, completedEras, skipped, provisionalEra }
 }
 
 // ── Hook ───────────────────────────────────────────────────────────────────
@@ -332,7 +365,7 @@ export function usePoolChecker() {
     }
     log('OK', `${allCollectedValidators.length} validator references collected across ${pools.length} pools (${uniqueValidators.length} unique). Step 2 completed in ${elapsed(s2)}s.`)
 
-    log('INFO', '─── Step 3: Resolving era block ranges (offline era reference + Subscan top-up) ───')
+    log('INFO', '─── Step 3: Resolving era block ranges (era reference + live era + Subscan / RPC top-up) ───')
     const s3 = Date.now()
     if (uniqueValidators.length === 0) {
       log('ERR', 'No nominated validators found — cannot resolve era block ranges.')
@@ -359,64 +392,218 @@ export function usePoolChecker() {
       log('WARN', 'Era reference CSV unavailable — resolving every era range from Subscan instead.')
     }
 
-    // Top-up: the CSV is regenerated periodically, so the newest eras (and the
-    // in-progress one) are normally absent from it. A single era_stat call fills
-    // that tail and reveals which era is currently live. Validators are tried in
-    // turn only because one address can return an empty list — this is a retry,
-    // not the old cross-validator vote: the CSV is now the trusted backbone.
+    // Observe the live era rather than inferring it. Everything below — which
+    // eras are missing, which are checkable, whether the window is honest —
+    // is measured against the chain's own answer. The previous code derived it
+    // from whatever data happened to arrive, so a stale reference file simply
+    // moved the whole window into the past without ever saying so.
+    let liveEra = null
+    let liveBlock = 0
+    try {
+      const wss  = validateWsEndpoint(RELAY_ARCHIVE_WSS)
+      const info = await fetchLiveChainInfo(wss)
+      const observed = safeInt(info?.era)
+      liveBlock = safeInt(info?.block)
+      if (observed > 0) {
+        liveEra = observed
+        log('OK', `Live era read from the archive node: ${liveEra}.`)
+      } else {
+        log('WARN', 'Archive node did not report an active era — falling back to Subscan for the live era.')
+      }
+    } catch (err) {
+      log('WARN', `Could not read the live era from the archive node (${err?.message || 'unknown error'}) — falling back to Subscan.`)
+    }
+    if (signal.aborted) return
+
+    // An era is usable as a payout window only when its range is closed, and the
+    // era currently in progress never is. Rewards for era N land during N+1, so
+    // checking the newest `eraCount` eras needs closed ranges for the eras from
+    // (live - eraCount) through (live - 1).
+    const isRangeComplete = era => {
+      const r = eraRangeMap.get(era)
+      return !!(r && r.start > 0 && r.end > 0)
+    }
+    const missingWindowEras = (targetLiveEra) => {
+      if (!targetLiveEra) return []
+      const out = []
+      for (let era = Math.max(1, targetLiveEra - eraCount); era <= targetLiveEra - 1; era++) {
+        if (!isRangeComplete(era)) out.push(era)
+      }
+      return out
+    }
+
+    // Top-up 1 (cheap): Subscan era_stat. The CSV is regenerated periodically, so
+    // the newest eras are normally absent from it.
+    //
+    // era_stat is address-scoped — it only covers eras in which that validator
+    // was in the active set — so a single sample is not authoritative. Earlier
+    // this loop shuffled the candidates and stopped at the first response that
+    // did not throw, which meant a validator that had dropped out of the set
+    // returned a stale tail, added nothing, and ended the search: the scan then
+    // silently reported a window several eras into the past, differently on each
+    // run. Now the candidates are taken in a stable order (most-nominated first,
+    // as those are the most likely to still be active), results are merged
+    // across them, and the loop stops early only once the window is actually
+    // covered.
+    const refCounts = new Map()
+    for (const v of allCollectedValidators) {
+      refCounts.set(v.address, (refCounts.get(v.address) ?? 0) + 1)
+    }
+    const candidates = [...uniqueValidators]
+      .sort((a, b) => (refCounts.get(b.address) ?? 0) - (refCounts.get(a.address) ?? 0))
+      .slice(0, ERA_VALIDATORS_SAMPLE)
+
     const topUpRows = csvMaxEra > 0 ? SUBSCAN_MAX_ROW : eraCount + 1
+    const staged = new Map()
     let subscanMaxEra = 0
-    shuffle(uniqueValidators)
-    for (const v of uniqueValidators.slice(0, ERA_VALIDATORS_SAMPLE)) {
+    let subscanReplied = false
+
+    for (const v of candidates) {
       if (signal.aborted) return
       const vLabel = v.display || truncateAddress(v.address)
       try {
         const list = await fetchEraStat(v.address, topUpRows, proxy, signal)
-        let added = 0
-        let mismatched = 0
+        subscanReplied = true
         for (const e of (list ?? [])) {
           const era   = safeInt(e?.era)
           const start = safeInt(e?.start_block_num)
           const end   = safeInt(e?.end_block_num)
           if (era <= 0) continue
           if (era > subscanMaxEra) subscanMaxEra = era
-          const known = eraRangeMap.get(era)
-          if (known) {
-            // The CSV wins on conflict: it is a verified, checked-in artefact.
-            if (start > 0 && end > 0 && (known.start !== start || known.end !== end)) mismatched++
-            continue
-          }
-          if (start > 0) { eraRangeMap.set(era, { start, end }); added++ }
+          if (start > 0 && !staged.has(era)) staged.set(era, { start, end })
         }
-        log('OK', `Era ranges topped up from ${vLabel}: ${added} era(s) added (live era ${subscanMaxEra || 'unknown'}).`)
-        if (mismatched > 0) {
-          log('WARN', `${mismatched} era(s) disagree between the era reference CSV and Subscan — keeping the CSV values.`)
-        }
-        break
+        log('OK', `Era stats from ${vLabel}: ${(list ?? []).length} era(s) reported (newest era ${subscanMaxEra || 'unknown'}).`)
       } catch (err) {
-        log('WARN', `Era stat top-up failed for ${vLabel}: ${err?.message || 'unknown error'}. Trying next validator…`)
+        log('WARN', `Era stat lookup failed for ${vLabel}: ${err?.message || 'unknown error'}. Trying next validator…`)
         await delay(API_DELAY_MS)
+        continue
+      }
+      // Stop early only when the staged rows actually close the window.
+      const target = liveEra ?? subscanMaxEra
+      if (target > 0) {
+        const stillShort = missingWindowEras(target)
+          .some(era => !staged.has(era) || !(staged.get(era).start > 0 && staged.get(era).end > 0))
+        if (!stillShort) break
+      }
+    }
+    if (signal.aborted) return
+    if (!subscanReplied) {
+      // Previously a WARN. It is not a warning: with no Subscan reply and a
+      // reference file that is days old, the scan is about to report a window
+      // well into the past as though it were current.
+      log('ERR', `Era stat lookup failed for all ${candidates.length} sampled validator(s) — the era window may be well behind the chain. Check the API key and network, then retry.`)
+    }
+
+    // Subscan's end_block_num for the live era is the current chain head rather
+    // than an era boundary, so that range is recorded as `partial`. It is still
+    // worth having: it is the payout window for the era below it, which lets
+    // that era be reported as provisional rather than withheld until tomorrow.
+    // What it must not do is masquerade as closed — see selectCheckableEras.
+    const effectiveLiveEra = liveEra ?? (subscanMaxEra > 0 ? subscanMaxEra : csvMaxEra + 1)
+    let added = 0
+    let mismatched = 0
+    let openAdded = 0
+    for (const [era, r] of [...staged.entries()].sort((a, b) => a[0] - b[0])) {
+      const known = eraRangeMap.get(era)
+      if (known) {
+        // The CSV wins on conflict: it is a verified, checked-in artefact.
+        if (r.start > 0 && r.end > 0 && (known.start !== r.start || known.end !== r.end)) mismatched++
+        continue
+      }
+      if (!(r.start > 0 && r.end > 0)) continue
+      if (era >= effectiveLiveEra) {
+        eraRangeMap.set(era, { start: r.start, end: r.end, partial: true })
+        openAdded++
+      } else {
+        eraRangeMap.set(era, { start: r.start, end: r.end })
+        added++
+      }
+    }
+    if (added > 0 || openAdded > 0) {
+      log('OK', `Subscan top-up: ${added} closed era(s) added${openAdded > 0 ? `, plus the in-progress era ${effectiveLiveEra} as an open payout window` : ''}.`)
+    }
+    if (mismatched > 0) {
+      log('WARN', `${mismatched} era(s) disagree between the era reference CSV and Subscan — keeping the CSV values.`)
+    }
+
+    // Top-up 2 (expensive, last resort): binary-search the archive node for any
+    // era the reference file and Subscan between them could not supply. Each era
+    // costs a search over the chain head, so the gap is capped rather than ground
+    // through silently.
+    const rpcNeeded = missingWindowEras(liveEra)
+    if (rpcNeeded.length > 0 && liveEra) {
+      if (rpcNeeded.length > MAX_ERA_RPC_TOPUP) {
+        log('WARN', `${rpcNeeded.length} era(s) in the requested window are missing block ranges — beyond the ${MAX_ERA_RPC_TOPUP}-era archive lookup cap. Update ${RELAY_ERA_CSV} to close the gap.`)
+      } else {
+        log('INFO', `${rpcNeeded.length} era(s) still missing block ranges (${rpcNeeded.join(', ')}) — resolving from the archive node. This takes a moment.`)
+        try {
+          const wss     = validateWsEndpoint(RELAY_ARCHIVE_WSS)
+          const rpcRows = await fetchEraBoundariesFromRpc(wss, rpcNeeded, signal)
+          if (signal.aborted) return
+          let rpcAdded = 0
+          for (const era of rpcNeeded) {
+            const row = rpcRows?.[era]
+            const start = safeInt(row?.startBlock)
+            const end   = safeInt(row?.endBlock)
+            if (start > 0 && end > 0) { eraRangeMap.set(era, { start, end }); rpcAdded++ }
+          }
+          log(rpcAdded === rpcNeeded.length ? 'OK' : 'WARN',
+            `Archive node resolved ${rpcAdded}/${rpcNeeded.length} missing era range(s).`)
+        } catch (err) {
+          if (signal.aborted) return
+          log('WARN', `Archive era lookup failed: ${err?.message || 'unknown error'}. Continuing with the ranges already resolved.`)
+        }
       }
     }
     if (signal.aborted) return
 
-    const { maxClosedEra, completedEras, skipped } = selectCheckableEras(eraRangeMap, eraCount)
+    // The newest era is reportable only if the open payout window — the live
+    // era's range — is known. Subscan normally supplies it above; when it does
+    // not, synthesise it from the chain itself: the archive gives the live era's
+    // start block and fetchLiveChainInfo already gave us the head it runs to.
+    if (liveEra && liveBlock > 0 && !eraRangeMap.has(liveEra)) {
+      try {
+        const wss  = validateWsEndpoint(RELAY_ARCHIVE_WSS)
+        const rows = await fetchEraBoundariesFromRpc(wss, [liveEra], signal)
+        if (signal.aborted) return
+        const start = safeInt(rows?.[liveEra]?.startBlock)
+        if (start > 0 && liveBlock > start) {
+          eraRangeMap.set(liveEra, { start, end: liveBlock, partial: true })
+          log('OK', `Open payout window for era ${liveEra} resolved from the archive node (blocks ${start}–${liveBlock}).`)
+        }
+      } catch (err) {
+        if (signal.aborted) return
+        log('WARN', `Could not resolve the open payout window for era ${liveEra} (${err?.message || 'unknown error'}) — era ${liveEra - 1} will be withheld until it closes.`)
+      }
+    }
+    if (signal.aborted) return
+
+    const { maxClosedEra, completedEras, skipped, provisionalEra } = selectCheckableEras(eraRangeMap, eraCount, liveEra)
     if (maxClosedEra === 0) {
-      log('ERR', 'No complete era block ranges available from the era reference CSV or Subscan.')
+      log('ERR', 'No complete era block ranges available from the era reference CSV, Subscan or the archive node.')
       dispatch({ type: 'ERROR' })
       return
     }
-    const currentEra = Math.max(subscanMaxEra, maxClosedEra + 1)
+    const currentEra = liveEra ?? Math.max(subscanMaxEra, maxClosedEra + 1)
     if (skipped.length > 0) {
       log('WARN', `${skipped.length} era(s) in the requested window have no known payout block range and were skipped: ${[...skipped].sort((a, b) => a - b).join(', ')}.`)
     }
 
+    // With the open payout window available, the newest reportable era is one
+    // below the live era; without it, two. Warn only when the window lags beyond
+    // that structural offset — the offset itself is correct behaviour, and
+    // reporting it as a problem trained the reader to ignore the message.
     const latestCompletedEra = completedEras[0] ?? 0
-    if (latestCompletedEra > 0 && currentEra - 1 > latestCompletedEra) {
-      log('WARN', `Newest checkable era is ${latestCompletedEra}, ${currentEra - 1 - latestCompletedEra} era(s) behind the latest completed era (${currentEra - 1}) — payout block ranges for the gap are not available yet.`)
+    const expectedNewest = currentEra - (provisionalEra != null ? 1 : 2)
+    if (latestCompletedEra > 0 && expectedNewest > latestCompletedEra) {
+      log('WARN', `Newest reported era is ${latestCompletedEra}, ${expectedNewest - latestCompletedEra} era(s) behind the newest that should be available (${expectedNewest}) — block ranges for the gap could not be resolved.`)
     }
     const erasAscending = [...completedEras].sort((a, b) => a - b).join(', ')
-    log('OK', `Era block ranges resolved: current era ${currentEra} (excluded), ${completedEras.length} completed era(s): ${erasAscending}. Step 3 completed in ${elapsed(s3)}s.`)
+    log('OK', `Era block ranges resolved: live era ${liveEra ?? `${currentEra} (inferred)`}. ${completedEras.length} era(s) to check: ${erasAscending}. Step 3 completed in ${elapsed(s3)}s.`)
+    dispatch({ type: 'SET_PROVISIONAL_ERA', payload: provisionalEra })
+    if (provisionalEra != null) {
+      log('WARN', `Era ${provisionalEra} is PROVISIONAL: its payout window is era ${currentEra}, which is still in progress. Rewards for it are still landing, so a pool showing none yet is not necessarily missing a payout — it is excluded from missed-era detection until era ${currentEra} closes.`)
+    }
     phases[3] = { ...phases[3], completed: 1, status: 'completed' }
     phases[4] = { ...phases[4], total: pools.length, completed: 0, status: 'in_progress' }
     syncProgress()
@@ -471,7 +658,7 @@ export function usePoolChecker() {
 
         const poolVals = poolValidatorsMap.get(p.poolId) ?? []
         const eraValidatorBreakdown = buildEraValidatorBreakdown(allRewards, poolVals, completedEras)
-        const missedEras = computePoolMissedEras(allRewards, latestCompletedEra, completedEras.length)
+        const missedEras = computePoolMissedEras(allRewards, latestCompletedEra, completedEras.length, provisionalEra)
         dispatch({
           type: 'PATCH_POOL',
           poolId: p.poolId,

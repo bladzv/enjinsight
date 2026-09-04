@@ -41,6 +41,12 @@ export const SUBSCAN_MAX_ROW       = 25
 // Guards the 20,000 req/day free-tier quota against a runaway loop.
 export const SUBSCAN_MAX_PAGES     = 400
 export const ERA_VALIDATORS_SAMPLE = 3    // validators to try when topping up era block ranges from Subscan
+// Upper bound on eras the Pool Checker will resolve over archive RPC when the
+// era reference CSV and Subscan between them cannot close the gap to the live
+// era. Each era costs a binary search over the chain head (~50 RPC calls), so
+// this is a cost guard: a gap wider than this means something is wrong with the
+// reference data, and grinding through it silently is worse than saying so.
+export const MAX_ERA_RPC_TOPUP     = 8
 
 // ── Defaults ───────────────────────────────────────────────────────────────
 export const DEFAULT_ERA_COUNT     = 2
