@@ -1029,6 +1029,26 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
         </div>
       </section>
 
+      <ToolInfoSection tone="warning">
+        <p>ERC-20 ENJ is different from native ENJ on the Enjin Blockchain.</p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+          <div>
+            <p className="metric-label">Contract</p>
+            <p className="mt-1 break-all font-mono text-[11px] leading-snug text-text">{CONTRACT_ADDRESS}</p>
+          </div>
+          <div>
+            <p className="metric-label">RPC</p>
+            <p className="mt-1 font-semibold text-text">Alchemy/Etherscan</p>
+          </div>
+          <div>
+            <p className="metric-label">Scope</p>
+            <p className="mt-1 font-semibold text-text">ERC-1155, Ethereum Mainnet</p>
+          </div>
+        </div>
+        <p className="mt-3"><span className="font-semibold text-text">Wallet scan.</span> Wallet token lists can be incomplete. If a token is missing, use Token ID scan with its Etherscan NFT URL or paste the token ID found after:</p>
+        <code className="mt-1 block break-all rounded-sm border border-[var(--hairline)] bg-term/80 px-2 py-1 font-mono text-[11px] text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>
+      </ToolInfoSection>
+
       <ToolModeStrip
         queryLabel="Check"
         value={infusionTab}
@@ -1044,28 +1064,6 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
           complete={infusionSimpleComplete}
           onReset={infusionSimpleStep > 1 ? handleSimpleReset : undefined}
         />
-      )}
-
-      {infusionTab === 'query' && (
-        <ToolInfoSection tone="warning">
-          <p>ERC-20 ENJ is different from native ENJ on the Enjin Blockchain.</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            <div>
-              <p className="metric-label">Contract</p>
-              <p className="mt-1 break-all font-mono text-[11px] leading-snug text-text">{CONTRACT_ADDRESS}</p>
-            </div>
-            <div>
-              <p className="metric-label">RPC</p>
-              <p className="mt-1 font-semibold text-text">Alchemy/Etherscan</p>
-            </div>
-            <div>
-              <p className="metric-label">Scope</p>
-              <p className="mt-1 font-semibold text-text">ERC-1155, Ethereum Mainnet</p>
-            </div>
-          </div>
-          <p className="mt-3"><span className="font-semibold text-text">Wallet scan.</span> Wallet token lists can be incomplete. If a token is missing, use Token ID scan with its Etherscan NFT URL or paste the token ID found after:</p>
-          <code className="mt-1 block break-all rounded-sm border border-[var(--hairline)] bg-term/80 px-2 py-1 font-mono text-[11px] text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>
-        </ToolInfoSection>
       )}
 
       {/* ── Simple page 1: Mode selection ── */}

@@ -638,6 +638,10 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
         </div>
       </section>
 
+      <ToolInfoSection tone="warning">
+        <p>Archive RPC queries take longer over wide ranges. Narrowing the window or increasing the step reduces query time and sample count.</p>
+      </ToolInfoSection>
+
       <ToolModeStrip
         queryLabel="Query Node"
         value={tab}
@@ -653,12 +657,6 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
           complete={balanceSimpleComplete}
           onReset={balanceSimpleStep > 1 ? () => { reset(); setQueriedAddress(''); setBalancePage(1); setBalanceSimpleRunning(false) } : undefined}
         />
-      )}
-
-      {tab === 'query' && (
-        <ToolInfoSection tone="warning">
-          <p>Archive RPC queries take longer over wide ranges. Narrowing the window or increasing the step reduces query time and sample count.</p>
-        </ToolInfoSection>
       )}
 
       {/* ── Simple page 1: Address + Network ── */}
