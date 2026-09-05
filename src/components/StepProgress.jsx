@@ -1,5 +1,4 @@
-import { useState, useId } from 'react'
-import { Info, RotateCcw } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 import SuccessCheck from './SuccessCheck.jsx'
 import HoldButton from './HoldButton.jsx'
 
@@ -34,8 +33,6 @@ export function getStepState({ index, currentStep, total, complete = false }) {
  *   complete    – true once the run has *successfully* finished; checks the
  *                 final step instead of leaving it rendered as active
  *   onReset     – optional callback; renders a Reset button when provided
- *   infoContent – optional ReactNode; when provided renders a cyan (i) circle
- *                 as the zeroth item. Clicking it toggles an info panel below.
  *   className   – extra classes on the root element
  */
 export default function StepProgress({
@@ -43,32 +40,14 @@ export default function StepProgress({
   currentStep,
   complete = false,
   onReset,
-  infoContent,
-  infoOpen: infoOpenProp,
-  onInfoOpenChange,
   className = '',
 }) {
-  const [infoOpenState, setInfoOpenState] = useState(false)
-  const isControlled = infoOpenProp !== undefined
-  const infoOpen = isControlled ? infoOpenProp : infoOpenState
-  const total    = steps.length
-  const hasInfo  = !!infoContent
-  const infoPanelId = useId()
+  const total = steps.length
 
-  function handleToggle() {
-    const next = !infoOpen
-    if (!isControlled) setInfoOpenState(next)
-    onInfoOpenChange?.(next)
-  }
-
-  // Fill fraction:
-  //   • Without info circle: (currentStep-1) / (total-1)   — 0 at step 1, 1 at last step
-  //   • With    info circle: currentStep / total             — fills to each step's column
+  // Fill fraction: 0 at step 1, 1 at last step
   const progress = complete
     ? 1
-    : hasInfo
-      ? total > 0 ? Math.max(0, Math.min(1, currentStep / total)) : 1
-      : total > 1 ? Math.max(0, Math.min(1, (currentStep - 1) / (total - 1))) : 1
+    : total > 1 ? Math.max(0, Math.min(1, (currentStep - 1) / (total - 1))) : 1
 
   return (
     <div className={`space-y-3 ${className}`}>
@@ -84,33 +63,6 @@ export default function StepProgress({
 
           {/* All circles in one justify-between row */}
           <div className="relative flex justify-between">
-
-            {/* ── (i) info circle ── */}
-            {hasInfo && (
-              <div className="flex flex-col items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleToggle}
-                  aria-label={infoOpen ? 'Hide info' : 'Show info'}
-                  aria-expanded={infoOpen}
-                  aria-controls={infoPanelId}
-                  className={[
-                    'relative z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all duration-300 overflow-hidden',
-                    infoOpen
-                      ? 'border-cyan bg-card text-cyan'
-                      : 'border-cyan/40 bg-card text-cyan/60 hover:border-cyan hover:text-cyan',
-                  ].join(' ')}
-                >
-                  {infoOpen && (
-                    <span className="absolute inset-0 bg-cyan/15" aria-hidden="true" />
-                  )}
-                  <span className="relative"><Info size={13} /></span>
-                </button>
-                <span className="hidden sm:block text-[9px] font-bold uppercase tracking-[0.16em] whitespace-nowrap text-muted">
-                  Info
-                </span>
-              </div>
-            )}
 
             {/* ── Numbered steps ── */}
             {steps.map((step, index) => {
@@ -162,27 +114,6 @@ export default function StepProgress({
           </HoldButton>
         )}
       </div>
-
-      {/* ── Collapsible info panel — grid-rows accordion, no JS height
-          measurement. Stays mounted so it can animate closed as well as
-          open; the border/background live one level in so overflow:hidden
-          on the row clips it cleanly at 0fr instead of leaving a border
-          sliver. */}
-      {hasInfo && (
-        <div
-          id={infoPanelId}
-          className={`accordion-rows ${infoOpen ? 'accordion-rows-open' : ''}`}
-          aria-hidden={!infoOpen}
-        >
-          <div className="accordion-rows-inner">
-            <div className="mx-auto max-w-2xl rounded-sm border border-cyan/20 bg-card">
-              <div className="px-3 py-3 text-xs leading-relaxed text-text-secondary sm:px-4 sm:text-sm sm:leading-6">
-                {infoContent}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

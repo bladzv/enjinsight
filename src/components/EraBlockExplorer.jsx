@@ -14,6 +14,7 @@ import CopyButton from './CopyButton.jsx'
 import Field from './Field.jsx'
 import ScanStatusBar from './ScanStatusBar.jsx'
 import Skeleton, { SkeletonSwap } from './Skeleton.jsx'
+import ToolInfoSection from './ToolInfoSection.jsx'
 
 const HEARTBEAT_PATH = 'M0 20 L20 20 L25 10 L30 30 L35 20 L100 20'
 
@@ -170,7 +171,7 @@ export default function EraBlockExplorer() {
     <main id="main-content" className="relative z-10 mx-auto w-full max-w-[100rem] space-y-4 px-3 py-4 pb-32 sm:space-y-5 sm:px-6 sm:py-6">
       {/* Hero */}
       <section className="page-hero">
-        <div className="relative z-10 flex flex-col gap-3 sm:gap-4">
+        <div className="relative z-10 flex flex-col gap-2 sm:gap-3">
           <div className="hero-kicker self-start">
             <span className={`h-1.5 w-1.5 rounded-full ${statusCfg.dot}`} />
             <span>{statusCfg.label}</span>
@@ -197,6 +198,13 @@ export default function EraBlockExplorer() {
           </div>
         </div>
       </section>
+
+      <ToolInfoSection tone="warning">
+        <p className="font-semibold text-text">Two data sources, two purposes</p>
+        <p className="mt-1">The live tiles above come from a direct WebSocket connection to the Enjin Relaychain and update in real time. The era lookup below reads from a cached CSV of 1,000+ past era boundaries, refreshed at load, plus an on-demand archive-node query for anything the cache doesn't cover yet.</p>
+        <p className="mt-2"><span className="font-semibold text-text">Era length is nominal, not fixed.</span> An era targets 14,400 blocks (6 sessions of 2,400 blocks each), but real lengths vary — skipped slots shorten them, and a stall can stretch one well past target. Boundaries here are measured, not assumed: the start block comes from the cached CSV or an archive-node search for the first block of the era, and the end block is taken from the block before the next era begins. If no source covers the next era, the end block falls back to the nominal length and is labelled <span className="font-semibold text-text">estimated</span>.</p>
+        <p className="mt-2"><span className="font-semibold text-text">No wallet data.</span> This tool reports chain-wide state only; it does not look up an address or account.</p>
+      </ToolInfoSection>
 
       {/* Live telemetry grid */}
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
@@ -348,9 +356,17 @@ export default function EraBlockExplorer() {
                 </p>
               </div>
               <div className="metric-card">
-                <p className="metric-label">End Block</p>
+                <p className="metric-label">
+                  End Block
+                  {lookup.endExact === false && (
+                    <span className="ml-1.5 text-[10px] font-normal text-warning">estimated</span>
+                  )}
+                </p>
                 <p className="metric-value text-base">
-                  <span className="sr-only">{lookup.endBlock.toLocaleString()}</span>
+                  <span className="sr-only">
+                    {lookup.endBlock.toLocaleString()}
+                    {lookup.endExact === false ? ' (estimated)' : ''}
+                  </span>
                   <span aria-hidden="true">{endBlockCount}</span>
                 </p>
               </div>

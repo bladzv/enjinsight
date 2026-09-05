@@ -36,7 +36,7 @@ const NAV_ITEMS = [
 
 const GITHUB_URL = 'https://github.com/bladzv/enjinsight'
 const README_URL = 'https://github.com/bladzv/enjinsight#readme'
-const BRAND_LOGO_URL = '/assets/brand/enjinsight_brand.png'
+const BRAND_LOGO_URL = '/assets/brand/enjinsight-wordmark-512.png'
 
 /**
  * Sidebar navigation rail. The component is still named AppHeader to keep
@@ -299,18 +299,18 @@ function ExternalRailLink({ href, icon: Icon, children }) {
   )
 }
 
-const ICON_LOGO_URL = '/android-chrome-192x192.png'
+const ICON_LOGO_URL = '/assets/brand/enjinsight-logo-128.png'
 
 function BrandMark({ loading }) {
   return (
-    <div className="relative flex items-center gap-0.5">
+    <div className="relative flex items-center gap-2">
       <div className="relative">
-        <img src={ICON_LOGO_URL} alt="" aria-hidden="true" className="h-6 w-6" />
+        <img src={ICON_LOGO_URL} alt="" aria-hidden="true" className="h-6 w-6 shrink-0" />
         {loading && (
           <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-primary shadow-primary-glow animate-pulse" />
         )}
       </div>
-      <img src={BRAND_LOGO_URL} alt="EnjinSight" className="h-7 w-auto" />
+      <img src={BRAND_LOGO_URL} alt="EnjinSight" className="h-[1.8rem] w-auto" />
     </div>
   )
 }

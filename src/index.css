@@ -453,8 +453,20 @@
   .page-hero {
     @apply relative rounded-sm px-4 py-5 sm:px-6 sm:py-6;
     min-width: 0;
+    /* Sized to the tallest hero's natural content at each breakpoint
+       (measured empirically), so all five tools render the same height
+       instead of only as tall as their own copy. Below ~360px a hero with
+       enough copy to wrap onto a third line can still exceed this — the
+       floor pads shorter heroes up, it cannot shrink a taller one. */
+    min-height: 11.75rem;
     background: var(--card);
     border: 1px solid var(--hairline);
+  }
+
+  @media (min-width: 640px) {
+    .page-hero {
+      min-height: 11.25rem;
+    }
   }
 
   .page-hero::before {

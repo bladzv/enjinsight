@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Database, ExternalLink, FileDown, ImageIcon, Loader2, RefreshCw, Search, Square, Wallet } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Database, ExternalLink, FileDown, ImageIcon, Loader2, RefreshCw, Search, Wallet } from 'lucide-react'
 import DetailModal from './DetailModal.jsx'
 import PhaseProgressCards from './PhaseProgressCards.jsx'
 import StepProgress from './StepProgress.jsx'
@@ -8,7 +8,7 @@ import ToolInfoSection from './ToolInfoSection.jsx'
 import { derivePhases } from '../utils/infusionPhases.js'
 import { formatExportedAtUTC } from '../utils/format.js'
 import Field from './Field.jsx'
-import HoldButton from './HoldButton.jsx'
+import Spinner from './Spinner.jsx'
 import ScanStatusBar from './ScanStatusBar.jsx'
 import ScanExportPanel from './ScanExportPanel.jsx'
 import ScanImportPanel from './ScanImportPanel.jsx'
@@ -432,7 +432,6 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
   const hasRetryingRows = retryingTokenIds.size > 0
   const [infusionPage, setInfusionPage] = useState(1)
   const [infusionSimpleRunning, setInfusionSimpleRunning] = useState(false)
-  const [simpleInfoOpen, setSimpleInfoOpen] = useState(false)
   const infusionSimpleStep = (isLoading && infusionSimpleRunning) ? 3
     : ((singleStarted || bulkStarted) && infusionSimpleRunning) ? 4
     : infusionPage
@@ -468,7 +467,6 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
     setRetryProgress({ total: 0, completed: 0, active: false })
     setInfusionPage(1)
     setInfusionSimpleRunning(false)
-    setSimpleInfoOpen(false)
   }
 
   /**
@@ -518,7 +516,6 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
     // rather than hiding it behind a step that never ran.
     setInfusionPage(INFUSION_SIMPLE_STEPS.length)
     setInfusionSimpleRunning(false)
-    setSimpleInfoOpen(false)
 
     setDataSource('import')
     setImportMeta({ fileName, exportedAt: parsed.exportedAt, appVersion: parsed.appVersion ?? null })
@@ -1020,7 +1017,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
   return (
     <div className="space-y-4 overflow-x-hidden sm:space-y-5">
       <section className="page-hero">
-        <div className="relative z-10 flex flex-col gap-2">
+        <div className="relative z-10 flex flex-col gap-2 sm:gap-3">
           <div className="hero-kicker self-start">
             <span className="hero-dot" />
             Ethereum Mainnet
@@ -1031,6 +1028,26 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
           </p>
         </div>
       </section>
+
+      <ToolInfoSection tone="warning">
+        <p>ERC-20 ENJ is different from native ENJ on the Enjin Blockchain.</p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-3">
+          <div>
+            <p className="metric-label">Contract</p>
+            <p className="mt-1 break-all font-mono text-[11px] leading-snug text-text">{CONTRACT_ADDRESS}</p>
+          </div>
+          <div>
+            <p className="metric-label">RPC</p>
+            <p className="mt-1 font-semibold text-text">Alchemy/Etherscan</p>
+          </div>
+          <div>
+            <p className="metric-label">Scope</p>
+            <p className="mt-1 font-semibold text-text">ERC-1155, Ethereum Mainnet</p>
+          </div>
+        </div>
+        <p className="mt-3"><span className="font-semibold text-text">Wallet scan.</span> Wallet token lists can be incomplete. If a token is missing, use Token ID scan with its Etherscan NFT URL or paste the token ID found after:</p>
+        <code className="mt-1 block break-all rounded-sm border border-[var(--hairline)] bg-term/80 px-2 py-1 font-mono text-[11px] text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>
+      </ToolInfoSection>
 
       <ToolModeStrip
         queryLabel="Check"
@@ -1046,34 +1063,11 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
           currentStep={infusionSimpleStep}
           complete={infusionSimpleComplete}
           onReset={infusionSimpleStep > 1 ? handleSimpleReset : undefined}
-          infoOpen={simpleInfoOpen}
-          onInfoOpenChange={setSimpleInfoOpen}
-          infoContent={
-            <>
-              <p>ERC-20 ENJ is different from native ENJ on the Enjin Blockchain.</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                <div>
-                  <p className="metric-label">Contract</p>
-                  <p className="mt-1 break-all font-mono text-[11px] leading-snug text-text">{CONTRACT_ADDRESS}</p>
-                </div>
-                <div>
-                  <p className="metric-label">RPC</p>
-                  <p className="mt-1 font-semibold text-text">Alchemy/Etherscan</p>
-                </div>
-                <div>
-                  <p className="metric-label">Scope</p>
-                  <p className="mt-1 font-semibold text-text">ERC-1155, Ethereum Mainnet</p>
-                </div>
-              </div>
-              <p className="mt-3"><span className="font-semibold text-text">Wallet scan.</span> Wallet token lists can be incomplete. If a token is missing, use Token ID scan with its Etherscan NFT URL or paste the token ID found after:</p>
-              <code className="mt-1 block break-all rounded-sm border border-[var(--hairline)] bg-term/80 px-2 py-1 font-mono text-[11px] text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>
-            </>
-          }
         />
       )}
 
       {/* ── Simple page 1: Mode selection ── */}
-      {simpleMode && infusionTab === 'query' && infusionSimpleStep === 1 && !simpleInfoOpen && (
+      {simpleMode && infusionTab === 'query' && infusionSimpleStep === 1 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="section-title">What do you want to check?</h2>
@@ -1107,7 +1101,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
             </button>
           </div>
           <div className="flex justify-end pt-1">
-            <button type="button" onClick={() => { setSimpleInfoOpen(false); setInfusionPage(2) }} className="btn-primary flex items-center gap-2">
+            <button type="button" onClick={() => { setInfusionPage(2) }} className="btn-primary flex items-center gap-2">
               Next <span aria-hidden="true">→</span>
             </button>
           </div>
@@ -1115,7 +1109,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
       )}
 
       {/* ── Simple page 2: Input ── */}
-      {simpleMode && infusionTab === 'query' && infusionSimpleStep === 2 && !simpleInfoOpen && (
+      {simpleMode && infusionTab === 'query' && infusionSimpleStep === 2 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="section-title">{mode === 'single' ? 'Enter a token ID or URL' : 'Enter a wallet address'}</h2>
@@ -1135,7 +1129,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
                 required
               />
               <div className="flex items-center justify-between pt-1">
-                <button type="button" onClick={() => { setSimpleInfoOpen(false); setInfusionPage(1) }} className="btn-secondary flex items-center gap-2">
+                <button type="button" onClick={() => { setInfusionPage(1) }} className="btn-secondary flex items-center gap-2">
                   <span aria-hidden="true">←</span> Back
                 </button>
                 <button type="submit" className="btn-primary btn-push flex items-center gap-2">
@@ -1158,7 +1152,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
                 required
               />
               <div className="flex items-center justify-between pt-1">
-                <button type="button" onClick={() => { setSimpleInfoOpen(false); setInfusionPage(1) }} className="btn-secondary flex items-center gap-2">
+                <button type="button" onClick={() => { setInfusionPage(1) }} className="btn-secondary flex items-center gap-2">
                   <span aria-hidden="true">←</span> Back
                 </button>
                 <button type="submit" className="btn-primary btn-push flex items-center gap-2">
@@ -1169,26 +1163,6 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
           )}
         </div>
       )}
-
-      {!simpleMode && infusionTab === 'query' && <ToolInfoSection tone="warning">
-        <p>ERC-20 ENJ is different from native ENJ on the Enjin Blockchain.</p>
-        <div className="mt-2 grid gap-2 sm:grid-cols-3">
-          <div>
-            <p className="metric-label">Contract</p>
-            <p className="mt-1 break-all font-mono text-[11px] leading-snug text-text">{CONTRACT_ADDRESS}</p>
-          </div>
-          <div>
-            <p className="metric-label">RPC</p>
-            <p className="mt-1 font-semibold text-text">Alchemy/Etherscan</p>
-          </div>
-          <div>
-            <p className="metric-label">Scope</p>
-            <p className="mt-1 font-semibold text-text">ERC-1155, Ethereum Mainnet</p>
-          </div>
-        </div>
-        <p className="mt-3"><span className="font-semibold text-text">Wallet scan.</span> Wallet token lists can be incomplete. If a token is missing, use Token ID scan with its Etherscan NFT URL or paste the token ID found after:</p>
-        <code className="mt-1 block break-all rounded-sm border border-[var(--hairline)] bg-term/80 px-2 py-1 font-mono text-[11px] text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>
-      </ToolInfoSection>}
 
       {infusionTab === 'query' && (!simpleMode || infusionSimpleStep >= 3) && (
       <section
@@ -1245,18 +1219,16 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
                   placeholder="Enter token ID or Etherscan NFT URL"
                   required
                 />
-                {/* Split rather than switched by `type`: the guarded Stop
-                    must be a plain button, while Check stays a submit so the
-                    form still responds to Enter in the field above. */}
+                {/* Split rather than switched by `type`: the busy state must
+                    be a plain non-submitting button, while Check stays a
+                    submit so the form still responds to Enter in the field
+                    above. Stop itself lives only in the sticky ScanStatusBar
+                    below, which stays reachable while scrolling results. */}
                 {isLoading ? (
-                  <HoldButton
-                    key="stop"
-                    onActivate={handleStopScan}
-                    className="btn-stop whitespace-nowrap"
-                  >
-                    <Square size={14} />
-                    Stop
-                  </HoldButton>
+                  <button key="scanning" type="button" disabled className="btn-primary btn-push whitespace-nowrap">
+                    <Spinner size={14} tone="on-primary" />
+                    Checking…
+                  </button>
                 ) : (
                   <button key="run" type="submit" className="btn-primary btn-push whitespace-nowrap">
                     <Search size={16} />
@@ -1279,18 +1251,16 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
                   placeholder="Enter Ethereum wallet address"
                   required
                 />
-                {/* Split rather than switched by `type`: the guarded Stop
-                    must be a plain button, while Bulk Check stays a submit so the
-                    form still responds to Enter in the field above. */}
+                {/* Split rather than switched by `type`: the busy state must
+                    be a plain non-submitting button, while Bulk Check stays a
+                    submit so the form still responds to Enter in the field
+                    above. Stop itself lives only in the sticky ScanStatusBar
+                    below, which stays reachable while scrolling results. */}
                 {isLoading ? (
-                  <HoldButton
-                    key="stop"
-                    onActivate={handleStopScan}
-                    className="btn-stop whitespace-nowrap"
-                  >
-                    <Square size={14} />
-                    Stop
-                  </HoldButton>
+                  <button key="scanning" type="button" disabled className="btn-primary btn-push whitespace-nowrap">
+                    <Spinner size={14} tone="on-primary" />
+                    Scanning…
+                  </button>
                 ) : (
                   <button key="run" type="submit" className="btn-primary btn-push whitespace-nowrap">
                     <Wallet size={16} />
@@ -1632,7 +1602,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
 
       {/* No re-export of imported data, matching the Balance Viewer and the
           Staking Cadence panels. */}
-      {!simpleMode && !isImported && rows.length > 0 && (
+      {!isImported && rows.length > 0 && (
         <ScanExportPanel
           schema={SCAN_SCHEMAS.INFUSION}
           buildContent={buildInfusionExport}

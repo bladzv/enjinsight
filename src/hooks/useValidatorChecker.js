@@ -422,14 +422,14 @@ export function useValidatorChecker() {
   const importScan = useCallback((parsed, fileName = '') => {
     try { abortControllerRef.current?.abort() } catch { /* noop */ }
     abortControllerRef.current = null
-    const { validators = [], requestedEraCount = 0, exportedAt = '', appVersion = null } = parsed ?? {}
+    const { validators = [], requestedEraCount = 0, exportedAt = '', appVersion = null, filter = null } = parsed ?? {}
     const from = fileName ? ` from ${fileName}` : ''
     const when = exportedAt ? `, exported ${exportedAt}` : ''
     dispatch({
       type: 'IMPORT',
       validators,
       requestedEraCount,
-      importMeta: { fileName, exportedAt, appVersion },
+      importMeta: { fileName, exportedAt, appVersion, filter },
       logMessage: `Imported ${validators.length} validator(s)${from}${when}. This is file data — nothing was fetched.`,
     })
   }, [])

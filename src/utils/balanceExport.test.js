@@ -1,5 +1,26 @@
 import { describe, it, expect } from 'vitest'
-import { parseBigInt, aesEncrypt, aesDecrypt, parseImport } from './balanceExport.js'
+import { parseBigInt, aesEncrypt, aesDecrypt, parseImport, defaultRewardFilename } from './balanceExport.js'
+
+describe('defaultRewardFilename', () => {
+  it('uses the first 10 characters of the address', () => {
+    const name = defaultRewardFilename('enDr55GTVDWok78KBZgt5N86WNEy55bmMMeC9JsKAaPtiQnct')
+    expect(name.startsWith('reward-history-enDr55GTVD-')).toBe(true)
+  })
+
+  it('falls back to "enjin" when no address is given', () => {
+    expect(defaultRewardFilename('')).toMatch(/^reward-history-enjin-\d+$/)
+    expect(defaultRewardFilename(undefined)).toMatch(/^reward-history-enjin-\d+$/)
+  })
+
+  it('embeds a millisecond timestamp, matching the format the export used before this fix', () => {
+    // Before this fix, the export used Date.now() (ms) but the placeholder
+    // shown to the user was missing the timestamp entirely — the two must
+    // now be the exact same string.
+    const name = defaultRewardFilename('short')
+    const ts = Number(name.split('-').pop())
+    expect(ts).toBeGreaterThan(1_700_000_000_000) // sanity: looks like ms, not seconds
+  })
+})
 
 describe('parseBigInt', () => {
   it('parses non-negative integers', () => {
