@@ -286,6 +286,39 @@ class EraExplorerController {
     return result
   }
 
+  /**
+   * Cheap, exact sources for the first block of era+1: the CSV cache, or the
+   * locked current-era start when era+1 is the live era. null when neither
+   * covers it.
+   */
+  _nextEraStart(targetEra, currentEra) {
+    const nextCsv = this.csvCache[targetEra + 1]
+    if (nextCsv && !isNaN(nextCsv.start_block)) return nextCsv.start_block
+    if (targetEra + 1 === currentEra && this.lockedStart != null) return this.lockedStart
+    return null
+  }
+
+  /**
+   * An era ends on the block before the next era begins. Era length is NOT
+   * constant — skipped slots shorten an era and a stall can stretch it well
+   * past target — so `start + ERA_LEN - 1` is only ever an estimate, used
+   * solely when no authoritative source covers era+1. `exact` says which.
+   */
+  async _resolveEndBlock(callFn, targetEra, startBlock, currentEra) {
+    const cheap = this._nextEraStart(targetEra, currentEra)
+    if (cheap != null) return { endBlock: cheap - 1, exact: true }
+    if (callFn && this.keys.activeEra && this.chain.block != null) {
+      try {
+        const next = await this._binarySearch(callFn, this.keys.activeEra, targetEra + 1, this.chain.block)
+        if (next != null) return { endBlock: next - 1, exact: true }
+      } catch (e) {
+        if (this.killed) throw e
+        this.log('warn', `End-block search: ${e.message}`)
+      }
+    }
+    return { endBlock: startBlock + ERA_LEN - 1, exact: false }
+  }
+
   // Discover pallet keys using the supplied call function (archive or live)
   async discoverKeys(callFn) {
     const query = callFn || ((m, p) => this.rpc(m, p))
@@ -655,7 +688,13 @@ class EraExplorerController {
     this.dispatch({ type: 'LOOKUP_START' })
     const csvRow = this.csvCache[targetEra] || null
     if (csvRow && !isNaN(csvRow.start_block)) {
-      const endBlock   = csvRow.end_block ?? (csvRow.start_block + ERA_LEN - 1)
+      let endBlock     = csvRow.end_block ?? null
+      let endExact     = endBlock != null
+      if (endBlock == null) {
+        const nextStart = this._nextEraStart(targetEra, currentEra)
+        if (nextStart != null) { endBlock = nextStart - 1; endExact = true }
+        else { endBlock = csvRow.start_block + ERA_LEN - 1; endExact = false }
+      }
       let endDateUtc   = csvRow.end_datetime_utc ?? null
       if (!endDateUtc) {
         try {
@@ -677,6 +716,7 @@ class EraExplorerController {
           era: targetEra,
           startBlock: csvRow.start_block,
           endBlock,
+          endExact,
           source: 'Cached',
           startDateUtc:   csvRow.start_datetime_utc ?? null,
           endDateUtc,
@@ -709,62 +749,79 @@ class EraExplorerController {
         }
       } catch (e) { this.log('warn', `ErasStartSessionIndex: ${e.message}`) }
     }
-    const mathStart =
+    // Both candidates below derive from fixed-length assumptions — a session
+    // index times SESSION_LEN, or an era count times ERA_LEN. Era length is
+    // not constant, so neither is authoritative: they are a fallback for when
+    // the archive binary search cannot run or fails, never a preference over it.
+    const guessStart =
+      rpcStart ??
       this.eraBlockCache[targetEra] ??
       (this.lockedStart != null ? this.lockedStart - (currentEra - targetEra) * ERA_LEN : null)
-
-    let fStart = rpcStart ?? mathStart
-    let source = rpcStart != null
-      ? 'ErasStartSessionIndex'
+    const guessSource = rpcStart != null
+      ? 'ErasStartSessionIndex (estimated)'
       : (withinHistory ? 'math (key not found)' : 'math · beyond history')
+
+    let fStart = null
+    let source = null
+    let endBlock = null
+    let endExact = false
     let startBlockHash = null
     let startDateUtc   = null
     let endDateUtc     = null
 
-    // Open one archive connection to either binary-search (when fStart is still
-    // unknown) or to enrich the result with block hash + UTC timestamp.
+    // One archive connection: binary-search the true era start, resolve the
+    // true end from the next era's first block, then enrich with hash + dates.
     if (this.keys.activeEra && this.chain.block) {
       const head = this.chain.block
       try {
         await this.archiveRpc(async callFn => {
-          if (fStart == null) {
-            const found = await this._binarySearch(callFn, this.keys.activeEra, targetEra, head)
-            if (found != null) { fStart = found; source = 'archive binary search' }
-          }
-          if (fStart != null) {
-            const h = await callFn('chain_getBlockHash', [fStart]).catch(() => null)
-            startBlockHash = h
-            if (h) {
-              const tsRaw = await callFn('state_getStorage', [TIMESTAMP_NOW_KEY, h]).catch(() => null)
-              if (tsRaw) {
-                const ms = decodeTimestampMs(tsRaw)
-                if (ms != null) startDateUtc = tsToUtcString(ms)
-              }
+          const found = await this._binarySearch(callFn, this.keys.activeEra, targetEra, head)
+          if (found != null) { fStart = found; source = 'archive binary search' }
+          else { fStart = guessStart; source = guessSource }
+          if (fStart == null) return
+
+          const resolved = await this._resolveEndBlock(callFn, targetEra, fStart, currentEra)
+          endBlock = resolved.endBlock
+          endExact = resolved.exact
+
+          const h = await callFn('chain_getBlockHash', [fStart]).catch(() => null)
+          startBlockHash = h
+          if (h) {
+            const tsRaw = await callFn('state_getStorage', [TIMESTAMP_NOW_KEY, h]).catch(() => null)
+            if (tsRaw) {
+              const ms = decodeTimestampMs(tsRaw)
+              if (ms != null) startDateUtc = tsToUtcString(ms)
             }
-            const endBlock = fStart + ERA_LEN - 1
-            const endH = await callFn('chain_getBlockHash', [endBlock]).catch(() => null)
-            if (endH) {
-              const endTsRaw = await callFn('state_getStorage', [TIMESTAMP_NOW_KEY, endH]).catch(() => null)
-              if (endTsRaw) {
-                const endMs = decodeTimestampMs(endTsRaw)
-                if (endMs != null) endDateUtc = tsToUtcString(endMs)
-              }
+          }
+          const endH = await callFn('chain_getBlockHash', [endBlock]).catch(() => null)
+          if (endH) {
+            const endTsRaw = await callFn('state_getStorage', [TIMESTAMP_NOW_KEY, endH]).catch(() => null)
+            if (endTsRaw) {
+              const endMs = decodeTimestampMs(endTsRaw)
+              if (endMs != null) endDateUtc = tsToUtcString(endMs)
             }
           }
         })
       } catch (e) { this.log('warn', `Archive era lookup: ${e.message}`) }
     }
 
+    if (fStart == null) { fStart = guessStart; source = guessSource }
     if (fStart == null) {
       this.dispatch({ type: 'LOOKUP_ERROR', error: 'Cannot compute. Ensure live data is synced.' })
       return
+    }
+    if (endBlock == null) {
+      const resolved = await this._resolveEndBlock(null, targetEra, fStart, currentEra)
+      endBlock = resolved.endBlock
+      endExact = resolved.exact
     }
     this.dispatch({
       type: 'LOOKUP_DONE',
       result: {
         era: targetEra,
         startBlock: fStart,
-        endBlock:   fStart + ERA_LEN - 1,
+        endBlock,
+        endExact,
         source,
         startDateUtc,
         endDateUtc,

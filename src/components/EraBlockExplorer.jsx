@@ -202,7 +202,7 @@ export default function EraBlockExplorer() {
       <ToolInfoSection tone="warning">
         <p className="font-semibold text-text">Two data sources, two purposes</p>
         <p className="mt-1">The live tiles above come from a direct WebSocket connection to the Enjin Relaychain and update in real time. The era lookup below reads from a cached CSV of 1,000+ past era boundaries, refreshed at load, plus an on-demand archive-node query for anything the cache doesn't cover yet.</p>
-        <p className="mt-2"><span className="font-semibold text-text">Era length is fixed.</span> One era is 14,400 blocks (6 sessions of 2,400 blocks each) — this tool derives every era boundary and countdown from that constant, not from a Subscan lookup.</p>
+        <p className="mt-2"><span className="font-semibold text-text">Era length is nominal, not fixed.</span> An era targets 14,400 blocks (6 sessions of 2,400 blocks each), but real lengths vary — skipped slots shorten them, and a stall can stretch one well past target. Boundaries here are measured, not assumed: the start block comes from the cached CSV or an archive-node search for the first block of the era, and the end block is taken from the block before the next era begins. If no source covers the next era, the end block falls back to the nominal length and is labelled <span className="font-semibold text-text">estimated</span>.</p>
         <p className="mt-2"><span className="font-semibold text-text">No wallet data.</span> This tool reports chain-wide state only; it does not look up an address or account.</p>
       </ToolInfoSection>
 
@@ -356,9 +356,17 @@ export default function EraBlockExplorer() {
                 </p>
               </div>
               <div className="metric-card">
-                <p className="metric-label">End Block</p>
+                <p className="metric-label">
+                  End Block
+                  {lookup.endExact === false && (
+                    <span className="ml-1.5 text-[10px] font-normal text-warning">estimated</span>
+                  )}
+                </p>
                 <p className="metric-value text-base">
-                  <span className="sr-only">{lookup.endBlock.toLocaleString()}</span>
+                  <span className="sr-only">
+                    {lookup.endBlock.toLocaleString()}
+                    {lookup.endExact === false ? ' (estimated)' : ''}
+                  </span>
                   <span aria-hidden="true">{endBlockCount}</span>
                 </p>
               </div>
