@@ -214,6 +214,9 @@ export default function TerminalLog({ logs, sticky = false, onExpandChange }) {
       if (Math.abs(next - avgRowHeight) > 0.5) setAvgRowHeight(next)
     }
     return out
+    // heightsVersion is the invalidation token for heightsRef.current, which
+    // the rule cannot see through. Removing it strands measured heights.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logs, heightsVersion, avgRowHeight])
 
   const totalHeight = offsets[logs.length] ?? 0

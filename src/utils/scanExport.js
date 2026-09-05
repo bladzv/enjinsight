@@ -24,8 +24,8 @@
  */
 import { parseBigInt, aesEncrypt, aesDecrypt } from './balanceExport.js'
 import {
-  SCAN_TOOL_ID, SCAN_SCHEMAS, SCHEMA_LABELS, SCAN_SCHEMA_VERSION,
-  ScanImportError, MAX_STR, MAX_TEXT, str, int,
+  SCAN_TOOL_ID, SCAN_SCHEMAS, SCAN_SCHEMA_VERSION,
+  ScanImportError, MAX_TEXT, str, int,
   envelopeHeader, validateHeader,
 } from './scanEnvelope.js'
 
