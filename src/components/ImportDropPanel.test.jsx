@@ -7,7 +7,7 @@
  * weaken it for the others. The size and extension checks in particular are
  * the cheap guards that run *before* a file is read.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import ImportDropPanel from './ImportDropPanel.jsx'
 

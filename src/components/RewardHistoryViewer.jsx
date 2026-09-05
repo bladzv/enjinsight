@@ -13,7 +13,7 @@
  */
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
-  Play, Square, RotateCcw, Download, Upload,
+  Play, Square, RotateCcw, Download,
   ChevronDown, Lock, Unlock,
   AlertTriangle, Info, FileDown,
 } from 'lucide-react'
