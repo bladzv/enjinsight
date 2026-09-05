@@ -101,7 +101,7 @@ export default function App() {
     return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
   })
   const [simpleMode, setSimpleMode] = useState(() => {
-    return window.localStorage.getItem('enjinsight-ui-mode') === 'simple'
+    return window.localStorage.getItem('enjinsight-ui-mode') !== 'advanced'
   })
   const [stakingPage, setStakingPage] = useState(1)
   const [stakingSimpleRunning, setStakingSimpleRunning] = useState(false)

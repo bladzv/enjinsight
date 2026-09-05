@@ -1,4 +1,5 @@
-import { useId } from 'react'
+import { useId, useRef } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 
 // Controls whose own UI chrome (a native date picker, a number spinner, a
 // select's chevron) means the browser either never reports :placeholder-shown
@@ -34,6 +35,11 @@ export function isFilled({ as, type, value }) {
  * works exactly like the empty-field fallback. The CSS keeps it invisible
  * until the field is focused, otherwise it would sit directly under the
  * resting (unlifted) label and the two would overlap.
+ *
+ * A number field gets its own chevron stepper in place of the native spinner
+ * — see the .field__stepper block in index.css for why the native one cannot
+ * be centred here. Staking Cadence is unaffected: its inputs go through
+ * Stepper.jsx as type="text", not through this component.
  */
 export default function Field({
   label,
@@ -52,12 +58,40 @@ export default function Field({
   ...rest
 }) {
   const generatedId = useId()
+  const inputRef = useRef(null)
   const controlId = id ?? generatedId
   const messageId = `${controlId}-message`
   const message = error || hint
 
   const filled = isFilled({ as, type, value })
   const controlClass = as === 'select' ? 'select-field' : 'input-field'
+  const hasStepper = as === 'input' && type === 'number' && !rest.disabled && !rest.readOnly
+
+  /**
+   * Step the value by one `step` unit.
+   *
+   * stepUp/stepDown do the clamping against min/max/step natively, but they
+   * write straight to the DOM node — React's controlled-input value tracker
+   * still holds the old value, so the change event it synthesises would be
+   * discarded as a no-op and onChange would never fire. Re-applying the
+   * result through the prototype's own setter resets that tracker, which is
+   * what makes the dispatched event reach the caller.
+   */
+  function step(direction) {
+    const el = inputRef.current
+    if (!el) return
+    try {
+      if (direction > 0) el.stepUp()
+      else el.stepDown()
+    } catch {
+      // stepUp/stepDown throw on a value the control cannot parse. Fall back
+      // to the floor of the range so a click still does something sensible.
+      el.value = el.min !== '' ? el.min : '0'
+    }
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
+    setter.call(el, el.value)
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+  }
 
   const shared = {
     id: controlId,
@@ -75,6 +109,7 @@ export default function Field({
       data-filled={filled ? 'true' : 'false'}
       data-invalid={error ? 'true' : 'false'}
       data-icon={icon ? 'true' : 'false'}
+      data-stepper={hasStepper ? 'true' : 'false'}
       data-variant={variant}
     >
       {/* The label is positioned against this box rather than against
@@ -90,12 +125,41 @@ export default function Field({
         ) : as === 'textarea' ? (
           <textarea {...shared} />
         ) : (
-          <input {...shared} type={type} />
+          <input {...shared} ref={inputRef} type={type} />
         )}
 
         <label htmlFor={controlId} className="field__label">
           {label}
         </label>
+
+        {/* Pointer affordance only. The input's own ArrowUp/ArrowDown already
+            covers keyboard and screen-reader users, so these stay out of the
+            tab order and out of the accessibility tree rather than adding two
+            extra stops to every number field in the app. onMouseDown is
+            suppressed so a click doesn't pull focus off the input and drop
+            the floating label back down mid-edit. */}
+        {hasStepper && (
+          <span className="field__stepper" aria-hidden="true">
+            <button
+              type="button"
+              tabIndex={-1}
+              className="field__stepper-btn"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => step(1)}
+            >
+              <ChevronUp size={11} strokeWidth={2.5} />
+            </button>
+            <button
+              type="button"
+              tabIndex={-1}
+              className="field__stepper-btn"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => step(-1)}
+            >
+              <ChevronDown size={11} strokeWidth={2.5} />
+            </button>
+          </span>
+        )}
       </div>
 
       {message && (
