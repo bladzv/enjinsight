@@ -15,7 +15,7 @@
  */
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { fetchLiveChainInfo } from '../utils/chainInfo.js'
-import { Activity, AlertTriangle, ChevronDown, FileDown, Info, RotateCcw, Sparkles, Square } from 'lucide-react'
+import { Activity, AlertTriangle, ChevronDown, FileDown, RotateCcw, Sparkles } from 'lucide-react'
 import { fmtENJ } from '../utils/balanceExport.js'
 import useBalanceExplorer, { STATUS } from '../hooks/useBalanceExplorer.js'
 import { ENJIN_NETWORKS, MAX_RPC_CALLS, MAX_SCAN_DAYS } from '../constants.js'
@@ -32,6 +32,7 @@ import TerminalLog        from './TerminalLog.jsx'
 import ToolInfoSection    from './ToolInfoSection.jsx'
 import Field from './Field.jsx'
 import HoldButton from './HoldButton.jsx'
+import Spinner from './Spinner.jsx'
 import ScanStatusBar from './ScanStatusBar.jsx'
 
 // ── Address prefix map ───────────────────────────────────────────────────────
@@ -384,7 +385,6 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
   const hasResults = records.length > 0
   const [balancePage, setBalancePage] = useState(1)
   const [balanceSimpleRunning, setBalanceSimpleRunning] = useState(false)
-  const [simpleInfoOpen, setSimpleInfoOpen] = useState(false)
   const balanceSimpleStep = (isLoading && balanceSimpleRunning) ? 3
     : ((status === STATUS.DONE || status === STATUS.CANCELLED || status === STATUS.ERROR) && balanceSimpleRunning) ? 4
     : balancePage
@@ -626,7 +626,7 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
     <div className="space-y-4 sm:space-y-5">
 
       <section className="page-hero">
-        <div className="relative z-10 flex flex-col gap-3">
+        <div className="relative z-10 flex flex-col gap-2 sm:gap-3">
           <div className="hero-kicker self-start">
             <span className="hero-dot" />
             Historical Balance Viewer
@@ -638,20 +638,9 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
         </div>
       </section>
 
-      {/* The stepper describes the Query flow, so it hides in Import mode. */}
-      {simpleMode && tab === 'query' && (
-        <StepProgress
-          steps={BALANCE_SIMPLE_STEPS}
-          currentStep={balanceSimpleStep}
-          complete={balanceSimpleComplete}
-          onReset={balanceSimpleStep > 1 ? () => { reset(); setQueriedAddress(''); setBalancePage(1); setBalanceSimpleRunning(false); setSimpleInfoOpen(false) } : undefined}
-          infoOpen={simpleInfoOpen}
-          onInfoOpenChange={setSimpleInfoOpen}
-          infoContent={
-            <p>Archive RPC queries take longer over wide ranges. Narrowing the window or increasing the step reduces query time and sample count.</p>
-          }
-        />
-      )}
+      <ToolInfoSection tone="warning">
+        <p>Archive RPC queries take longer over wide ranges. Narrowing the window or increasing the step reduces query time and sample count.</p>
+      </ToolInfoSection>
 
       <ToolModeStrip
         queryLabel="Query Node"
@@ -660,8 +649,18 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
         idPrefix="balance"
       />
 
+      {/* The stepper describes the Query flow, so it hides in Import mode. */}
+      {simpleMode && tab === 'query' && (
+        <StepProgress
+          steps={BALANCE_SIMPLE_STEPS}
+          currentStep={balanceSimpleStep}
+          complete={balanceSimpleComplete}
+          onReset={balanceSimpleStep > 1 ? () => { reset(); setQueriedAddress(''); setBalancePage(1); setBalanceSimpleRunning(false) } : undefined}
+        />
+      )}
+
       {/* ── Simple page 1: Address + Network ── */}
-      {simpleMode && tab === 'query' && balanceSimpleStep === 1 && !simpleInfoOpen && (
+      {simpleMode && tab === 'query' && balanceSimpleStep === 1 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="section-title">Select network &amp; enter address</h2>
@@ -701,7 +700,7 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
           <div className="flex justify-end pt-1">
             <button
               type="button"
-              onClick={() => { setSimpleInfoOpen(false); setBalancePage(2) }}
+              onClick={() => setBalancePage(2)}
               disabled={!address.trim() || addressNote?.type === 'error'}
               className="btn-primary flex items-center gap-2 disabled:opacity-40"
             >
@@ -712,7 +711,7 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
       )}
 
       {/* ── Simple page 2: Range parameters ── */}
-      {simpleMode && tab === 'query' && balanceSimpleStep === 2 && !simpleInfoOpen && (
+      {simpleMode && tab === 'query' && balanceSimpleStep === 2 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="section-title">Set the query window</h2>
@@ -787,7 +786,7 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
             </div>
           )}
           <div className="flex items-center justify-between pt-1">
-            <button type="button" onClick={() => { setSimpleInfoOpen(false); setBalancePage(1) }} className="btn-secondary flex items-center gap-2">
+            <button type="button" onClick={() => setBalancePage(1)} className="btn-secondary flex items-center gap-2">
               <span aria-hidden="true">←</span> Back
             </button>
             <button
@@ -809,9 +808,6 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
       {/* ── Query pane — advanced only ── */}
       {tab === 'query' && !simpleMode && (
         <div className="space-y-3 sm:space-y-4">
-          {!simpleMode && <ToolInfoSection tone="warning">
-            <p>Archive RPC queries take longer over wide ranges. Narrowing the window or increasing the step reduces query time and sample count.</p>
-          </ToolInfoSection>}
           <div className="grid gap-4 xl:grid-cols-3 xl:items-stretch">
               <div className="data-panel">
                 <h3 className="font-headline text-lg font-bold text-text sm:text-xl">Scan Configuration</h3>
@@ -1094,12 +1090,14 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
               <div className="flex flex-col items-center gap-3">
                 {/* Distinct keys: Stop and Reset share this slot, and without
                     them the charge earned on Stop would carry straight over to
-                    Reset on a double click. */}
+                    Reset on a double click. Stop itself lives only in the
+                    sticky ScanStatusBar below, which stays reachable while
+                    scrolling a long result list. */}
                 {isLoading ? (
-                  <HoldButton key="stop" onActivate={cancel} className="btn-stop w-full sm:w-auto sm:min-w-[200px]">
-                    <Square size={14} />
-                    STOP
-                  </HoldButton>
+                  <button key="scanning" type="button" disabled className="btn-primary w-full sm:w-auto sm:min-w-[200px]">
+                    <Spinner size={14} tone="on-primary" />
+                    QUERYING…
+                  </button>
                 ) : hasResults ? (
                   <HoldButton key="reset" onActivate={() => { reset(); setQueriedAddress('') }} className="btn-primary w-full sm:w-auto sm:min-w-[200px]">
                     <RotateCcw size={14} />
@@ -1188,14 +1186,6 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
             <div className="space-y-3">
               <div>
                 <p className="section-label">Import</p>
-              </div>
-              <div className="flex gap-2.5 p-3 rounded-lg bg-card border border-surface-bright text-[11px] leading-relaxed">
-                <Info size={13} className="text-text-secondary flex-shrink-0 mt-0.5" />
-                <p className="text-text-secondary">
-                  Only files previously exported by this tool{' '}
-                  <span className="font-mono text-muted">(JSON, CSV, or XML)</span>{' '}
-                  can be imported. Files from other sources or tools are not supported.
-                </p>
               </div>
               <BalanceImportPanel
                 bare

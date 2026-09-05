@@ -13,9 +13,9 @@
  */
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
-  Play, Square, RotateCcw, Download,
+  Play, RotateCcw, Download,
   ChevronDown, Lock, Unlock,
-  AlertTriangle, Info, FileDown,
+  AlertTriangle, FileDown,
 } from 'lucide-react'
 import { useRewardHistory, RH_STATUS } from '../hooks/useRewardHistory.js'
 import { fetchLiveChainInfo } from '../utils/chainInfo.js'
@@ -26,7 +26,7 @@ import ToolInfoSection from './ToolInfoSection.jsx'
 import RewardImportPanel from './RewardImportPanel.jsx'
 import ToolModeStrip from './ToolModeStrip.jsx'
 import { PLANCK_PER_ENJ, SUBSCAN_HISTORY_DAYS, MAX_SCAN_DAYS, MAX_REWARD_ERA_SPAN } from '../constants.js'
-import { aesEncryptLabelled, downloadFile, safeFilename, parseBigInt, splitCsvRow } from '../utils/balanceExport.js'
+import { aesEncryptLabelled, downloadFile, safeFilename, defaultRewardFilename, parseBigInt, splitCsvRow } from '../utils/balanceExport.js'
 import { SCAN_SCHEMAS, envelopeHeader, readLegacyHeader } from '../utils/scanEnvelope.js'
 import { formatExportedAtUTC } from '../utils/format.js'
 import Spinner from './Spinner.jsx'
@@ -1016,12 +1016,16 @@ function RewardExportPanel({ results, address }) {
   const [busy,     setBusy]     = useState(false)
   const [msg,      setMsg]      = useState(null)
 
+  // Frozen per mount (not recomputed on every render) so the placeholder
+  // shown below is byte-identical to the name actually saved.
+  const defaultName = useMemo(() => defaultRewardFilename(address), [address])
+
   async function handleExport() {
     if (!results.length) { setMsg({ type: 'err', text: 'No data to export.' }); return }
     if (encOn && !password) { setMsg({ type: 'err', text: 'Enter an encryption password.' }); return }
     setBusy(true); setMsg(null)
     try {
-      const fname = filename.trim() || `reward-history-${(address || 'enjin').slice(0, 10)}-${Date.now()}`
+      const fname = filename.trim() || defaultName
       const meta  = { address, exportedAt: new Date().toISOString() }
       let content = format === 'json' ? rewardToJSON(results, meta)
                   : format === 'csv'  ? rewardToCSV(results, meta)
@@ -1076,7 +1080,7 @@ function RewardExportPanel({ results, address }) {
       <div className="grid gap-3 sm:grid-cols-[1fr_120px_auto] items-end">
         <div>
           <Field label="Filename" id="rh-fname" type="text" maxLength={200} autoComplete="off" spellCheck="false"
-            placeholder={`reward-history-${(address||'').slice(0,10)}`}
+            placeholder={defaultName}
             value={filename} onChange={e => setFilename(e.target.value)}
             controlClassName="font-mono" />
         </div>
@@ -1203,7 +1207,6 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
 
   const [rhPage, setRhPage] = useState(1)
   const [rhSimpleRunning, setRhSimpleRunning] = useState(false)
-  const [simpleInfoOpen, setSimpleInfoOpen] = useState(false)
 
   const isLoading = status === RH_STATUS.LOADING
   const isDone    = status === RH_STATUS.DONE
@@ -1330,10 +1333,10 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
   }, [status, activeResults.length])
 
   return (
-    <div className={`space-y-4 transition-[padding] duration-200 ${!simpleMode && logExpanded ? 'pb-[380px]' : 'pb-16'}`}>
+    <div className={`space-y-4 sm:space-y-5 transition-[padding] duration-200 ${!simpleMode && logExpanded ? 'pb-[380px]' : 'pb-16'}`}>
 
       <section className="page-hero">
-        <div className="relative z-10 flex flex-col gap-2">
+        <div className="relative z-10 flex flex-col gap-2 sm:gap-3">
           <div className="hero-kicker self-start">
             <span className="hero-dot" />
             Reward History Viewer
@@ -1345,26 +1348,15 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
         </div>
       </section>
 
-      {/* The stepper describes the Query flow, so it hides in Import mode. */}
-      {simpleMode && tab === 'query' && (
-        <StepProgress
-          steps={RH_SIMPLE_STEPS}
-          currentStep={rhSimpleStep}
-          complete={rhSimpleComplete}
-          onReset={rhSimpleStep > 1 ? () => { reset(); setImportedResults(null); setImportedAddress(''); setRhPage(1); setRhSimpleRunning(false); setSimpleInfoOpen(false) } : undefined}
-          infoOpen={simpleInfoOpen}
-          onInfoOpenChange={setSimpleInfoOpen}
-          infoContent={
-            <>
-              <p className="font-semibold text-text">Reward history is an estimate</p>
-              <p className="mt-1">Archive snapshots reconstruct pool-level rewards and member share over time, so the output is best used for investigation and planning.</p>
-              <p className="mt-2"><span className="font-semibold text-text">Pool-level payouts.</span> The pool gets daily rewards, not the user, so these values are estimations rather than wallet-level settlement records.</p>
-              <p className="mt-2"><span className="font-semibold text-text">Enjin Wallet may show different values.</span> The wallet derives reward figures from its own data pipeline and may reflect claimable balances or rounding differently from the era-by-era archive reconstruction used here.</p>
-              <p className="mt-2"><span className="font-semibold text-text">Tax note.</span> Tax treatment depends on your jurisdiction and activity history. Use this tool as a research aid, not tax advice.</p>
-            </>
-          }
-        />
-      )}
+      <ToolInfoSection tone="warning">
+        <p className="font-semibold text-text">Reward history is an estimate</p>
+        <p className="mt-1">Archive snapshots reconstruct pool-level rewards and member share over time, so the output is best used for investigation and planning.</p>
+        <p className="mt-2"><span className="font-semibold text-text">Pool-level payouts.</span> The pool gets daily rewards, not the user, so these values are estimations rather than wallet-level settlement records.</p>
+        <p className="mt-2"><span className="font-semibold text-text">Enjin Wallet may show different values.</span> The wallet derives reward figures from its own data pipeline and may reflect claimable balances or rounding differently from the era-by-era archive reconstruction used here.</p>
+        <p className="mt-2"><span className="font-semibold text-text">Historical figures corrected.</span> Reward, Cumulative, and APY figures shown before this fix were overstated for eras after the pool commission mechanism launched — the calculation mistakenly added the pool operator's commission instead of subtracting it. Figures shown now are net of commission and correct; if you saved or exported numbers earlier, they may be higher than the current values.</p>
+        <p className="mt-2"><span className="font-semibold text-text">APY is now ENJ-denominated.</span> APY previously divided by the pool's sENJ share supply because the pool's bonded-stake lookup was silently failing. It now divides by the actual bonded ENJ, which is the correct unit. Since 1 sENJ is worth well over 1 ENJ in mature pools, APY figures are roughly half what this tool showed before — the lower numbers are the accurate ones.</p>
+        <p className="mt-2"><span className="font-semibold text-text">Tax note.</span> Tax treatment depends on your jurisdiction and activity history. Use this tool as a research aid, not tax advice.</p>
+      </ToolInfoSection>
 
       <ToolModeStrip
         queryLabel="Compute Rewards"
@@ -1373,19 +1365,19 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
         idPrefix="reward"
       />
 
+      {/* The stepper describes the Query flow, so it hides in Import mode. */}
+      {simpleMode && tab === 'query' && (
+        <StepProgress
+          steps={RH_SIMPLE_STEPS}
+          currentStep={rhSimpleStep}
+          complete={rhSimpleComplete}
+          onReset={rhSimpleStep > 1 ? () => { reset(); setImportedResults(null); setImportedAddress(''); setRhPage(1); setRhSimpleRunning(false) } : undefined}
+        />
+      )}
+
       {/* ── Compute pane (advanced only) ── */}
       {tab === 'query' && !simpleMode && (
         <div className="space-y-3 sm:space-y-4">
-          <ToolInfoSection tone="warning">
-            <p className="font-semibold text-text">Reward history is an estimate</p>
-            <p className="mt-1">Archive snapshots reconstruct pool-level rewards and member share over time, so the output is best used for investigation and planning.</p>
-            <p className="mt-2"><span className="font-semibold text-text">Pool-level payouts.</span> The pool gets daily rewards, not the user, so these values are estimations rather than wallet-level settlement records.</p>
-            <p className="mt-2"><span className="font-semibold text-text">Enjin Wallet may show different values.</span> The wallet derives reward figures from its own data pipeline and may reflect claimable balances or rounding differently from the era-by-era archive reconstruction used here.</p>
-            <p className="mt-2"><span className="font-semibold text-text">Historical figures corrected.</span> Reward, Cumulative, and APY figures shown before this fix were overstated for eras after the pool commission mechanism launched — the calculation mistakenly added the pool operator's commission instead of subtracting it. Figures shown now are net of commission and correct; if you saved or exported numbers earlier, they may be higher than the current values.</p>
-            <p className="mt-2"><span className="font-semibold text-text">APY is now ENJ-denominated.</span> APY previously divided by the pool's sENJ share supply because the pool's bonded-stake lookup was silently failing. It now divides by the actual bonded ENJ, which is the correct unit. Since 1 sENJ is worth well over 1 ENJ in mature pools, APY figures are roughly half what this tool showed before — the lower numbers are the accurate ones.</p>
-            <p className="mt-2"><span className="font-semibold text-text">Tax note.</span> Tax treatment depends on your jurisdiction and activity history. Use this tool as a research aid, not tax advice.</p>
-          </ToolInfoSection>
-
           <div className="grid gap-4 xl:grid-cols-3 xl:items-start">
           {/* Col 1: RPC Config */}
           <div className="data-panel">
@@ -1532,11 +1524,13 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
             <div className="flex flex-col items-center gap-2">
               {/* Distinct keys: Stop and Reset share this slot, and without
                   them the charge earned on Stop would carry straight over to
-                  Reset on a double click. */}
+                  Reset on a double click. Stop itself lives only in the
+                  sticky ScanStatusBar below, which stays reachable while
+                  scrolling a long result list. */}
               {isLoading ? (
-                <HoldButton key="stop" onActivate={stop} className="btn-danger gap-1.5 px-5">
-                  <Square size={14} />Stop
-                </HoldButton>
+                <button key="scanning" type="button" disabled className="btn-primary gap-1.5 px-5">
+                  <Spinner size={14} tone="on-primary" />Computing…
+                </button>
               ) : (isDone || isStopped || isError || importedResults) ? (
                 <HoldButton key="reset" onActivate={() => { reset(); setImportedResults(null); setImportedAddress('') }} className="btn-primary gap-1.5 px-5">
                   <RotateCcw size={14} />Reset
@@ -1584,7 +1578,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
       )}
 
       {/* ── Simple page 1: Address ── */}
-      {simpleMode && rhSimpleStep === 1 && !simpleInfoOpen && (
+      {simpleMode && tab === 'query' && rhSimpleStep === 1 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="font-headline text-xl font-bold text-text">Enter your wallet address</h2>
@@ -1605,7 +1599,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
           </div>
           <div className="flex justify-end pt-1">
             <button
-              onClick={() => { setSimpleInfoOpen(false); setRhPage(2) }}
+              onClick={() => { setRhPage(2) }}
               disabled={!address.trim() || !!addrErr}
               className="btn-primary px-6 disabled:opacity-40"
             >
@@ -1616,7 +1610,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
       )}
 
       {/* ── Simple page 2: Mode ── */}
-      {simpleMode && rhSimpleStep === 2 && !simpleInfoOpen && (
+      {simpleMode && tab === 'query' && rhSimpleStep === 2 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="font-headline text-xl font-bold text-text">Choose query mode</h2>
@@ -1646,14 +1640,14 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
             })}
           </div>
           <div className="flex justify-between pt-1">
-            <button onClick={() => { setSimpleInfoOpen(false); setRhPage(1) }} className="btn-secondary px-5">Back</button>
-            <button onClick={() => { setSimpleInfoOpen(false); setRhPage(3) }} className="btn-primary px-6">Next</button>
+            <button onClick={() => { setRhPage(1) }} className="btn-secondary px-5">Back</button>
+            <button onClick={() => { setRhPage(3) }} className="btn-primary px-6">Next</button>
           </div>
         </div>
       )}
 
       {/* ── Simple page 3: Range Parameters ── */}
-      {simpleMode && rhSimpleStep === 3 && !simpleInfoOpen && (
+      {simpleMode && tab === 'query' && rhSimpleStep === 3 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="font-headline text-xl font-bold text-text">Set the reward window</h2>
@@ -1746,7 +1740,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
           )}
 
           <div className="flex justify-between pt-1">
-            <button onClick={() => { setSimpleInfoOpen(false); setRhPage(2) }} className="btn-secondary px-5">Back</button>
+            <button onClick={() => { setRhPage(2) }} className="btn-secondary px-5">Back</button>
             <button
               onClick={handleRun}
               disabled={rangeMode === 'era' ? (!startEra || !endEra || !!eraValidErr) : (!startDate || !endDate || !!dateValidErr)}
@@ -1765,14 +1759,6 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
           <div role="tabpanel" id="reward-panel-import" aria-labelledby="reward-tab-import" className="p-4 sm:p-5 space-y-3">
             <div>
               <p className="section-label">Import</p>
-            </div>
-            <div className="flex gap-2.5 p-3 rounded-lg bg-card border border-surface-bright text-[11px] leading-relaxed">
-              <Info size={13} className="text-text-secondary flex-shrink-0 mt-0.5" />
-              <p className="text-text-secondary">
-                Only files previously exported by this tool{' '}
-                <span className="font-mono text-muted">(JSON, CSV, or XML)</span>{' '}
-                can be imported. Files from other sources or tools are not supported.
-              </p>
             </div>
             <RewardImportPanel parse={parseRewardImport} onImport={handleImportResults} />
           </div>
