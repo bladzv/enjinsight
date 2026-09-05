@@ -432,7 +432,6 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
   const hasRetryingRows = retryingTokenIds.size > 0
   const [infusionPage, setInfusionPage] = useState(1)
   const [infusionSimpleRunning, setInfusionSimpleRunning] = useState(false)
-  const [simpleInfoOpen, setSimpleInfoOpen] = useState(false)
   const infusionSimpleStep = (isLoading && infusionSimpleRunning) ? 3
     : ((singleStarted || bulkStarted) && infusionSimpleRunning) ? 4
     : infusionPage
@@ -468,7 +467,6 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
     setRetryProgress({ total: 0, completed: 0, active: false })
     setInfusionPage(1)
     setInfusionSimpleRunning(false)
-    setSimpleInfoOpen(false)
   }
 
   /**
@@ -518,7 +516,6 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
     // rather than hiding it behind a step that never ran.
     setInfusionPage(INFUSION_SIMPLE_STEPS.length)
     setInfusionSimpleRunning(false)
-    setSimpleInfoOpen(false)
 
     setDataSource('import')
     setImportMeta({ fileName, exportedAt: parsed.exportedAt, appVersion: parsed.appVersion ?? null })
@@ -1046,34 +1043,33 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
           currentStep={infusionSimpleStep}
           complete={infusionSimpleComplete}
           onReset={infusionSimpleStep > 1 ? handleSimpleReset : undefined}
-          infoOpen={simpleInfoOpen}
-          onInfoOpenChange={setSimpleInfoOpen}
-          infoContent={
-            <>
-              <p>ERC-20 ENJ is different from native ENJ on the Enjin Blockchain.</p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                <div>
-                  <p className="metric-label">Contract</p>
-                  <p className="mt-1 break-all font-mono text-[11px] leading-snug text-text">{CONTRACT_ADDRESS}</p>
-                </div>
-                <div>
-                  <p className="metric-label">RPC</p>
-                  <p className="mt-1 font-semibold text-text">Alchemy/Etherscan</p>
-                </div>
-                <div>
-                  <p className="metric-label">Scope</p>
-                  <p className="mt-1 font-semibold text-text">ERC-1155, Ethereum Mainnet</p>
-                </div>
-              </div>
-              <p className="mt-3"><span className="font-semibold text-text">Wallet scan.</span> Wallet token lists can be incomplete. If a token is missing, use Token ID scan with its Etherscan NFT URL or paste the token ID found after:</p>
-              <code className="mt-1 block break-all rounded-sm border border-[var(--hairline)] bg-term/80 px-2 py-1 font-mono text-[11px] text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>
-            </>
-          }
         />
       )}
 
+      {infusionTab === 'query' && (
+        <ToolInfoSection tone="warning">
+          <p>ERC-20 ENJ is different from native ENJ on the Enjin Blockchain.</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            <div>
+              <p className="metric-label">Contract</p>
+              <p className="mt-1 break-all font-mono text-[11px] leading-snug text-text">{CONTRACT_ADDRESS}</p>
+            </div>
+            <div>
+              <p className="metric-label">RPC</p>
+              <p className="mt-1 font-semibold text-text">Alchemy/Etherscan</p>
+            </div>
+            <div>
+              <p className="metric-label">Scope</p>
+              <p className="mt-1 font-semibold text-text">ERC-1155, Ethereum Mainnet</p>
+            </div>
+          </div>
+          <p className="mt-3"><span className="font-semibold text-text">Wallet scan.</span> Wallet token lists can be incomplete. If a token is missing, use Token ID scan with its Etherscan NFT URL or paste the token ID found after:</p>
+          <code className="mt-1 block break-all rounded-sm border border-[var(--hairline)] bg-term/80 px-2 py-1 font-mono text-[11px] text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>
+        </ToolInfoSection>
+      )}
+
       {/* ── Simple page 1: Mode selection ── */}
-      {simpleMode && infusionTab === 'query' && infusionSimpleStep === 1 && !simpleInfoOpen && (
+      {simpleMode && infusionTab === 'query' && infusionSimpleStep === 1 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="section-title">What do you want to check?</h2>
@@ -1107,7 +1103,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
             </button>
           </div>
           <div className="flex justify-end pt-1">
-            <button type="button" onClick={() => { setSimpleInfoOpen(false); setInfusionPage(2) }} className="btn-primary flex items-center gap-2">
+            <button type="button" onClick={() => { setInfusionPage(2) }} className="btn-primary flex items-center gap-2">
               Next <span aria-hidden="true">→</span>
             </button>
           </div>
@@ -1115,7 +1111,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
       )}
 
       {/* ── Simple page 2: Input ── */}
-      {simpleMode && infusionTab === 'query' && infusionSimpleStep === 2 && !simpleInfoOpen && (
+      {simpleMode && infusionTab === 'query' && infusionSimpleStep === 2 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="section-title">{mode === 'single' ? 'Enter a token ID or URL' : 'Enter a wallet address'}</h2>
@@ -1135,7 +1131,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
                 required
               />
               <div className="flex items-center justify-between pt-1">
-                <button type="button" onClick={() => { setSimpleInfoOpen(false); setInfusionPage(1) }} className="btn-secondary flex items-center gap-2">
+                <button type="button" onClick={() => { setInfusionPage(1) }} className="btn-secondary flex items-center gap-2">
                   <span aria-hidden="true">←</span> Back
                 </button>
                 <button type="submit" className="btn-primary btn-push flex items-center gap-2">
@@ -1158,7 +1154,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
                 required
               />
               <div className="flex items-center justify-between pt-1">
-                <button type="button" onClick={() => { setSimpleInfoOpen(false); setInfusionPage(1) }} className="btn-secondary flex items-center gap-2">
+                <button type="button" onClick={() => { setInfusionPage(1) }} className="btn-secondary flex items-center gap-2">
                   <span aria-hidden="true">←</span> Back
                 </button>
                 <button type="submit" className="btn-primary btn-push flex items-center gap-2">
@@ -1169,26 +1165,6 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
           )}
         </div>
       )}
-
-      {!simpleMode && infusionTab === 'query' && <ToolInfoSection tone="warning">
-        <p>ERC-20 ENJ is different from native ENJ on the Enjin Blockchain.</p>
-        <div className="mt-2 grid gap-2 sm:grid-cols-3">
-          <div>
-            <p className="metric-label">Contract</p>
-            <p className="mt-1 break-all font-mono text-[11px] leading-snug text-text">{CONTRACT_ADDRESS}</p>
-          </div>
-          <div>
-            <p className="metric-label">RPC</p>
-            <p className="mt-1 font-semibold text-text">Alchemy/Etherscan</p>
-          </div>
-          <div>
-            <p className="metric-label">Scope</p>
-            <p className="mt-1 font-semibold text-text">ERC-1155, Ethereum Mainnet</p>
-          </div>
-        </div>
-        <p className="mt-3"><span className="font-semibold text-text">Wallet scan.</span> Wallet token lists can be incomplete. If a token is missing, use Token ID scan with its Etherscan NFT URL or paste the token ID found after:</p>
-        <code className="mt-1 block break-all rounded-sm border border-[var(--hairline)] bg-term/80 px-2 py-1 font-mono text-[11px] text-text">https://etherscan.io/nft/0xfaafdc07907ff5120a76b34b731b278c38d6043c/</code>
-      </ToolInfoSection>}
 
       {infusionTab === 'query' && (!simpleMode || infusionSimpleStep >= 3) && (
       <section

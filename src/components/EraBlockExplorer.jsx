@@ -14,6 +14,7 @@ import CopyButton from './CopyButton.jsx'
 import Field from './Field.jsx'
 import ScanStatusBar from './ScanStatusBar.jsx'
 import Skeleton, { SkeletonSwap } from './Skeleton.jsx'
+import ToolInfoSection from './ToolInfoSection.jsx'
 
 const HEARTBEAT_PATH = 'M0 20 L20 20 L25 10 L30 30 L35 20 L100 20'
 
@@ -197,6 +198,13 @@ export default function EraBlockExplorer() {
           </div>
         </div>
       </section>
+
+      <ToolInfoSection tone="warning">
+        <p className="font-semibold text-text">Two data sources, two purposes</p>
+        <p className="mt-1">The live tiles above come from a direct WebSocket connection to the Enjin Relaychain and update in real time. The era lookup below reads from a cached CSV of 1,000+ past era boundaries, refreshed at load, plus an on-demand archive-node query for anything the cache doesn't cover yet.</p>
+        <p className="mt-2"><span className="font-semibold text-text">Era length is fixed.</span> One era is 14,400 blocks (6 sessions of 2,400 blocks each) — this tool derives every era boundary and countdown from that constant, not from a Subscan lookup.</p>
+        <p className="mt-2"><span className="font-semibold text-text">No wallet data.</span> This tool reports chain-wide state only; it does not look up an address or account.</p>
+      </ToolInfoSection>
 
       {/* Live telemetry grid */}
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
