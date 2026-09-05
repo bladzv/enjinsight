@@ -226,8 +226,8 @@
     background-color: var(--ink);
     /* Subtle grid backdrop for "engineering" feel */
     background-image:
-      linear-gradient(to right, rgba(var(--grid-rgb), 0.035) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(var(--grid-rgb), 0.035) 1px, transparent 1px),
+      linear-gradient(to right, rgb(var(--grid-rgb) / 0.035) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--grid-rgb) / 0.035) 1px, transparent 1px),
       radial-gradient(800px 480px at 100% -10%, rgba(124, 58, 237, 0.05), transparent 60%);
     background-size: 32px 32px, 32px 32px, auto;
     background-attachment: fixed;
@@ -272,13 +272,13 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(var(--line-rgb), 0.16);
+    background: rgb(var(--line-rgb) / 0.16);
     border: 3px solid transparent;
     background-clip: content-box;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(var(--line-rgb), 0.32);
+    background: rgb(var(--line-rgb) / 0.32);
     background-clip: content-box;
   }
 
@@ -346,7 +346,7 @@
     position: fixed;
     inset: 0;
     z-index: 60;
-    background: rgba(var(--scrim-rgb), 0.56);
+    background: rgb(var(--scrim-rgb) / 0.56);
     backdrop-filter: blur(4px);
   }
 
@@ -385,7 +385,7 @@
     z-index: 30;
     height: var(--status-h);
     border-bottom: 1px solid var(--hairline);
-    background: rgba(var(--sheet-rgb), 0.88);
+    background: rgb(var(--sheet-rgb) / 0.88);
     backdrop-filter: blur(10px);
   }
 
@@ -401,7 +401,7 @@
   }
 
   .rail-item:hover {
-    background: rgba(var(--hover-rgb), 0.06);
+    background: rgb(var(--hover-rgb) / 0.06);
     color: theme('colors.text');
   }
 
@@ -431,7 +431,7 @@
   }
 
   .glass-panel {
-    background: rgba(var(--glass-rgb), 0.92);
+    background: rgb(var(--glass-rgb) / 0.92);
     backdrop-filter: blur(8px);
     border: 1px solid var(--hairline);
   }
@@ -669,11 +669,11 @@
   }
 
   .data-table-row:hover {
-    background: rgba(var(--hover-rgb), 0.06);
+    background: rgb(var(--hover-rgb) / 0.06);
   }
 
   .data-table-row-alt {
-    background: rgba(var(--hover-rgb), 0.03);
+    background: rgb(var(--hover-rgb) / 0.03);
   }
 
   .data-table-row-danger {
@@ -986,7 +986,7 @@
   }
 
   .btn-ghost:hover {
-    background: rgba(var(--hover-rgb), 0.07);
+    background: rgb(var(--hover-rgb) / 0.07);
     color: theme('colors.text');
   }
 
@@ -999,7 +999,7 @@
   }
 
   .btn-icon:hover {
-    background: rgba(var(--hover-rgb), 0.07);
+    background: rgb(var(--hover-rgb) / 0.07);
     color: theme('colors.text');
   }
 
@@ -1261,7 +1261,7 @@
   }
 
   .btn-push:disabled {
-    box-shadow: 0 var(--m-press-edge) 0 rgba(var(--primary-dim-rgb) / 0.35);
+    box-shadow: 0 var(--m-press-edge) 0 rgb(var(--primary-dim-rgb) / 0.35);
   }
 
   /* The staking Run button carries an inset accent ring on top of the edge.
@@ -1298,7 +1298,7 @@
     bottom: 0;
     z-index: 0;
     border-radius: 0.125rem;
-    background: rgba(var(--primary-rgb) / 0.15);
+    background: rgb(var(--primary-rgb) / 0.15);
     transition: left var(--m-glide) var(--m-glide-ease),
                 width var(--m-glide) var(--m-glide-ease);
   }
@@ -1313,6 +1313,36 @@
     /* Same duration as the pill's travel, so the label finishes changing
        colour exactly as the pill lands rather than ahead of it. */
     transition: color var(--m-glide) var(--m-glide-ease);
+  }
+
+  /* ── Theme toggle ─────────────────────────────────────────────────
+     Both icons occupy the same grid cell so the swap cross-fades instead of
+     one popping in after the other unmounts. The outgoing icon rotates and
+     shrinks away rather than only fading, which reads as one object turning
+     over rather than two objects blinking. */
+  .theme-toggle__icons {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 17px;
+    height: 17px;
+  }
+
+  .theme-toggle__icon {
+    grid-area: 1 / 1;
+    display: flex;
+    transition: opacity var(--m-base) var(--m-ease-out),
+                transform var(--m-base) var(--m-ease-out);
+  }
+
+  .theme-toggle__icon[data-visible='false'] {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.6);
+  }
+
+  .theme-toggle__icon[data-visible='true'] {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
   }
 
   /* ── Floating label (Interaction #15) ─────────────────────────────
@@ -1424,6 +1454,64 @@
     color: theme('colors.muted');
   }
 
+
+  /* ── Number stepper ───────────────────────────────────────────────
+     The native spinner centres itself against the control's *content
+     box*. A .field number input carries deliberately asymmetric padding
+     (1.15rem top / 0.4rem bottom) so the lifted floating label has room,
+     which pushes that content box down and leaves the native control
+     sitting visibly low. It cannot be repositioned — ::-webkit-*-spin-button
+     ignores positioning, and Firefox exposes no pseudo-element at all — so
+     it is suppressed and replaced with chevrons positioned against
+     .field__box, which is the padded box. Field.jsx renders these only for
+     type="number"; Staking Cadence uses Stepper.jsx and is untouched. */
+  .field .input-field[type='number'] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+
+  .field .input-field[type='number']::-webkit-outer-spin-button,
+  .field .input-field[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .field[data-stepper='true'] .input-field {
+    padding-right: 1.9rem;
+  }
+
+  .field__stepper {
+    position: absolute;
+    right: 0.4rem;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .field__stepper-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.1rem;
+    height: 0.75rem;
+    border-radius: 0.125rem;
+    color: theme('colors.muted');
+    transition: color var(--m-fast) ease,
+                background-color var(--m-fast) ease,
+                transform var(--m-fast) ease;
+  }
+
+  .field__stepper-btn:hover {
+    color: theme('colors.text');
+    background: rgb(var(--line-rgb) / 0.18);
+  }
+
+  /* Matches .step-btn:active, so both steppers in the app press the same way. */
+  .field__stepper-btn:active {
+    transform: scale(0.9);
+  }
   /* ── Expanding search (Interaction #25) ───────────────────────────
      Collapse only where width is actually scarce. On desktop a 56px search
      puck costs more in discoverability than it saves in space, so the
@@ -1570,7 +1658,7 @@
     overflow: hidden;
     height: 3px;
     border-radius: 999px;
-    background: rgba(var(--primary-rgb) / 0.12);
+    background: rgb(var(--primary-rgb) / 0.12);
   }
 
   .indeterminate-bar__seg {
@@ -1660,6 +1748,47 @@
 }
 
 /* =============================================================================
+   Theme cross-fade
+   App.jsx stamps .theme-switching on <html> for the length of a theme change.
+   The class previously had no rule behind it anywhere: the only thing that
+   actually cross-faded was the hand-maintained selector list up in @layer
+   base, so panels and inputs faded while chart SVGs, badges and bordered
+   elements snapped to the new palette a frame later. This closes that seam.
+
+   Deliberately outside @layer. The elements that most need it (anything with
+   Tailwind's `transition-colors`, .pill-switch__pill, .btn-icon) already
+   declare their own `transition`, and a layered rule at equal specificity
+   would lose to them; unlayered CSS outranks every @layer section. It wins
+   for the ~620ms the class is applied and hands the element back its own
+   transition the moment the class is removed. No !important, so the
+   reduced-motion backstop below still overrides it.
+
+   `color` is deliberately NOT in this list, and that is the whole design of
+   the rule. Measured over a theme switch, worst frame in ms (dev build,
+   50k-node synthetic table for the largest case):
+
+       nodes    no rule    this rule    + color
+        260       18          18          33
+       2.7k       50          33         167
+        10k      132         151         584
+
+   Transitioning `color` on every element re-rasterizes every glyph on the
+   page each frame, and it alone accounts for the entire regression — the
+   other four properties are free at any size the app can actually produce
+   (its tables page at 250 rows). Text is also the part that needs it least:
+   most of it inherits `color` from one of the @layer base selectors above
+   and follows that animation for free. Do not add `color` here.
+   ============================================================================= */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: background-color var(--theme-transition-ms) ease,
+              border-color var(--theme-transition-ms) ease,
+              fill var(--theme-transition-ms) ease,
+              stroke var(--theme-transition-ms) ease;
+}
+
+/* =============================================================================
    Reduced motion — single source of truth
    Placed outside @layer so it wins on source order without needing
    !important on the token half. Zeroing every --m-* token handles anything
@@ -1669,6 +1798,7 @@
    ============================================================================= */
 @media (prefers-reduced-motion: reduce) {
   :root {
+    --theme-transition-ms: 0.01ms;
     --m-instant: 0.01ms;
     --m-fast: 0.01ms;
     --m-base: 0.01ms;

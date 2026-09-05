@@ -55,6 +55,10 @@ export default [
       },
       globals: {
         ...globals.browser,
+        // Injected by vite.config.js's `define` from package.json at build
+        // time. Read through a `typeof` guard in scanEnvelope.js so a bare
+        // Node import degrades to 'unknown' instead of throwing.
+        __APP_VERSION__: 'readonly',
       },
     },
     rules: {

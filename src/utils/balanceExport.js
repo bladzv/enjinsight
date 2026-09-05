@@ -10,6 +10,9 @@
  * - Blob URLs are revoked after 60 s to avoid memory leaks.
  */
 import { isValidBlockHash } from './substrate.js'
+// From the leaf envelope module, not scanExport.js — scanExport imports this
+// file, so importing it back would make the two circular.
+import { SCAN_SCHEMAS, envelopeHeader, readLegacyHeader } from './scanEnvelope.js'
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -84,8 +87,21 @@ function rowToObj(d) {
 
 // ── Export serialisers ─────────────────────────────────────────────────────
 
+/**
+ * Serialise to JSON.
+ *
+ * The identifying header is spread across the existing flat shape rather than
+ * wrapping it: `_rpcConfig` and `records` stay exactly where they have always
+ * been, so a build predating the header still recognises and reads the file.
+ * `exportedAt` therefore appears twice — once in the header, once inside
+ * `_rpcConfig` where older builds look for it.
+ */
 export function toJSON(data, rpcMeta) {
-  return JSON.stringify({ _rpcConfig: rpcMeta, records: data.map(rowToObj) }, null, 2)
+  return JSON.stringify({
+    ...envelopeHeader(SCAN_SCHEMAS.BALANCE),
+    _rpcConfig: rpcMeta,
+    records: data.map(rowToObj),
+  }, null, 2)
 }
 
 export function toCSV(data, rpcMeta) {
@@ -94,8 +110,15 @@ export function toCSV(data, rpcMeta) {
     'nonce','newFormat','free_enj','reserved_enj','miscFrozen_enj','feeFrozen_enj',
   ]
   const esc = v => `"${String(v).replace(/"/g, '""')}"`
+  // The original marker line stays first so an older build's sniff still
+  // matches; the provenance lines are additive.
+  const header = envelopeHeader(SCAN_SCHEMAS.BALANCE)
   const comments = [
     `# enjin_balance_export`,
+    `# tool: ${header.tool}`,
+    `# schema: ${header.schema}`,
+    `# schemaVersion: ${header.schemaVersion}`,
+    `# appVersion: ${header.appVersion}`,
     `# endpoint: ${rpcMeta.endpoint}`,
     `# address: ${rpcMeta.address}`,
     `# exportedAt: ${rpcMeta.exportedAt}`,
@@ -116,8 +139,13 @@ export function toXML(data, rpcMeta) {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&apos;')
+  const header = envelopeHeader(SCAN_SCHEMAS.BALANCE)
   const rpcXml = [
     '  <rpcConfig>',
+    `    <tool>${ex(header.tool)}</tool>`,
+    `    <schema>${ex(header.schema)}</schema>`,
+    `    <schemaVersion>${ex(header.schemaVersion)}</schemaVersion>`,
+    `    <appVersion>${ex(header.appVersion)}</appVersion>`,
     `    <endpoint>${ex(rpcMeta.endpoint)}</endpoint>`,
     `    <address>${ex(rpcMeta.address)}</address>`,
     `    <exportedAt>${ex(rpcMeta.exportedAt)}</exportedAt>`,
@@ -140,7 +168,7 @@ export function toXML(data, rpcMeta) {
  * The previous parser stripped every quote and *then* split on commas, so any
  * quoted field containing a comma silently corrupted the whole row.
  */
-function splitCsvRow(row) {
+export function splitCsvRow(row) {
   const out = []
   let field = ''
   let inQuotes = false
@@ -159,6 +187,21 @@ function splitCsvRow(row) {
     } else field += ch
   }
   out.push(field.trim())
+  return out
+}
+
+/**
+ * Rebuild a header object from a CSV comment block's `# key: value` lines.
+ *
+ * Returns an object with no `tool` key for a file predating the header, which
+ * is what makes `readLegacyHeader` fall through to the caller's own sniff.
+ */
+function commentHeader(comments) {
+  const out = {}
+  for (const c of comments) {
+    const m = c.match(/^#\s*(tool|schema|schemaVersion|appVersion|exportedAt):\s*(.+)$/)
+    if (m) out[m[1]] = m[2].trim()
+  }
   return out
 }
 
@@ -187,11 +230,17 @@ export function parseImport(text, ext) {
   if (ext === 'json') {
     let parsed
     try { parsed = JSON.parse(text) } catch { throw new Error('JSON parse failed.') }
+    // Validates the shared header when one is present, and throws naming the
+    // owning tool if it belongs to a different one. Returns null for an export
+    // written before the header existed, which the shape check below still
+    // accepts — see readLegacyHeader.
+    const header = readLegacyHeader(parsed, SCAN_SCHEMAS.BALANCE)
     const arr = Array.isArray(parsed) ? parsed : parsed?.records
     if (!Array.isArray(arr)) throw new Error('Expected a JSON array or {records:[]} object at root.')
     return {
       records: arr.map(normaliseRecord),
       rpcConfig: parsed?._rpcConfig ?? null,
+      header,
     }
   }
 
@@ -200,6 +249,9 @@ export function parseImport(text, ext) {
     const comments = allLines.filter(l => l.startsWith('#'))
     const dataLines = allLines.filter(l => !l.startsWith('#'))
     if (dataLines.length < 2) throw new Error('CSV has no data rows.')
+
+    // Header lines are comments, so the same validation applies.
+    const header = readLegacyHeader(commentHeader(comments), SCAN_SCHEMAS.BALANCE)
 
     // Extract RPC config from comments
     let endpoint = '', address = ''
@@ -250,16 +302,25 @@ export function parseImport(text, ext) {
         throw new Error(`CSV row ${i + 2}: ${e.message}`, { cause: e })
       }
     })
-    return { records, rpcConfig: (endpoint || address) ? { endpoint, address } : null }
+    return { records, rpcConfig: (endpoint || address) ? { endpoint, address } : null, header }
   }
 
   if (ext === 'xml') {
     const doc = new DOMParser().parseFromString(text, 'application/xml')
     if (doc.querySelector('parsererror')) throw new Error('XML parse error.')
     const rpcEl = doc.querySelector('rpcConfig')
+    const el = (parent, tag) => parent?.querySelector(tag)?.textContent?.trim()
+    // Header elements live inside <rpcConfig>, so the same validation applies.
+    const header = readLegacyHeader({
+      tool:          el(rpcEl, 'tool'),
+      schema:        el(rpcEl, 'schema'),
+      schemaVersion: el(rpcEl, 'schemaVersion'),
+      appVersion:    el(rpcEl, 'appVersion'),
+      exportedAt:    el(rpcEl, 'exportedAt'),
+    }, SCAN_SCHEMAS.BALANCE)
     const rpcConfig = rpcEl ? {
-      endpoint: rpcEl.querySelector('endpoint')?.textContent?.trim() ?? '',
-      address:  rpcEl.querySelector('address')?.textContent?.trim()  ?? '',
+      endpoint: el(rpcEl, 'endpoint') ?? '',
+      address:  el(rpcEl, 'address')  ?? '',
     } : null
     const records = Array.from(doc.querySelectorAll('record')).map(r => {
       const t = s => r.querySelector(s)?.textContent || ''
@@ -270,7 +331,7 @@ export function parseImport(text, ext) {
         nonce:      t('nonce'),      newFormat:  t('newFormat') === 'true',
       })
     })
-    return { records, rpcConfig }
+    return { records, rpcConfig, header }
   }
 
   throw new Error('Unsupported file format.')
@@ -371,6 +432,26 @@ export async function aesEncrypt(plain, password) {
     encrypted: true, v: ENCRYPTED_FORMAT_VERSION, algorithm, kdf,
     data: bytesToBase64(out),
   }, null, 2)
+}
+
+/**
+ * Encrypt, then label the payload with the shared header.
+ *
+ * The header sits *alongside* the ciphertext fields rather than wrapping them,
+ * so `aesDecrypt` — and any build predating this change — still finds
+ * `encrypted`, `v`, `kdf` and `data` exactly where it expects. What it buys is
+ * that an importer can tell whose file this is before asking for a password:
+ * previously every tool's `.enc.json` looked identical, so a Balance export
+ * dropped on the Reward importer prompted for a password and only failed after
+ * a successful decrypt.
+ *
+ * The label is a routing hint, not a security control: it is outside the AEAD,
+ * so it is not authenticated. The authoritative check is the header inside the
+ * decrypted plaintext, which `parseImport` validates.
+ */
+export async function aesEncryptLabelled(plain, password, schema) {
+  const cipher = JSON.parse(await aesEncrypt(plain, password))
+  return JSON.stringify({ ...envelopeHeader(schema), ...cipher }, null, 2)
 }
 
 /**

@@ -1,5 +1,10 @@
+import { readFileSync } from 'node:fs'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+
+// Read at config time (Node context) rather than imported into app code, so
+// bumping the version never requires touching anything but package.json.
+const APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8')).version
 
 const ENJIN_CRYPTOITEMS_CONTRACT = '0xfaafdc07907ff5120a76b34b731b278c38d6043c'
 const ETHERSCAN_API_URL = 'https://api.etherscan.io/v2/api'
@@ -555,6 +560,12 @@ export default defineConfig(({ mode }) => {
     // './' base makes the app work at any subdirectory path,
     // including use in relative subdirectories for static hosts
     base: './',
+    // Inlined at build time — a plain string constant, not a secret, so
+    // exposing it via `define` (unlike the API keys above) is fine. Vitest
+    // reads this same config, so tests see it too.
+    define: {
+      __APP_VERSION__: JSON.stringify(APP_VERSION),
+    },
     build: {
       outDir: 'dist',
       sourcemap: false, // never expose source maps in production

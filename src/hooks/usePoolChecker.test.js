@@ -108,7 +108,7 @@ describe('selectCheckableEras', () => {
   it('returns an empty result when nothing is closed', () => {
     const open = new Map([[10, { start: 100, end: 0 }]])
     expect(selectCheckableEras(open, 5)).toEqual({
-      maxClosedEra: 0, completedEras: [], skipped: [],
+      maxClosedEra: 0, completedEras: [], skipped: [], provisionalEra: null,
     })
     expect(selectCheckableEras(new Map(), 5).maxClosedEra).toBe(0)
   })
@@ -130,5 +130,78 @@ describe('selectCheckableEras', () => {
       expect(payout.start).toBeGreaterThan(0)
       expect(payout.end).toBeGreaterThan(0)
     }
+  })
+})
+
+// Mark the newest era's range as still-filling, the way the live era arrives
+// from Subscan (end_block_num = current chain head, not an era boundary).
+function withOpenLiveEra(from, liveEra) {
+  const map = contiguous(from, liveEra)
+  map.set(liveEra, { ...map.get(liveEra), partial: true })
+  return map
+}
+
+describe('selectCheckableEras — live era and provisional reporting', () => {
+  it('never counts the in-progress era as a closed payout window', () => {
+    const { maxClosedEra } = selectCheckableEras(withOpenLiveEra(1160, 1172), 4, 1172)
+    expect(maxClosedEra).toBe(1171)   // not 1172: its range is still filling
+  })
+
+  it('reports the era below the live one, flagged provisional', () => {
+    // Era 1171 pays out during era 1172, which is in progress. It is included
+    // because most payouts land early in the window, but named as provisional
+    // so it can be excluded from miss detection.
+    const { completedEras, provisionalEra } = selectCheckableEras(withOpenLiveEra(1160, 1172), 4, 1172)
+    expect(provisionalEra).toBe(1171)
+    expect(completedEras).toEqual([1171, 1170, 1169, 1168])
+  })
+
+  it('honours the requested era count with the provisional era included', () => {
+    for (const n of [1, 2, 7]) {
+      const { completedEras } = selectCheckableEras(withOpenLiveEra(1150, 1172), n, 1172)
+      expect(completedEras).toHaveLength(n)
+      expect(completedEras[0]).toBe(1171)
+    }
+  })
+
+  it('withholds the newest era when the open payout window is unknown', () => {
+    // No range at all for the live era: era 1171 has nothing to be checked against.
+    const map = contiguous(1160, 1171)
+    const { completedEras, provisionalEra } = selectCheckableEras(map, 4, 1172)
+    expect(provisionalEra).toBeNull()
+    expect(completedEras).toEqual([1170, 1169, 1168, 1167])
+  })
+
+  it('treats a closed range for the live era as not provisional', () => {
+    // Defensive: if a range for the live era ever arrives without the partial
+    // flag, fall back to the conservative window rather than trusting it.
+    const { provisionalEra, completedEras } = selectCheckableEras(contiguous(1160, 1172), 4, 1172)
+    expect(provisionalEra).toBeNull()
+    expect(completedEras).toEqual([1170, 1169, 1168, 1167])
+  })
+
+  it('falls back to the old behaviour when the live era is unknown', () => {
+    const map = withOpenLiveEra(1160, 1172)
+    const { completedEras, provisionalEra } = selectCheckableEras(map, 4, null)
+    expect(provisionalEra).toBeNull()
+    expect(completedEras).toEqual([1170, 1169, 1168, 1167])
+  })
+
+  it('every reported era has a usable payout range', () => {
+    // The invariant Step 4 relies on, now including the open window.
+    const map = withOpenLiveEra(1160, 1172)
+    const { completedEras } = selectCheckableEras(map, 4, 1172)
+    for (const era of completedEras) {
+      const payout = map.get(era + 1)
+      expect(payout).toBeDefined()
+      expect(payout.start).toBeGreaterThan(0)
+      expect(payout.end).toBeGreaterThan(0)
+    }
+  })
+
+  it('still reports nothing when the live era predates every known range', () => {
+    const { maxClosedEra, completedEras } = selectCheckableEras(contiguous(1160, 1170), 4, 1160)
+    expect(maxClosedEra).toBe(0)
+    expect(completedEras).toEqual([])
   })
 })

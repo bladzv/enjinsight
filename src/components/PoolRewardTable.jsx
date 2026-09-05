@@ -1,6 +1,108 @@
-import { useState, useMemo } from 'react'
-import { CheckCircle2, XCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, ExternalLink, Info } from 'lucide-react'
 import { formatENJ, truncateAddress, validatorExplorerUrl } from '../utils/format.js'
+import { useHoverCapable } from '../hooks/useHoverCapable.js'
+
+/**
+ * Merge reward events with the expected era window into render-ready rows.
+ *
+ * Exported for tests: the three states a row can be in are the whole point of
+ * this table, and getting them wrong either hides a real missed payout or
+ * invents one.
+ *
+ *  - `missed`      — no reward event for this era. A gap, whether or not the
+ *                    payout window has closed: a provisional era with nothing
+ *                    yet counts, and may fill in later.
+ *  - `provisional` — the payout window is the era in progress. A label only;
+ *                    it does not change whether the row counts as missed.
+ *  - `pending`     — provisional, not missed, but the summed reward is zero.
+ *                    Reachable while `missedEras` is still being computed, and
+ *                    for a zero-amount reward event. Must not read as a green
+ *                    all-clear.
+ */
+export function buildEraRows({ eraRewards, missedEras, eraCount, latestEra, provisionalEra = null }) {
+  const missedSet = new Set(missedEras ?? [])
+
+  // Build a lookup from era → summed reward amount (BigInt)
+  const rewardTotals = new Map()
+  if (Array.isArray(eraRewards)) {
+    for (const r of eraRewards) {
+      const era = parseInt(String(r.era), 10)
+      if (!Number.isFinite(era)) continue
+      const amtStr = String(r.amount ?? '0').replace(/[^0-9]/g, '') || '0'
+      let amt
+      try { amt = BigInt(amtStr) } catch { amt = 0n }
+      rewardTotals.set(era, (rewardTotals.get(era) || 0n) + amt)
+    }
+  }
+
+  // All expected eras, newest first, with reward data or a gap marker.
+  const allEras = latestEra && eraCount ? Array.from({ length: eraCount }, (_, i) => latestEra - i) : []
+  return allEras.map(era => {
+    const provisional = provisionalEra != null && era === provisionalEra
+    const rewardTotal = rewardTotals.get(era) ?? 0n
+    // A provisional era is no longer exempt: if it has no reward event it is
+    // missed like any other. `pending` is what is left over — provisional,
+    // present in the reward list (so not missed), but summing to zero.
+    const missed = missedSet.has(era)
+    return {
+      era,
+      rewardTotal,
+      missed,
+      provisional,
+      pending: provisional && !missed && rewardTotal <= 0n,
+    }
+  })
+}
+
+const PROVISIONAL_COPY = "Provisional \u2014 this era's payout window (the era now in progress) is still open. A missing reward is counted as missed, but it may still be paid before the window closes."
+
+/**
+ * Small "i" affordance that reveals an explanation on hover (pointer devices)
+ * or on click/focus (touch and keyboard). Hover alone would be permanently
+ * unreachable on a touch screen, so the click/focus path is not optional.
+ */
+function InfoTip({ label, children, align = 'left' }) {
+  const [open, setOpen] = useState(false)
+  const hoverCapable = useHoverCapable()
+  const wrapRef = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onDocPointer(event) {
+      if (wrapRef.current && !wrapRef.current.contains(event.target)) setOpen(false)
+    }
+    function onKeyDown(event) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocPointer)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onDocPointer)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+
+  return (
+    <span ref={wrapRef} className="relative inline-flex group align-middle">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-label={label}
+        aria-expanded={open}
+        className="ml-1.5 inline-flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning transition-colors hover:bg-warning/25"
+      >
+        <Info size={9} strokeWidth={2.5} />
+      </button>
+      <span
+        role="tooltip"
+        className={`pointer-events-none absolute z-50 top-full mt-1 w-56 whitespace-normal break-words rounded-lg border border-rim bg-ink p-2.5 text-left text-[10px] font-normal normal-case leading-relaxed tracking-normal text-text-secondary shadow-xl shadow-black/60 transition-opacity duration-150 ${align === 'right' ? 'right-0' : 'left-0'} ${open ? 'opacity-100' : hoverCapable ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}
+      >
+        {children}
+      </span>
+    </span>
+  )
+}
 
 /**
  * Paginated table showing per-era reward status for a nomination pool.
@@ -9,7 +111,7 @@ import { formatENJ, truncateAddress, validatorExplorerUrl } from '../utils/forma
  */
 export default function PoolRewardTable({
   eraRewards, missedEras, eraCount, latestEra,
-  eraValidatorBreakdown,
+  eraValidatorBreakdown, provisionalEra = null,
 }) {
   const [page, setPage]         = useState(0)
   const [pageSize, setPageSize] = useState(10)
@@ -18,30 +120,10 @@ export default function PoolRewardTable({
   // Re-parses every reward's BigInt amount and rebuilds the full row array.
   // Previously ran on every render (e.g. toggling a row's expansion) even when
   // none of these props had changed.
-  const rows = useMemo(() => {
-    const missedSet = new Set(missedEras ?? [])
-
-    // Build a lookup from era → summed reward amount (BigInt)
-    const rewardTotals = new Map()
-    if (Array.isArray(eraRewards)) {
-      for (const r of eraRewards) {
-        const era = parseInt(String(r.era), 10)
-        if (!Number.isFinite(era)) continue
-        const amtStr = String(r.amount ?? '0').replace(/[^0-9]/g, '') || '0'
-        let amt
-        try { amt = BigInt(amtStr) } catch { amt = 0n }
-        rewardTotals.set(era, (rewardTotals.get(era) || 0n) + amt)
-      }
-    }
-
-    // Build merged rows: all expected eras (descending), with reward data or gap marker
-    const allEras = latestEra && eraCount ? Array.from({ length: eraCount }, (_, i) => latestEra - i) : []
-    return allEras.map(era => ({
-      era,
-      rewardTotal: rewardTotals.get(era) ?? 0n,
-      missed: missedSet.has(era),
-    }))
-  }, [eraRewards, missedEras, eraCount, latestEra])
+  const rows = useMemo(
+    () => buildEraRows({ eraRewards, missedEras, eraCount, latestEra, provisionalEra }),
+    [eraRewards, missedEras, eraCount, latestEra, provisionalEra],
+  )
 
   if (!latestEra || !eraCount) {
     return <p className="text-xs text-dim py-4 text-center">No reward data available.</p>
@@ -96,7 +178,7 @@ export default function PoolRewardTable({
 
       {/* Mobile cards */}
       <div className="space-y-1.5 sm:hidden">
-        {pageItems.map(({ era, rewardTotal, missed }) => {
+        {pageItems.map(({ era, rewardTotal, missed, provisional, pending }) => {
           const bd = hasBreakdown ? eraValidatorBreakdown.get(era) : null
           const isExpanded = expandedEra === era
           const activeUnrewarded = bd?.unrewarded?.filter(v => v.isActive) ?? []
@@ -105,13 +187,20 @@ export default function PoolRewardTable({
           return (
             <div
               key={`m-${era}`}
-              className={`rounded-sm border ${missed ? 'border-danger/30 bg-danger/10' : 'border-[var(--hairline)] bg-card'} px-3 py-2`}
+              className={`rounded-sm border ${missed ? 'border-danger/30 bg-danger/10' : provisional ? 'border-warning/30 bg-warning/5' : 'border-[var(--hairline)] bg-card'} px-3 py-2`}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className={`font-mono text-sm font-bold ${missed ? 'text-danger' : 'text-text'}`}>Era {era}</span>
+                <span className={`font-mono text-sm font-bold ${missed ? 'text-danger' : 'text-text'}`}>
+                  Era {era}
+                  {provisional && (
+                    <InfoTip label={`Era ${era} is provisional`}>{PROVISIONAL_COPY}</InfoTip>
+                  )}
+                </span>
                 {missed
                   ? <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-danger"><XCircle size={11} />No Reward</span>
-                  : <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-success"><CheckCircle2 size={11} />Rewarded</span>
+                  : pending
+                    ? <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-warning"><Clock size={11} />Pending</span>
+                    : <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-success"><CheckCircle2 size={11} />Rewarded</span>
                 }
               </div>
               <div className="mt-1 flex items-center justify-between text-[11px] text-text-secondary">
@@ -155,13 +244,14 @@ export default function PoolRewardTable({
             </tr>
           </thead>
           <tbody>
-              {pageItems.map(({ era, rewardTotal, missed }) => {
+              {pageItems.map(({ era, rewardTotal, missed, provisional, pending }) => {
               const bd = hasBreakdown ? eraValidatorBreakdown.get(era) : null
               const isExpanded = expandedEra === era
               return missed ? (
                 <MissedRow
                   key={`miss-${era}`}
                   era={era}
+                  provisional={provisional}
                   bd={bd}
                   hasBreakdown={hasBreakdown}
                   isExpanded={isExpanded}
@@ -172,6 +262,8 @@ export default function PoolRewardTable({
                   key={`era-${era}`}
                   era={era}
                   rewardTotal={rewardTotal}
+                  provisional={provisional}
+                  pending={pending}
                   bd={bd}
                   hasBreakdown={hasBreakdown}
                   isExpanded={isExpanded}
@@ -187,7 +279,7 @@ export default function PoolRewardTable({
 }
 
 /** Rewarded era row with optional validator breakdown expansion. */
-function RewardedRow({ era, rewardTotal, bd, hasBreakdown, isExpanded, onToggle }) {
+function RewardedRow({ era, rewardTotal, provisional = false, pending = false, bd, hasBreakdown, isExpanded, onToggle }) {
   const rewardedCount = bd?.rewarded?.length ?? 0
   // Exclude inactive validators from "no reward" count
   const activeUnrewarded = bd?.unrewarded?.filter(v => v.isActive) ?? []
@@ -196,7 +288,12 @@ function RewardedRow({ era, rewardTotal, bd, hasBreakdown, isExpanded, onToggle 
   return (
     <>
       <tr className="data-table-row">
-        <td className="px-3 py-2.5 font-mono text-text-secondary text-center w-16">{era}</td>
+        <td className="px-3 py-2.5 font-mono text-text-secondary text-center w-16">
+          {era}
+          {provisional && (
+            <InfoTip label={`Era ${era} is provisional`}>{PROVISIONAL_COPY}</InfoTip>
+          )}
+        </td>
         <td className="px-3 py-2.5 text-right font-mono text-text w-10">
           {rewardTotal && rewardTotal > 0n ? formatENJ(rewardTotal, 4) : '—'}
         </td>
@@ -210,9 +307,9 @@ function RewardedRow({ era, rewardTotal, bd, hasBreakdown, isExpanded, onToggle 
           }
         </td>
         <td className="px-3 py-2.5 text-center">
-          <span className="inline-flex items-center gap-1 text-success">
-            <CheckCircle2 size={12} />
-            <span className="text-[11px] font-semibold">Rewarded</span>
+          <span className={`inline-flex items-center gap-1 ${pending ? 'text-warning' : 'text-success'}`}>
+            {pending ? <Clock size={12} /> : <CheckCircle2 size={12} />}
+            <span className="text-[11px] font-semibold">{pending ? 'Pending' : 'Rewarded'}</span>
           </span>
           <div className="mt-1 flex items-center justify-center gap-2 text-[10px] text-dim md:hidden">
             <span>
@@ -243,7 +340,7 @@ function RewardedRow({ era, rewardTotal, bd, hasBreakdown, isExpanded, onToggle 
 }
 
 /** Missed era row with optional expansion showing all unrewarded validators. */
-function MissedRow({ era, bd, hasBreakdown, isExpanded, onToggle }) {
+function MissedRow({ era, provisional = false, bd, hasBreakdown, isExpanded, onToggle }) {
   // Exclude inactive validators from "no reward" count
   const activeUnrewarded = bd?.unrewarded?.filter(v => v.isActive) ?? []
   const noRewardCount = activeUnrewarded.length
@@ -251,7 +348,12 @@ function MissedRow({ era, bd, hasBreakdown, isExpanded, onToggle }) {
   return (
     <>
       <tr className="data-table-row-danger">
-        <td className="px-3 py-2.5 font-mono text-danger font-semibold text-center w-16">{era}</td>
+        <td className="px-3 py-2.5 font-mono text-danger font-semibold text-center w-16">
+          {era}
+          {provisional && (
+            <InfoTip label={`Era ${era} is provisional`}>{PROVISIONAL_COPY}</InfoTip>
+          )}
+        </td>
         <td className="px-3 py-2.5 text-right text-danger w-10">—</td>
         <td className="px-3 py-2.5 text-center hidden md:table-cell">
           <span className="font-mono text-xs text-dim">0</span>

@@ -13,9 +13,9 @@
  */
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
-  Play, Square, RotateCcw, Download, Upload,
-  ChevronDown, Lock, Unlock, FolderOpen,
-  AlertTriangle, Server, Info, XCircle, CheckCircle,
+  Play, Square, RotateCcw, Download,
+  ChevronDown, Lock, Unlock,
+  AlertTriangle, Info, FileDown,
 } from 'lucide-react'
 import { useRewardHistory, RH_STATUS } from '../hooks/useRewardHistory.js'
 import { fetchLiveChainInfo } from '../utils/chainInfo.js'
@@ -23,9 +23,12 @@ import PhaseProgressCards from './PhaseProgressCards.jsx'
 import StepProgress from './StepProgress.jsx'
 import TerminalLog from './TerminalLog.jsx'
 import ToolInfoSection from './ToolInfoSection.jsx'
+import RewardImportPanel from './RewardImportPanel.jsx'
+import ToolModeStrip from './ToolModeStrip.jsx'
 import { PLANCK_PER_ENJ, SUBSCAN_HISTORY_DAYS, MAX_SCAN_DAYS, MAX_REWARD_ERA_SPAN } from '../constants.js'
-import { aesEncrypt, aesDecrypt, downloadFile, safeFilename } from '../utils/balanceExport.js'
-import { MAX_IMPORT_MB } from '../constants.js'
+import { aesEncryptLabelled, downloadFile, safeFilename, parseBigInt, splitCsvRow } from '../utils/balanceExport.js'
+import { SCAN_SCHEMAS, envelopeHeader, readLegacyHeader } from '../utils/scanEnvelope.js'
+import { formatExportedAtUTC } from '../utils/format.js'
 import Spinner from './Spinner.jsx'
 import Field from './Field.jsx'
 import Skeleton from './Skeleton.jsx'
@@ -163,8 +166,17 @@ function rewardToObj(r) {
   }
 }
 
+/**
+ * Serialise to JSON.
+ *
+ * The shared header is spread across the existing flat shape rather than
+ * wrapping it, so a build predating the header still recognises and reads the
+ * file — see scanEnvelope.js. `exportedAt` therefore appears twice: once in
+ * the header, once inside `_meta` where older builds look for it.
+ */
 function rewardToJSON(results, meta) {
   return JSON.stringify({
+    ...envelopeHeader(SCAN_SCHEMAS.REWARD),
     _meta: meta,
     records: results.map(rewardToObj),
   }, null, 2)
@@ -173,8 +185,15 @@ function rewardToJSON(results, meta) {
 function rewardToCSV(results, meta) {
   const H = Object.keys(rewardToObj(results[0] || {}))
   const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`
+  // The original marker line stays first so an older build's sniff still
+  // matches; the provenance lines are additive.
+  const header = envelopeHeader(SCAN_SCHEMAS.REWARD)
   const comments = [
     '# enjin_reward_history_export',
+    `# tool: ${header.tool}`,
+    `# schema: ${header.schema}`,
+    `# schemaVersion: ${header.schemaVersion}`,
+    `# appVersion: ${header.appVersion}`,
     `# address: ${meta.address ?? ''}`,
     `# exportedAt: ${meta.exportedAt}`,
   ]
@@ -188,7 +207,17 @@ function rewardToCSV(results, meta) {
 function rewardToXML(results, meta) {
   const ex = v =>
     String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;')
-  const metaXml = `  <meta>\n    <address>${ex(meta.address ?? '')}</address>\n    <exportedAt>${ex(meta.exportedAt)}</exportedAt>\n  </meta>`
+  const header = envelopeHeader(SCAN_SCHEMAS.REWARD)
+  const metaXml = [
+    '  <meta>',
+    `    <tool>${ex(header.tool)}</tool>`,
+    `    <schema>${ex(header.schema)}</schema>`,
+    `    <schemaVersion>${ex(header.schemaVersion)}</schemaVersion>`,
+    `    <appVersion>${ex(header.appVersion)}</appVersion>`,
+    `    <address>${ex(meta.address ?? '')}</address>`,
+    `    <exportedAt>${ex(meta.exportedAt)}</exportedAt>`,
+    '  </meta>',
+  ].join('\n')
   const rows = results.map(r => {
     const o = rewardToObj(r)
     return '  <record>\n' + Object.entries(o).map(([k, v]) => `    <${k}>${ex(v)}</${k}>`).join('\n') + '\n  </record>'
@@ -196,8 +225,23 @@ function rewardToXML(results, meta) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<enjinRewardHistory>\n${metaXml}\n${rows}\n</enjinRewardHistory>`
 }
 
-/** Parse imported reward JSON/CSV back into result rows */
-function parseRewardImport(text, ext) {
+/**
+ * Rebuild a header object from a CSV comment block's `# key: value` lines.
+ *
+ * Yields an object with no `tool` key for a file predating the header, which is
+ * what makes `readLegacyHeader` fall through to the caller's own sniff.
+ */
+function commentHeader(comments) {
+  const out = {}
+  for (const c of comments) {
+    const m = c.match(/^#\s*(tool|schema|schemaVersion|appVersion|exportedAt):\s*(.+)$/)
+    if (m) out[m[1]] = m[2].trim()
+  }
+  return out
+}
+
+/** Parse imported reward JSON/CSV back into result rows. Exported for tests. */
+export function parseRewardImport(text, ext) {
   // ── Shared row mapper ─────────────────────────────────────────────────────
   function mapRow(r) {
     return {
@@ -206,11 +250,11 @@ function parseRewardImport(text, ext) {
       poolLabel:       String(r.pool_label ?? r.poolLabel ?? ''),
       eraStartBlock:   r.era_start_block != null ? Number(r.era_start_block) : null,
       eraStartDateUtc: r.era_date_utc || r.eraStartDateUtc || null,
-      memberBalance:   BigInt(String(r.member_senj ?? r.memberBalance ?? '0').replace(/[^0-9]/g, '') || '0'),
-      poolSupply:      BigInt(String(r.pool_supply_senj ?? r.poolSupply ?? '0').replace(/[^0-9]/g, '') || '0'),
-      reinvested:      BigInt(String(r.reinvested_enj ?? r.reinvested ?? '0').replace(/[^0-9]/g, '') || '0'),
-      reward:          BigInt(String(r.reward_enj ?? r.reward ?? '0').replace(/[^0-9]/g, '') || '0'),
-      accumulated:     BigInt(String(r.cumulative_enj ?? r.accumulated ?? '0').replace(/[^0-9]/g, '') || '0'),
+      memberBalance:   parseBigInt(r.member_senj ?? r.memberBalance, { field: 'member_senj' }),
+      poolSupply:      parseBigInt(r.pool_supply_senj ?? r.poolSupply, { field: 'pool_supply_senj' }),
+      reinvested:      parseBigInt(r.reinvested_enj ?? r.reinvested, { field: 'reinvested_enj' }),
+      reward:          parseBigInt(r.reward_enj ?? r.reward, { field: 'reward_enj' }),
+      accumulated:     parseBigInt(r.cumulative_enj ?? r.accumulated, { field: 'cumulative_enj' }),
       apy:             parseFloat(r.apy_pct ?? r.apy ?? '0') || 0,
       rollingApy:      parseFloat(r.rolling_apy_pct ?? r.rollingApy ?? '') || undefined,
     }
@@ -219,9 +263,13 @@ function parseRewardImport(text, ext) {
   if (ext === 'json') {
     let parsed
     try { parsed = JSON.parse(text) } catch { throw new Error('JSON parse failed.') }
+    // Validates the shared header when present, throwing by name if the file
+    // belongs to another tool; returns null for a headerless legacy export,
+    // which the shape check below still accepts.
+    const header = readLegacyHeader(parsed, SCAN_SCHEMAS.REWARD)
     const arr = Array.isArray(parsed) ? parsed : parsed?.records
     if (!Array.isArray(arr)) throw new Error('Expected JSON array or {records:[]}.')
-    return { results: arr.map(mapRow), meta: parsed?._meta ?? null }
+    return { results: arr.map(mapRow), meta: parsed?._meta ?? null, header }
   }
 
   if (ext === 'csv') {
@@ -229,23 +277,30 @@ function parseRewardImport(text, ext) {
     const comments  = allLines.filter(l => l.startsWith('#'))
     const dataLines = allLines.filter(l => !l.startsWith('#'))
     if (dataLines.length < 2) throw new Error('CSV has no data rows.')
+    // Header lines are comments, so the same validation applies.
+    const header = readLegacyHeader(commentHeader(comments), SCAN_SCHEMAS.REWARD)
     let address = ''
     comments.forEach(c => { const m = c.match(/^# address:\s*(.+)/); if (m) address = m[1].trim() })
-    const headers = dataLines[0].replace(/"/g, '').split(',')
+    const headers = splitCsvRow(dataLines[0])
     const idx = k => headers.indexOf(k)
-    const results = dataLines.slice(1).map(row => {
-      const c = row.replace(/"/g, '').split(',')
+    const results = dataLines.slice(1).map((row, i) => {
+      const c = splitCsvRow(row)
       const g = k => c[idx(k)] ?? ''
-      return mapRow({
-        era: g('era'), pool_id: g('pool_id'), pool_label: g('pool_label'),
-        era_start_block: g('era_start_block'), era_date_utc: g('era_date_utc'),
-        member_senj: g('member_senj'), pool_supply_senj: g('pool_supply_senj'),
-        reinvested_enj: g('reinvested_enj'), reward_enj: g('reward_enj'),
-        cumulative_enj: g('cumulative_enj'), apy_pct: g('apy_pct'),
-        rolling_apy_pct: g('rolling_apy_pct'),
-      })
+      try {
+        return mapRow({
+          era: g('era'), pool_id: g('pool_id'), pool_label: g('pool_label'),
+          era_start_block: g('era_start_block'), era_date_utc: g('era_date_utc'),
+          member_senj: g('member_senj'), pool_supply_senj: g('pool_supply_senj'),
+          reinvested_enj: g('reinvested_enj'), reward_enj: g('reward_enj'),
+          cumulative_enj: g('cumulative_enj'), apy_pct: g('apy_pct'),
+          rolling_apy_pct: g('rolling_apy_pct'),
+        })
+      } catch (e) {
+        // +2: one for the header row, one for 1-based line numbering.
+        throw new Error(`CSV row ${i + 2}: ${e.message}`, { cause: e })
+      }
     })
-    return { results, meta: address ? { address } : null }
+    return { results, meta: address ? { address } : null, header }
   }
 
   if (ext === 'xml') {
@@ -263,8 +318,16 @@ function parseRewardImport(text, ext) {
       })
     )
     const metaEl = doc.querySelector('meta')
+    // Header elements live inside <meta>, so the same validation applies.
+    const header = readLegacyHeader({
+      tool:          g(metaEl, 'tool') || undefined,
+      schema:        g(metaEl, 'schema'),
+      schemaVersion: g(metaEl, 'schemaVersion'),
+      appVersion:    g(metaEl, 'appVersion'),
+      exportedAt:    g(metaEl, 'exportedAt'),
+    }, SCAN_SCHEMAS.REWARD)
     const meta = metaEl ? { address: g(metaEl,'address'), exportedAt: g(metaEl,'exportedAt') } : null
-    return { results, meta }
+    return { results, meta, header }
   }
 
   throw new Error('Unsupported format.')
@@ -964,7 +1027,7 @@ function RewardExportPanel({ results, address }) {
                   : format === 'csv'  ? rewardToCSV(results, meta)
                   : rewardToXML(results, meta)
       if (encOn) {
-        content = await aesEncrypt(content, password)
+        content = await aesEncryptLabelled(content, password, SCAN_SCHEMAS.REWARD)
         downloadFile(content, `${fname}.enc.json`, 'application/json')
         setMsg({ type: 'ok', text: `Encrypted: ${safeFilename(fname)}.enc.json` })
       } else {
@@ -1036,186 +1099,6 @@ function RewardExportPanel({ results, address }) {
   )
 }
 
-// ── Reward sniff — verifies file was exported by this tool ───────────────────
-function sniffReward(text, ext) {
-  if (ext === 'json') {
-    try {
-      const obj = JSON.parse(text)
-      if (obj?.encrypted === true) return true
-      const arr = Array.isArray(obj) ? obj : obj?.records
-      return Array.isArray(arr) && (obj?._meta != null || arr[0]?.era != null)
-    } catch { return false }
-  }
-  if (ext === 'csv') {
-    const firstLine = text.trimStart().split(/\r?\n/).find(l => !l.startsWith('#')) ?? ''
-    return firstLine.includes('era') && firstLine.includes('pool_id')
-  }
-  if (ext === 'xml') return text.includes('<enjinRewardHistory>')
-  return false
-}
-
-// ── Import panel ─────────────────────────────────────────────────────────────
-function RewardImportPanel({ onImport }) {
-  const [isDragOver, setIsDragOver] = useState(false)
-  const [isPending,  setIsPending]  = useState(false)
-  const [encPending, setEncPending] = useState(null)
-  const [decPwd,     setDecPwd]     = useState('')
-  const [alert,      setAlert]      = useState(null)  // post-parse errors
-  const [fileStatus, setFileStatus] = useState(null)  // { name, ext?, sizeKb, rejected, reason? }
-  const fileInputRef = useRef(null)
-
-  function showAlert(type, text) { setAlert({ type, text }); setTimeout(() => setAlert(null), 8000) }
-
-  function processFile(file) {
-    setFileStatus(null); setAlert(null); setEncPending(null)
-
-    const sizeKb = (file.size / 1024).toFixed(1)
-
-    // ── Size check ──────────────────────────────────────────────────────
-    if (file.size > MAX_IMPORT_MB * 1024 * 1024) {
-      setFileStatus({ name: file.name, sizeKb, rejected: true, reason: `File too large — max ${MAX_IMPORT_MB} MB allowed.` })
-      return
-    }
-
-    // ── Extension check ─────────────────────────────────────────────────
-    const ext = file.name.split('.').pop().toLowerCase()
-    if (!['json','csv','xml'].includes(ext)) {
-      setFileStatus({ name: file.name, ext, sizeKb, rejected: true, reason: `".${ext}" is not a supported file type. Only .json, .csv, or .xml exports from this tool can be imported.` })
-      return
-    }
-
-    setIsPending(true)
-    const reader = new FileReader()
-    reader.onload = ev => {
-      const text = ev.target.result
-
-      // ── Content sniff ───────────────────────────────────────────────
-      if (!sniffReward(text, ext)) {
-        setFileStatus({ name: file.name, ext, sizeKb, rejected: true, reason: "This file doesn't appear to be an export from this tool. Only files generated by EnjinSight's Reward History Viewer are supported." })
-        setIsPending(false)
-        return
-      }
-
-      setFileStatus({ name: file.name, ext, sizeKb, rejected: false })
-
-      // ── Encrypted JSON ──────────────────────────────────────────────
-      if (ext === 'json') {
-        try {
-          const obj = JSON.parse(text)
-          if (obj?.encrypted === true) { setEncPending({ text, fname: file.name, ext }); setIsPending(false); return }
-        } catch {}
-      }
-
-      try {
-        const { results, meta } = parseRewardImport(text, ext)
-        onImport(results, meta)
-        setFileStatus(null)
-      } catch (e) { showAlert('err', e.message) }
-      setIsPending(false)
-    }
-    reader.onerror = () => { setFileStatus({ name: file.name, sizeKb, rejected: true, reason: 'Failed to read the file.' }); setIsPending(false) }
-    reader.readAsText(file)
-  }
-
-  async function handleDecrypt() {
-    if (!decPwd) { showAlert('err', 'Enter the decryption password.'); return }
-    setIsPending(true)
-    try {
-      const plain = await aesDecrypt(encPending.text, decPwd)
-      const { results, meta } = parseRewardImport(plain, 'json')
-      onImport(results, meta)
-      setEncPending(null); setDecPwd('')
-    } catch (e) { showAlert('err', `Decryption failed: ${e.message}`) }
-    setIsPending(false)
-  }
-
-  function onDrop(e) { e.preventDefault(); setIsDragOver(false); const f=e.dataTransfer.files?.[0]; if(f) processFile(f) }
-  function onFileChange(e) { const f=e.target.files?.[0]; if(f) processFile(f); e.target.value='' }
-
-  return (
-    <div className="space-y-3">
-
-      {/* ── File identification card ────────────────────────────────────── */}
-      {fileStatus && (
-        <div className={`flex items-start gap-2.5 p-3 rounded-lg border text-[11px] leading-snug
-          ${fileStatus.rejected ? 'bg-danger/8 border-danger/25' : 'bg-success/8 border-success/25'}`}>
-          {fileStatus.rejected
-            ? <XCircle size={14} className="text-danger flex-shrink-0 mt-0.5" />
-            : <CheckCircle size={14} className="text-success flex-shrink-0 mt-0.5" />}
-          <div className="min-w-0 space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="max-w-full break-all font-mono text-text/80">{fileStatus.name}</span>
-              {fileStatus.ext && (
-                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest flex-shrink-0
-                  ${fileStatus.rejected ? 'bg-danger/15 text-danger' : 'bg-success/15 text-success'}`}>
-                  .{fileStatus.ext}
-                </span>
-              )}
-              <span className="text-muted">{fileStatus.sizeKb} KB</span>
-            </div>
-            {fileStatus.rejected
-              ? <p className="text-danger">{fileStatus.reason}</p>
-              : <p className="text-success">File recognized — processing…</p>}
-          </div>
-        </div>
-      )}
-
-      {/* ── Post-parse alert ────────────────────────────────────────────── */}
-      {alert && (
-        <div role="alert" className={`px-4 py-2.5 rounded-lg border text-sm font-medium
-          ${alert.type==='ok'?'bg-success/10 border-success/30 text-success':'bg-danger/10 border-danger/30 text-danger'}`}>
-          {alert.text}
-        </div>
-      )}
-
-      {/* ── Drop zone ───────────────────────────────────────────────────── */}
-      <div role="button" tabIndex={0} aria-label="Drop file or click to browse"
-        className={`rounded-sm p-10 text-center cursor-pointer transition-all
-          ${isDragOver?'bg-cyan/10 shadow-cyan-glow':'bg-card hover:bg-surface-high'}`}
-        style={{ border: '1px dashed rgba(70, 71, 82, 0.18)' }}
-        onClick={() => fileInputRef.current?.click()}
-        onKeyDown={e => e.key==='Enter'&&fileInputRef.current?.click()}
-        onDragOver={e=>{e.preventDefault();setIsDragOver(true)}}
-        onDragLeave={()=>setIsDragOver(false)}
-        onDrop={onDrop}>
-        {isPending ? (
-          <div className="flex flex-col items-center gap-2">
-            <Spinner size={32} />
-            <p className="text-sm text-text-secondary">Reading file…</p>
-          </div>
-        ) : (
-          <>
-            <FolderOpen size={32} className="mx-auto mb-3 text-text-secondary" />
-            <p className="font-semibold text-text mb-1">Drop file here or click to browse</p>
-            <p className="text-sm text-text-secondary">JSON, CSV, or XML exports from this tool (max {MAX_IMPORT_MB} MB)</p>
-          </>
-        )}
-        <input ref={fileInputRef} type="file" accept=".json,.csv,.xml" className="hidden" onChange={onFileChange} aria-hidden />
-      </div>
-
-      {/* ── Decrypt block ───────────────────────────────────────────────── */}
-      {encPending && (
-        <div className="space-y-3">
-          <div className="flex gap-2 rounded-sm border border-cyan/30 bg-cyan/10 px-4 py-3 text-sm text-cyan">
-            🔒 Encrypted file detected. Enter password to decrypt.
-          </div>
-          <div className="flex gap-3 items-end">
-            <div className="flex-1">
-              <Field label="Password" id="rh-dec-pwd" type="password" placeholder="Enter password…" maxLength={1024}
-                value={decPwd} onChange={e=>setDecPwd(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleDecrypt()}
-                controlClassName="font-mono" />
-            </div>
-            <button onClick={handleDecrypt} disabled={isPending} className="btn-primary py-2 px-4 self-end">
-              {isPending?<Spinner size={16} tone="on-primary" />:<Upload size={14}/>}
-              Decrypt &amp; Import
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Main component ──────────────────────────────────────────────────────────
 const RH_SIMPLE_STEPS = [
   { key: 'address',  label: 'Address'  },
@@ -1228,7 +1111,7 @@ const RH_SIMPLE_STEPS = [
 export default function RewardHistoryViewer({ onScanStateChange, simpleMode = false }) {
   const { status, results, logs, progress, errorMsg, run, stop, reset, log } = useRewardHistory()
 
-  const [tab,       setTab]      = useState('compute')  // 'compute' | 'import'
+  const [tab,       setTab]      = useState('query')  // 'query' | 'import'
   const [address,   setAddress]  = useState('')
 
   // Era range mode
@@ -1241,6 +1124,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
 
   // Imported results (separate from computed)
   const [importedResults, setImportedResults] = useState(null)
+  const [importMeta, setImportMeta] = useState(null)
   const [importedAddress, setImportedAddress] = useState('')
 
   // Include past pool interactions toggle
@@ -1413,10 +1297,24 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
     setStartDate(toDateInput(from)); setEndDate(toDateInput(now)); setActivePreset(label)
   }
 
-  function handleImportResults(rows, meta) {
+  function handleImportResults(rows, meta, header, fileName) {
     setImportedResults(rows)
     setFilteredRows(rows)
     setImportedAddress(meta?.address ?? '')
+    // `header` is null for an export predating the shared header; the banner
+    // then simply shows fewer details rather than claiming false ones.
+    setImportMeta({
+      fileName: fileName ?? '',
+      exportedAt: header?.exportedAt || meta?.exportedAt || '',
+      appVersion: header?.appVersion ?? null,
+    })
+  }
+
+  function clearImport() {
+    setImportedResults(null)
+    setImportedAddress('')
+    setImportMeta(null)
+    setFilteredRows([])
   }
 
   const showResults = (isLoading || isDone || isStopped || isError || importedResults) && activeResults.length > 0
@@ -1447,7 +1345,8 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
         </div>
       </section>
 
-      {simpleMode && (
+      {/* The stepper describes the Query flow, so it hides in Import mode. */}
+      {simpleMode && tab === 'query' && (
         <StepProgress
           steps={RH_SIMPLE_STEPS}
           currentStep={rhSimpleStep}
@@ -1467,30 +1366,15 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
         />
       )}
 
-      {!simpleMode && <div className="flex w-full gap-1 rounded-sm border border-[var(--hairline)] bg-card p-1">
-        {[
-          { key: 'compute', label: 'Compute Rewards', icon: Server },
-          { key: 'import',  label: 'Import Data',     icon: Upload },
-        ].map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-sm px-2 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition-colors sm:gap-2 sm:px-3 sm:text-[13px] ${
-              tab === key
-                ? 'bg-primary/15 text-primary-glow'
-                : 'text-text-secondary hover:bg-surface-high hover:text-text'
-            }`}
-            style={{ fontFamily: 'JetBrains Mono, ui-monospace, monospace', ...(tab === key ? { boxShadow: 'inset 0 0 0 1px rgba(124, 58, 237, 0.35)' } : {}) }}
-          >
-            <Icon size={13} />
-            <span className="truncate">{label}</span>
-          </button>
-        ))}
-      </div>}
+      <ToolModeStrip
+        queryLabel="Compute Rewards"
+        value={tab}
+        onChange={setTab}
+        idPrefix="reward"
+      />
 
       {/* ── Compute pane (advanced only) ── */}
-      {tab === 'compute' && !simpleMode && (
+      {tab === 'query' && !simpleMode && (
         <div className="space-y-3 sm:space-y-4">
           <ToolInfoSection tone="warning">
             <p className="font-semibold text-text">Reward history is an estimate</p>
@@ -1875,10 +1759,10 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
         </div>
       )}
 
-      {/* ── Import pane ── */}
-      {!simpleMode && tab === 'import' && (
+      {/* ── Import pane — both UI modes ── */}
+      {tab === 'import' && (
         <div className="overflow-hidden rounded-sm border border-[var(--hairline)] bg-surface">
-          <div role="tabpanel" className="p-4 sm:p-5 space-y-3">
+          <div role="tabpanel" id="reward-panel-import" aria-labelledby="reward-tab-import" className="p-4 sm:p-5 space-y-3">
             <div>
               <p className="section-label">Import</p>
             </div>
@@ -1890,7 +1774,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                 can be imported. Files from other sources or tools are not supported.
               </p>
             </div>
-            <RewardImportPanel onImport={handleImportResults} />
+            <RewardImportPanel parse={parseRewardImport} onImport={handleImportResults} />
           </div>
         </div>
       )}
@@ -1952,12 +1836,32 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
             <PoolBondedPieChart data={filteredRows} />
             <PoolRewardPieChart data={filteredRows} />
           </div>
-          {!importedResults && (isDone || isStopped) && <div className="md:w-1/2"><RewardExportPanel results={activeResults} address={address} /></div>}
-          {importedResults && <div className="md:w-1/2"><RewardExportPanel results={activeResults} address={importedAddress} /></div>}
+          {/* Export only for computed data. Imported data is a snapshot of a
+              past run, and a re-export would be indistinguishable from an
+              original — the same rule the other three tools follow. */}
+          {!importedResults && (isDone || isStopped) && (
+            <div className="md:w-1/2"><RewardExportPanel results={activeResults} address={address} /></div>
+          )}
+
+          {/* Provenance, adjacent to the results it describes. */}
           {importedResults && (
-            <div className="flex items-center gap-2 text-xs text-text-secondary px-1">
-              <span>Showing imported data.</span>
-              <button onClick={() => setImportedResults(null)} className="text-violet-400 hover:underline">Clear import</button>
+            <div className="flex items-start gap-2 rounded-sm border border-cyan/30 bg-cyan/10 px-3 py-2 text-xs text-cyan">
+              <FileDown size={14} className="mt-0.5 flex-shrink-0" />
+              <p className="min-w-0 flex-1">
+                Showing imported data
+                {importMeta?.fileName && <> from <span className="break-all font-mono">{importMeta.fileName}</span></>}
+                {importMeta?.exportedAt && <> · exported {formatExportedAtUTC(importMeta.exportedAt)}</>}
+                {importMeta?.appVersion && <> · EnjinSight v{importMeta.appVersion}</>}
+                {' '}· {activeResults.length} row{activeResults.length === 1 ? '' : 's'}.
+                {' '}Nothing was computed.
+              </p>
+              <button
+                type="button"
+                onClick={clearImport}
+                className="btn-secondary shrink-0 px-3 py-1 text-xs"
+              >
+                Clear
+              </button>
             </div>
           )}
         </section>

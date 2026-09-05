@@ -137,10 +137,10 @@ function reducer(state, action) {
     case 'LOOKUP_DONE':  return { ...state, lookupLoading: false, lookup: action.result }
     case 'LOOKUP_ERROR': return { ...state, lookupLoading: false, lookupError: action.error }
     case 'RESET_LOOKUP': return { ...state, lookup: null, lookupLoading: false, lookupError: null }
-    case 'LOG': {
-      const next = [...state.logs, action.payload]
-      return { ...state, logs: next.length > 200 ? next.slice(-200) : next }
-    }
+    case 'LOG':
+      // Uncapped — see TerminalLog, which windows what it renders. This tool
+      // capped at 200 rather than the 500 used elsewhere; both are gone.
+      return { ...state, logs: [...state.logs, action.payload] }
     default: return state
   }
 }
