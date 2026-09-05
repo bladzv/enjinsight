@@ -1333,7 +1333,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
   }, [status, activeResults.length])
 
   return (
-    <div className={`space-y-4 transition-[padding] duration-200 ${!simpleMode && logExpanded ? 'pb-[380px]' : 'pb-16'}`}>
+    <div className={`space-y-4 sm:space-y-5 transition-[padding] duration-200 ${!simpleMode && logExpanded ? 'pb-[380px]' : 'pb-16'}`}>
 
       <section className="page-hero">
         <div className="relative z-10 flex flex-col gap-2 sm:gap-3">
@@ -1578,7 +1578,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
       )}
 
       {/* ── Simple page 1: Address ── */}
-      {simpleMode && rhSimpleStep === 1 && (
+      {simpleMode && tab === 'query' && rhSimpleStep === 1 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="font-headline text-xl font-bold text-text">Enter your wallet address</h2>
@@ -1610,7 +1610,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
       )}
 
       {/* ── Simple page 2: Mode ── */}
-      {simpleMode && rhSimpleStep === 2 && (
+      {simpleMode && tab === 'query' && rhSimpleStep === 2 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="font-headline text-xl font-bold text-text">Choose query mode</h2>
@@ -1647,7 +1647,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
       )}
 
       {/* ── Simple page 3: Range Parameters ── */}
-      {simpleMode && rhSimpleStep === 3 && (
+      {simpleMode && tab === 'query' && rhSimpleStep === 3 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="font-headline text-xl font-bold text-text">Set the reward window</h2>
