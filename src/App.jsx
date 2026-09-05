@@ -583,6 +583,14 @@ export default function App() {
           </div>
         </section>
 
+        <ToolInfoSection tone="warning">
+          <p className="font-semibold text-text">Cadence, not real-time monitoring</p>
+          <p className="mt-1">This scan reads recent-era history through Subscan, at two requests per second, so it's built for a periodic check-in rather than continuous monitoring.</p>
+          <p className="mt-2"><span className="font-semibold text-text">Missed era ≠ missed payout, necessarily.</span> A validator or pool with no reward event recorded for an era is flagged missed, full stop — that can mean a genuinely skipped reward, but also a late or still-pending payout depending on chain timing.</p>
+          <p className="mt-2"><span className="font-semibold text-text">Severity is by count, not cause.</span> 1–2 missed eras in the window is Low, 3–5 is Medium, 6+ is High. It does not distinguish an isolated miss from a consecutive run of them — check the detail table for that.</p>
+          <p className="mt-2"><span className="font-semibold text-text">Window size.</span> You can scan 1–7 recent eras per run. A wider window costs more Subscan requests and takes longer, so start narrow and widen only if you see something worth investigating.</p>
+        </ToolInfoSection>
+
         <ToolModeStrip
           queryLabel="Scan"
           value={stakingTab}
@@ -599,16 +607,6 @@ export default function App() {
             complete={stakingSimpleComplete}
             onReset={stakingSimpleStep > 1 ? handleReset : undefined}
           />
-        )}
-
-        {stakingTab === 'query' && (
-          <ToolInfoSection tone="warning">
-            <p className="font-semibold text-text">Cadence, not real-time monitoring</p>
-            <p className="mt-1">This scan reads recent-era history through Subscan, at two requests per second, so it's built for a periodic check-in rather than continuous monitoring.</p>
-            <p className="mt-2"><span className="font-semibold text-text">Missed era ≠ missed payout, necessarily.</span> A validator or pool with no reward event recorded for an era is flagged missed, full stop — that can mean a genuinely skipped reward, but also a late or still-pending payout depending on chain timing.</p>
-            <p className="mt-2"><span className="font-semibold text-text">Severity is by count, not cause.</span> 1–2 missed eras in the window is Low, 3–5 is Medium, 6+ is High. It does not distinguish an isolated miss from a consecutive run of them — check the detail table for that.</p>
-            <p className="mt-2"><span className="font-semibold text-text">Window size.</span> You can scan 1–7 recent eras per run. A wider window costs more Subscan requests and takes longer, so start narrow and widen only if you see something worth investigating.</p>
-          </ToolInfoSection>
         )}
 
         {/* Controls: advanced always; simple page 1 (Mode) and page 2 (Options) */}
