@@ -1207,7 +1207,6 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
 
   const [rhPage, setRhPage] = useState(1)
   const [rhSimpleRunning, setRhSimpleRunning] = useState(false)
-  const [simpleInfoOpen, setSimpleInfoOpen] = useState(false)
 
   const isLoading = status === RH_STATUS.LOADING
   const isDone    = status === RH_STATUS.DONE
@@ -1362,34 +1361,25 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
           steps={RH_SIMPLE_STEPS}
           currentStep={rhSimpleStep}
           complete={rhSimpleComplete}
-          onReset={rhSimpleStep > 1 ? () => { reset(); setImportedResults(null); setImportedAddress(''); setRhPage(1); setRhSimpleRunning(false); setSimpleInfoOpen(false) } : undefined}
-          infoOpen={simpleInfoOpen}
-          onInfoOpenChange={setSimpleInfoOpen}
-          infoContent={
-            <>
-              <p className="font-semibold text-text">Reward history is an estimate</p>
-              <p className="mt-1">Archive snapshots reconstruct pool-level rewards and member share over time, so the output is best used for investigation and planning.</p>
-              <p className="mt-2"><span className="font-semibold text-text">Pool-level payouts.</span> The pool gets daily rewards, not the user, so these values are estimations rather than wallet-level settlement records.</p>
-              <p className="mt-2"><span className="font-semibold text-text">Enjin Wallet may show different values.</span> The wallet derives reward figures from its own data pipeline and may reflect claimable balances or rounding differently from the era-by-era archive reconstruction used here.</p>
-              <p className="mt-2"><span className="font-semibold text-text">Tax note.</span> Tax treatment depends on your jurisdiction and activity history. Use this tool as a research aid, not tax advice.</p>
-            </>
-          }
+          onReset={rhSimpleStep > 1 ? () => { reset(); setImportedResults(null); setImportedAddress(''); setRhPage(1); setRhSimpleRunning(false) } : undefined}
         />
+      )}
+
+      {tab === 'query' && (
+        <ToolInfoSection tone="warning">
+          <p className="font-semibold text-text">Reward history is an estimate</p>
+          <p className="mt-1">Archive snapshots reconstruct pool-level rewards and member share over time, so the output is best used for investigation and planning.</p>
+          <p className="mt-2"><span className="font-semibold text-text">Pool-level payouts.</span> The pool gets daily rewards, not the user, so these values are estimations rather than wallet-level settlement records.</p>
+          <p className="mt-2"><span className="font-semibold text-text">Enjin Wallet may show different values.</span> The wallet derives reward figures from its own data pipeline and may reflect claimable balances or rounding differently from the era-by-era archive reconstruction used here.</p>
+          <p className="mt-2"><span className="font-semibold text-text">Historical figures corrected.</span> Reward, Cumulative, and APY figures shown before this fix were overstated for eras after the pool commission mechanism launched — the calculation mistakenly added the pool operator's commission instead of subtracting it. Figures shown now are net of commission and correct; if you saved or exported numbers earlier, they may be higher than the current values.</p>
+          <p className="mt-2"><span className="font-semibold text-text">APY is now ENJ-denominated.</span> APY previously divided by the pool's sENJ share supply because the pool's bonded-stake lookup was silently failing. It now divides by the actual bonded ENJ, which is the correct unit. Since 1 sENJ is worth well over 1 ENJ in mature pools, APY figures are roughly half what this tool showed before — the lower numbers are the accurate ones.</p>
+          <p className="mt-2"><span className="font-semibold text-text">Tax note.</span> Tax treatment depends on your jurisdiction and activity history. Use this tool as a research aid, not tax advice.</p>
+        </ToolInfoSection>
       )}
 
       {/* ── Compute pane (advanced only) ── */}
       {tab === 'query' && !simpleMode && (
         <div className="space-y-3 sm:space-y-4">
-          <ToolInfoSection tone="warning">
-            <p className="font-semibold text-text">Reward history is an estimate</p>
-            <p className="mt-1">Archive snapshots reconstruct pool-level rewards and member share over time, so the output is best used for investigation and planning.</p>
-            <p className="mt-2"><span className="font-semibold text-text">Pool-level payouts.</span> The pool gets daily rewards, not the user, so these values are estimations rather than wallet-level settlement records.</p>
-            <p className="mt-2"><span className="font-semibold text-text">Enjin Wallet may show different values.</span> The wallet derives reward figures from its own data pipeline and may reflect claimable balances or rounding differently from the era-by-era archive reconstruction used here.</p>
-            <p className="mt-2"><span className="font-semibold text-text">Historical figures corrected.</span> Reward, Cumulative, and APY figures shown before this fix were overstated for eras after the pool commission mechanism launched — the calculation mistakenly added the pool operator's commission instead of subtracting it. Figures shown now are net of commission and correct; if you saved or exported numbers earlier, they may be higher than the current values.</p>
-            <p className="mt-2"><span className="font-semibold text-text">APY is now ENJ-denominated.</span> APY previously divided by the pool's sENJ share supply because the pool's bonded-stake lookup was silently failing. It now divides by the actual bonded ENJ, which is the correct unit. Since 1 sENJ is worth well over 1 ENJ in mature pools, APY figures are roughly half what this tool showed before — the lower numbers are the accurate ones.</p>
-            <p className="mt-2"><span className="font-semibold text-text">Tax note.</span> Tax treatment depends on your jurisdiction and activity history. Use this tool as a research aid, not tax advice.</p>
-          </ToolInfoSection>
-
           <div className="grid gap-4 xl:grid-cols-3 xl:items-start">
           {/* Col 1: RPC Config */}
           <div className="data-panel">
@@ -1590,7 +1580,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
       )}
 
       {/* ── Simple page 1: Address ── */}
-      {simpleMode && rhSimpleStep === 1 && !simpleInfoOpen && (
+      {simpleMode && rhSimpleStep === 1 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="font-headline text-xl font-bold text-text">Enter your wallet address</h2>
@@ -1611,7 +1601,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
           </div>
           <div className="flex justify-end pt-1">
             <button
-              onClick={() => { setSimpleInfoOpen(false); setRhPage(2) }}
+              onClick={() => { setRhPage(2) }}
               disabled={!address.trim() || !!addrErr}
               className="btn-primary px-6 disabled:opacity-40"
             >
@@ -1622,7 +1612,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
       )}
 
       {/* ── Simple page 2: Mode ── */}
-      {simpleMode && rhSimpleStep === 2 && !simpleInfoOpen && (
+      {simpleMode && rhSimpleStep === 2 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="font-headline text-xl font-bold text-text">Choose query mode</h2>
@@ -1652,14 +1642,14 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
             })}
           </div>
           <div className="flex justify-between pt-1">
-            <button onClick={() => { setSimpleInfoOpen(false); setRhPage(1) }} className="btn-secondary px-5">Back</button>
-            <button onClick={() => { setSimpleInfoOpen(false); setRhPage(3) }} className="btn-primary px-6">Next</button>
+            <button onClick={() => { setRhPage(1) }} className="btn-secondary px-5">Back</button>
+            <button onClick={() => { setRhPage(3) }} className="btn-primary px-6">Next</button>
           </div>
         </div>
       )}
 
       {/* ── Simple page 3: Range Parameters ── */}
-      {simpleMode && rhSimpleStep === 3 && !simpleInfoOpen && (
+      {simpleMode && rhSimpleStep === 3 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="font-headline text-xl font-bold text-text">Set the reward window</h2>
@@ -1752,7 +1742,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
           )}
 
           <div className="flex justify-between pt-1">
-            <button onClick={() => { setSimpleInfoOpen(false); setRhPage(2) }} className="btn-secondary px-5">Back</button>
+            <button onClick={() => { setRhPage(2) }} className="btn-secondary px-5">Back</button>
             <button
               onClick={handleRun}
               disabled={rangeMode === 'era' ? (!startEra || !endEra || !!eraValidErr) : (!startDate || !endDate || !!dateValidErr)}

@@ -385,7 +385,6 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
   const hasResults = records.length > 0
   const [balancePage, setBalancePage] = useState(1)
   const [balanceSimpleRunning, setBalanceSimpleRunning] = useState(false)
-  const [simpleInfoOpen, setSimpleInfoOpen] = useState(false)
   const balanceSimpleStep = (isLoading && balanceSimpleRunning) ? 3
     : ((status === STATUS.DONE || status === STATUS.CANCELLED || status === STATUS.ERROR) && balanceSimpleRunning) ? 4
     : balancePage
@@ -652,17 +651,18 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
           steps={BALANCE_SIMPLE_STEPS}
           currentStep={balanceSimpleStep}
           complete={balanceSimpleComplete}
-          onReset={balanceSimpleStep > 1 ? () => { reset(); setQueriedAddress(''); setBalancePage(1); setBalanceSimpleRunning(false); setSimpleInfoOpen(false) } : undefined}
-          infoOpen={simpleInfoOpen}
-          onInfoOpenChange={setSimpleInfoOpen}
-          infoContent={
-            <p>Archive RPC queries take longer over wide ranges. Narrowing the window or increasing the step reduces query time and sample count.</p>
-          }
+          onReset={balanceSimpleStep > 1 ? () => { reset(); setQueriedAddress(''); setBalancePage(1); setBalanceSimpleRunning(false) } : undefined}
         />
       )}
 
+      {tab === 'query' && (
+        <ToolInfoSection tone="warning">
+          <p>Archive RPC queries take longer over wide ranges. Narrowing the window or increasing the step reduces query time and sample count.</p>
+        </ToolInfoSection>
+      )}
+
       {/* ── Simple page 1: Address + Network ── */}
-      {simpleMode && tab === 'query' && balanceSimpleStep === 1 && !simpleInfoOpen && (
+      {simpleMode && tab === 'query' && balanceSimpleStep === 1 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="section-title">Select network &amp; enter address</h2>
@@ -702,7 +702,7 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
           <div className="flex justify-end pt-1">
             <button
               type="button"
-              onClick={() => { setSimpleInfoOpen(false); setBalancePage(2) }}
+              onClick={() => setBalancePage(2)}
               disabled={!address.trim() || addressNote?.type === 'error'}
               className="btn-primary flex items-center gap-2 disabled:opacity-40"
             >
@@ -713,7 +713,7 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
       )}
 
       {/* ── Simple page 2: Range parameters ── */}
-      {simpleMode && tab === 'query' && balanceSimpleStep === 2 && !simpleInfoOpen && (
+      {simpleMode && tab === 'query' && balanceSimpleStep === 2 && (
         <div className="mx-auto w-full max-w-lg data-panel space-y-5">
           <div>
             <h2 className="section-title">Set the query window</h2>
@@ -788,7 +788,7 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
             </div>
           )}
           <div className="flex items-center justify-between pt-1">
-            <button type="button" onClick={() => { setSimpleInfoOpen(false); setBalancePage(1) }} className="btn-secondary flex items-center gap-2">
+            <button type="button" onClick={() => setBalancePage(1)} className="btn-secondary flex items-center gap-2">
               <span aria-hidden="true">←</span> Back
             </button>
             <button
@@ -810,9 +810,6 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
       {/* ── Query pane — advanced only ── */}
       {tab === 'query' && !simpleMode && (
         <div className="space-y-3 sm:space-y-4">
-          {!simpleMode && <ToolInfoSection tone="warning">
-            <p>Archive RPC queries take longer over wide ranges. Narrowing the window or increasing the step reduces query time and sample count.</p>
-          </ToolInfoSection>}
           <div className="grid gap-4 xl:grid-cols-3 xl:items-stretch">
               <div className="data-panel">
                 <h3 className="font-headline text-lg font-bold text-text sm:text-xl">Scan Configuration</h3>
