@@ -77,6 +77,14 @@ export function resolveLatestEra(validators) {
  * Same logic as computeMissedEras but operates on reward events
  * (each with an `era` field) rather than era_stat records.
  *
+ * An era with no reward event is missed, full stop — including the provisional
+ * era, whose payout window is the era currently in progress. That era is still
+ * being paid out, so this deliberately reports a gap that may fill in later:
+ * the alternative hid pools that genuinely were not being paid until the window
+ * closed. Callers still receive `provisionalEra` separately (see
+ * `selectCheckableEras`) so the row can be labelled, but the label is
+ * informational and does not change the classification.
+ *
  * @param {Array}  eraRewards - array of { era: number, ... } from reward_slash
  * @param {number} latestEra  - the global latest era
  * @param {number} eraCount   - user's requested N

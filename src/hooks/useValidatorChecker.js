@@ -21,6 +21,34 @@ const initialState = {
   // measures against the requested window rather than against whatever
   // happens to have loaded — see enrichValidators.
   requestedEraCount: 0,
+  // 'scan' for data this session fetched, 'import' for data read from a file.
+  // Consumers hide the export panel for imported data and show its provenance.
+  dataSource: 'scan',
+  // { fileName, exportedAt } for an imported scan, else null.
+  importMeta: null,
+}
+
+/**
+ * A completed-looking progress object for an imported scan.
+ *
+ * The phase cards render from `progress`, so an import that left it null would
+ * show the scan as never having run, and one that left a live scan's progress
+ * in place would show the wrong totals.
+ */
+function importedProgress(validatorCount) {
+  return {
+    phases: [
+      { key: 'probe',      label: 'Check API Endpoints', total: VALIDATOR_ENDPOINTS_TO_PROBE.length, completed: VALIDATOR_ENDPOINTS_TO_PROBE.length, status: 'completed' },
+      { key: 'list',       label: 'Fetch Validators',    total: 1, completed: 1, status: 'completed' },
+      { key: 'nominators', label: 'Fetch Nominators',    total: validatorCount, completed: validatorCount, status: 'completed' },
+      { key: 'eras',       label: 'Fetch Era Stats',     total: validatorCount, completed: validatorCount, status: 'completed' },
+    ],
+  }
+}
+
+/** One log entry, in the shape the LOG action builds. */
+function logEntry(level, message) {
+  return { id: Date.now() + Math.random(), ts: nowHHMMSS(), level, message }
 }
 
 // ── Reducer ────────────────────────────────────────────────────────────────
@@ -36,6 +64,9 @@ function reducer(state, action) {
         validators: [],
         logs: [],
         requestedEraCount: action.requestedEraCount ?? 0,
+        // A fresh scan replaces imported data; its provenance must not linger.
+        dataSource: 'scan',
+        importMeta: null,
         progress: {
           phases: [
             { key: 'probe',      label: 'Check API Endpoints', total: VALIDATOR_ENDPOINTS_TO_PROBE.length, completed: 0, status: 'in_progress' },
@@ -50,8 +81,7 @@ function reducer(state, action) {
       return {
         ...state,
         logs: (() => {
-          const next = [...state.logs, { id: Date.now() + Math.random(), ts: nowHHMMSS(), level: action.level, message: action.message }]
-          return next.length > 500 ? next.slice(-500) : next
+          return [...state.logs, { id: Date.now() + Math.random(), ts: nowHHMMSS(), level: action.level, message: action.message }]
         })(),
       }
 
@@ -67,6 +97,30 @@ function reducer(state, action) {
 
     case 'SET_PROGRESS':
       return { ...state, progress: action.payload }
+
+    /**
+     * Load a scan read from a file, in one dispatch.
+     *
+     * Deliberately not SET_VALIDATORS followed by DONE: `enrichValidators` runs
+     * on every render and recomputes each validator's missed-era list from
+     * `requestedEraCount`. Two dispatches would produce an intermediate render
+     * holding the new validators against the *old* count, so the summary would
+     * briefly show wrong gap counts — and if the import failed between them,
+     * would keep showing them.
+     */
+    case 'IMPORT':
+      return {
+        ...state,
+        status: 'done',
+        validators: action.validators,
+        requestedEraCount: action.requestedEraCount,
+        dataSource: 'import',
+        importMeta: action.importMeta,
+        progress: importedProgress(action.validators.length),
+        // The source file's own log is not restored — replaying it would read as
+        // though these requests had just happened. One line of provenance instead.
+        logs: [logEntry('INFO', action.logMessage)],
+      }
 
     case 'DONE':
       return { ...state, status: 'done' }
@@ -355,6 +409,31 @@ export function useValidatorChecker() {
     dispatch({ type: 'RESET' })
   }, [])
 
+  /**
+   * Load a scan parsed by `importValidatorScan`.
+   *
+   * Parsing stays with the caller: it is the one that has the file, and it has
+   * to catch ScanImportError to show a message anyway. This only takes the
+   * already-validated result.
+   *
+   * Aborts any in-flight scan first — otherwise a scan still running would keep
+   * dispatching PATCH_VALIDATOR over the imported rows.
+   */
+  const importScan = useCallback((parsed, fileName = '') => {
+    try { abortControllerRef.current?.abort() } catch { /* noop */ }
+    abortControllerRef.current = null
+    const { validators = [], requestedEraCount = 0, exportedAt = '', appVersion = null } = parsed ?? {}
+    const from = fileName ? ` from ${fileName}` : ''
+    const when = exportedAt ? `, exported ${exportedAt}` : ''
+    dispatch({
+      type: 'IMPORT',
+      validators,
+      requestedEraCount,
+      importMeta: { fileName, exportedAt, appVersion },
+      logMessage: `Imported ${validators.length} validator(s)${from}${when}. This is file data — nothing was fetched.`,
+    })
+  }, [])
+
   const stop = useCallback(() => {
     try { abortControllerRef.current?.abort() } catch { /* noop */ }
     abortControllerRef.current = null
@@ -431,6 +510,7 @@ export function useValidatorChecker() {
     runCheck,
     stop,
     reset,
+    importScan,
     retryValidator,
   }
 }

@@ -1,4 +1,5 @@
 import SuccessCheck from './SuccessCheck.jsx'
+import { MoreHorizontal } from 'lucide-react'
 import { useCountUp } from '../hooks/useCountUp.js'
 
 function clampPercent(value) {
@@ -105,7 +106,7 @@ function PhaseRing({ percent, phaseStatus }) {
         ) : phaseStatus === 'canceled' ? (
           <span aria-hidden="true" className="text-xs leading-none text-muted/60">⊘</span>
         ) : (
-          <span className="text-xs leading-none text-text-secondary">…</span>
+          <MoreHorizontal size={14} aria-hidden="true" className="text-text-secondary" />
         )}
       </div>
     </div>
@@ -125,10 +126,15 @@ function PhaseCard({ phase, index, indexLabel }) {
     : null
   const detail = phase?.reason ?? counter
   const detailClass = phase?.status === 'failed' ? 'text-danger' : 'text-text-secondary'
+  // Reserve the detail line's height only when a detail is showing, or is
+  // about to (in_progress/completed carry a counter once total > 0) — an
+  // idle/pending card has neither and would otherwise sit with two blank
+  // line-boxes under a one-line title, pinning the ring and text high.
+  const reservesDetailLine = Boolean(detail) || phase?.status === 'in_progress' || phase?.status === 'completed'
 
   return (
     <article className={`h-full rounded-sm border px-2.5 py-2 transition-colors ${meta.cardClass}`}>
-      <div className="flex items-center gap-3">
+      <div className="flex h-full items-center gap-3">
         <PhaseRing percent={percent} phaseStatus={phase?.status} />
 
         <div className="min-w-0 flex-1">
@@ -137,7 +143,7 @@ function PhaseCard({ phase, index, indexLabel }) {
           </p>
           <h4 className="mt-0.5 line-clamp-2 min-h-[2lh] text-xs font-semibold text-text sm:text-[13px]" title={phase?.label ?? 'Untitled Phase'}>{phase?.label ?? 'Untitled Phase'}</h4>
           <span
-            className={`mt-1 line-clamp-2 block min-h-[2lh] text-[10px] ${detail ? detailClass : ''}`}
+            className={`mt-1 line-clamp-2 block text-[10px] ${reservesDetailLine ? 'min-h-[2lh]' : ''} ${detail ? detailClass : ''}`}
             title={phase?.reason ? detail : undefined}
           >
             {detail}

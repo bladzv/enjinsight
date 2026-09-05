@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
+import Skeleton from './Skeleton.jsx'
 import { findConsecutiveGroups, getSeverity } from '../utils/eraAnalysis.js'
 import { poolExplorerUrl, poolLabel } from '../utils/format.js'
 import { useCountUp } from '../hooks/useCountUp.js'
@@ -10,7 +11,28 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect, prov
   const [gapPage, setGapPage]     = useState(0)
   const [gapPageSize, setGapPageSize] = useState(10)
 
-  if (!pools.length) return null
+  // Before the first pool has resolved there is nothing to summarize yet, but
+  // the scan is running — show the steady-state shape rather than nothing, so
+  // the section doesn't pop into existence once data lands.
+  if (!pools.length) {
+    if (!provisional) return null
+    return (
+      <section aria-labelledby="pool-summary-heading" className="space-y-3 animate-fade-in sm:space-y-4" aria-busy="true">
+        <div>
+          <p className="section-label">Summary</p>
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2 id="pool-summary-heading" className="font-headline text-lg font-bold text-text sm:text-xl">Pool Overview</h2>
+            {progressLabel && <span className="mini-chip text-warning">{progressLabel}</span>}
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <StatChipSkeleton label="Total Pools" />
+          <StatChipSkeleton label="All Rewarded" />
+          <StatChipSkeleton label="Has Gaps" />
+        </div>
+      </section>
+    )
+  }
 
   const withGaps   = pools.filter(p => p.missedEras?.length > 0)
   const clean      = pools.filter(p => Array.isArray(p.eraRewards) && p.missedEras?.length === 0 && p.eraRewards.length > 0)
@@ -37,13 +59,12 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect, prov
         <p className="section-label">Summary</p>
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 id="pool-summary-heading" className="font-headline text-lg font-bold text-text sm:text-xl">Pool Overview</h2>
-          {provisional && (
+          {provisional && progressLabel && (
             /* These figures are aggregates over whatever has loaded so far, so
-               they climb as the scan proceeds. Said plainly rather than left
-               for the reader to infer from numbers that keep moving. */
-            <span className="mini-chip text-warning">
-              {progressLabel ? `${progressLabel} · provisional` : 'Provisional'}
-            </span>
+               they climb as the scan proceeds. The scan-in-progress chip says
+               so directly rather than leaving the reader to infer it from
+               numbers that keep moving. */
+            <span className="mini-chip text-warning">{progressLabel}</span>
           )}
         </div>
       </div>
@@ -368,6 +389,15 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect, prov
 
 function hasNoNominatedValidators(pool) {
   return Array.isArray(pool?.nominatedValidators) && pool.nominatedValidators.length === 0
+}
+
+function StatChipSkeleton({ label }) {
+  return (
+    <div className="metric-card">
+      <span className="metric-label">{label}</span>
+      <Skeleton.Block width="3rem" height="1.8rem" className="mt-2" />
+    </div>
+  )
 }
 
 function StatChip({ value, label, colour }) {

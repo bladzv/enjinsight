@@ -20,7 +20,9 @@ export function formatENJ(rawValue, decimals = 4) {
   // Format whole (BigInt) without converting to Number to avoid precision loss
   const wholeStr = whole.toString()
   const withCommas = wholeStr.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-  return `${withCommas}.${decStr} ENJ`
+  // decStr is empty when decimals <= 0 — omit the separator rather than
+  // leaving a bare trailing dot ("5,000. ENJ").
+  return decStr ? `${withCommas}.${decStr} ENJ` : `${withCommas} ENJ`
 }
 
 // ── Address formatting ────────────────────────────────────────────────────
@@ -34,6 +36,25 @@ export function truncateAddress(address = '', start = 8, end = 6) {
 // ── Timestamp ─────────────────────────────────────────────────────────────
 export function nowHHMMSS() {
   return new Date().toTimeString().slice(0, 8)
+}
+
+/**
+ * Render an ISO-8601 timestamp as an explicit UTC date/time for a scan export's
+ * provenance banner.
+ *
+ * `exportedAt` is already written in UTC (`new Date().toISOString()`), but
+ * `toLocaleString()` renders it in the *viewer's* timezone with no indication
+ * that it did — showing a Manila user a Manila-local time with no "UTC" label
+ * looks correct and is not. Falls back to the raw string rather than
+ * "Invalid Date" if a hand-edited file carries junk.
+ */
+export function formatExportedAtUTC(iso) {
+  if (iso === null || iso === undefined || iso === '') return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return String(iso)
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} `
+    + `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} UTC`
 }
 
 // ── Number formatting ─────────────────────────────────────────────────────

@@ -41,6 +41,12 @@ export const SUBSCAN_MAX_ROW       = 25
 // Guards the 20,000 req/day free-tier quota against a runaway loop.
 export const SUBSCAN_MAX_PAGES     = 400
 export const ERA_VALIDATORS_SAMPLE = 3    // validators to try when topping up era block ranges from Subscan
+// Upper bound on eras the Pool Checker will resolve over archive RPC when the
+// era reference CSV and Subscan between them cannot close the gap to the live
+// era. Each era costs a binary search over the chain head (~50 RPC calls), so
+// this is a cost guard: a gap wider than this means something is wrong with the
+// reference data, and grinding through it silently is worse than saying so.
+export const MAX_ERA_RPC_TOPUP     = 8
 
 // ── Defaults ───────────────────────────────────────────────────────────────
 export const DEFAULT_ERA_COUNT     = 2
@@ -119,7 +125,14 @@ export const MAX_RPC_CALLS         = 2000   // upper cap on block-range query si
 // the equivalent guard for the reward path.
 export const MAX_REWARD_RPC_CALLS  = 2000
 export const CHART_MAX_PTS         = 250    // decimate chart data above this many points
-export const MAX_IMPORT_MB         = 10     // maximum import file size in megabytes
+export const MAX_IMPORT_MB         = 10     // maximum import file size in megabytes (legacy Balance/Reward exports)
+// Staking Cadence and Infusion Checker exports are nested (per-validator/pool
+// era arrays, or per-token metadata) and scale with real usage in a way the
+// legacy flat exports don't: a 28-validator/500-nominator scan measured
+// ~9 MB, and a 20,000-token wallet export measured ~10.2 MB — already at the
+// legacy cap. Set well above the largest plausible real export rather than
+// at it, so the tool never writes a file it then refuses to read back.
+export const MAX_SCAN_IMPORT_MB    = 64     // maximum import file size for scanExport.js schemas
 // The IS_NEW_LOGIC flag bit distinguishes the new frozen-field format
 export const IS_NEW_LOGIC_BIT      = 1n << 127n
 // System account prefix for building storage keys (System.Account map)

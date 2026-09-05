@@ -110,11 +110,10 @@ function reducer(state, action) {
         dataSource: action.dataSource ?? state.dataSource,
       }
 
-    case 'LOG': {
-      // Keep at most 500 log entries to cap memory
-      const next = [...state.logs, action.payload]
-      return { ...state, logs: next.length > 500 ? next.slice(-500) : next }
-    }
+    case 'LOG':
+      // Uncapped: the terminal drawer windows what it renders, so a long log
+      // costs memory for the entries themselves but not DOM nodes.
+      return { ...state, logs: [...state.logs, action.payload] }
 
     case 'DONE':
       return {
@@ -442,21 +441,24 @@ export default function useBalanceExplorer() {
   const importData = useCallback((text, ext, fname) => {
     dispatch({ type: 'RESET' })
     try {
-      const { records, rpcConfig } = parseImport(text, ext)
+      const { records, rpcConfig, header } = parseImport(text, ext)
       if (!records.length) throw new Error('No records found in file.')
       log('ok', `Imported ${records.length.toLocaleString('en')} records from "${fname}"`)
       dispatch({ type: 'DONE', records, dataSource: 'import' })
-      return { rpcConfig }
+      // `ok` lets the caller tell success from failure. This function reports
+      // errors itself (log + ERROR) rather than throwing, so without a flag a
+      // caller had no way to avoid acting as though a failed import worked.
+      return { ok: true, rpcConfig, header }
     } catch (e) {
       log('err', `Import failed: ${e.message}`)
       dispatch({ type: 'ERROR', payload: `Import failed: ${e.message}` })
-      return { rpcConfig: null }
+      return { ok: false, rpcConfig: null, header: null }
     }
   }, [log])
 
   /**
    * Decrypt an AES-256-GCM encrypted file then import it.
-   * @returns {Promise<{ rpcConfig: object|null }>}
+   * @returns {Promise<{ ok: boolean, rpcConfig: object|null, header: object|null }>}
    */
   const importEncrypted = useCallback(async (encText, password, ext, fname) => {
     try {
@@ -465,7 +467,7 @@ export default function useBalanceExplorer() {
     } catch {
       log('err', 'Decryption failed — wrong password or corrupted file.')
       dispatch({ type: 'ERROR', payload: 'Decryption failed — wrong password or corrupted file.' })
-      return { rpcConfig: null }
+      return { ok: false, rpcConfig: null, header: null }
     }
   }, [importData, log])
 

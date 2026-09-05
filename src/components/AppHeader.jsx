@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useFocusTrap } from '../hooks/useFocusTrap.js'
 import PillSwitch from './PillSwitch.jsx'
+import ThemeToggle from './ThemeToggle.jsx'
 import {
   BarChart3,
   BookOpen,
@@ -11,23 +12,17 @@ import {
   Layers,
   LineChart,
   Menu,
-  SunMoon,
   TrendingUp,
   X,
 } from 'lucide-react'
 
-// Option tables for the two rail switches. Declared at module scope so the
-// arrays are referentially stable — PillSwitch measures its options on every
+// Option table for the rail's Mode switch. Declared at module scope so the
+// array is referentially stable — PillSwitch measures its options on every
 // render pass that changes them, and a fresh array each render would thrash
 // that measurement.
-const THEME_OPTIONS = [
-  { value: 'dark', label: 'Dark', icon: <SunMoon size={13} strokeWidth={2} className="opacity-90" /> },
-  { value: 'light', label: 'Light' },
-]
-
 const UI_MODE_OPTIONS = [
-  { value: 'advanced', label: 'Advanced' },
   { value: 'simple', label: 'Simple' },
+  { value: 'advanced', label: 'Advanced' },
 ]
 
 const NAV_ITEMS = [
@@ -83,6 +78,14 @@ export default function AppHeader({ status, view, onNavigate, onAbout, theme = '
     onAbout?.()
   }
 
+  function selectTheme(nextTheme) {
+    if (typeof onThemeChange === 'function') {
+      onThemeChange(nextTheme)
+      return
+    }
+    if (typeof onToggleTheme === 'function') onToggleTheme()
+  }
+
   const tools = NAV_ITEMS.filter(item => item.group === 'tools')
   const workspace = NAV_ITEMS.filter(item => item.group === 'workspace')
 
@@ -90,6 +93,15 @@ export default function AppHeader({ status, view, onNavigate, onAbout, theme = '
     <>
       {/* ── Desktop rail ───────────────────────────────────────────── */}
       <aside className="rail hidden lg:flex lg:flex-col" aria-label="Primary">
+        {/* The rail's own header. It used to live inside RailContent behind a
+            `mobile` flag; it is lifted out so both it and the drawer header
+            can host the theme toggle without RailContent having to carry the
+            theme props through purely to hand them back. */}
+        <div className="flex items-center justify-between px-4 py-4" style={{ borderBottom: '1px solid var(--hairline)' }}>
+          <BrandMark loading={isLoading} />
+          <ThemeToggle theme={theme} onChange={selectTheme} />
+        </div>
+
         <RailContent
           view={view}
           isLoading={isLoading}
@@ -97,9 +109,6 @@ export default function AppHeader({ status, view, onNavigate, onAbout, theme = '
           workspace={workspace}
           onNavigate={handleNav}
           onAbout={handleAbout}
-          theme={theme}
-          onToggleTheme={onToggleTheme}
-          onThemeChange={onThemeChange}
           simpleMode={simpleMode}
           onSimpleModeChange={onSimpleModeChange}
         />
@@ -148,14 +157,17 @@ export default function AppHeader({ status, view, onNavigate, onAbout, theme = '
               >
                 <BrandMark loading={isLoading} />
               </button>
-              <button
-                type="button"
-                onClick={() => setMobileOpen(false)}
-                className="btn-icon"
-                aria-label="Close navigation"
-              >
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-1">
+                <ThemeToggle theme={theme} onChange={selectTheme} />
+                <button
+                  type="button"
+                  onClick={() => setMobileOpen(false)}
+                  className="btn-icon"
+                  aria-label="Close navigation"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
             <div className="px-2 py-3">
               <RailContent
@@ -165,12 +177,8 @@ export default function AppHeader({ status, view, onNavigate, onAbout, theme = '
                 workspace={workspace}
                 onNavigate={handleNav}
                 onAbout={handleAbout}
-                theme={theme}
-                onToggleTheme={onToggleTheme}
-                onThemeChange={onThemeChange}
                 simpleMode={simpleMode}
                 onSimpleModeChange={onSimpleModeChange}
-                mobile
               />
             </div>
           </aside>
@@ -180,23 +188,9 @@ export default function AppHeader({ status, view, onNavigate, onAbout, theme = '
   )
 }
 
-function RailContent({ view, isLoading, tools, workspace, onNavigate, onAbout, theme, onToggleTheme, onThemeChange, simpleMode = false, onSimpleModeChange, mobile = false }) {
-  function selectTheme(nextTheme) {
-    if (typeof onThemeChange === 'function') {
-      onThemeChange(nextTheme)
-      return
-    }
-    if (typeof onToggleTheme === 'function') onToggleTheme()
-  }
-
+function RailContent({ view, isLoading, tools, workspace, onNavigate, onAbout, simpleMode = false, onSimpleModeChange }) {
   return (
     <>
-      {!mobile && (
-        <div className="flex items-center px-4 py-4" style={{ borderBottom: '1px solid var(--hairline)' }}>
-          <BrandMark loading={isLoading} />
-        </div>
-      )}
-
       <nav className="px-2 py-3" aria-label="Workspace">
         <p className="rail-section-label">Workspace</p>
         <ul className="mt-1 space-y-0.5">
@@ -212,18 +206,6 @@ function RailContent({ view, isLoading, tools, workspace, onNavigate, onAbout, t
           ))}
         </ul>
       </nav>
-
-      <section className="px-2 pb-3" aria-label="Appearance">
-        <div className="space-y-2 px-1">
-          <p className="rail-section-label px-2">Theme</p>
-          <PillSwitch
-            ariaLabel="Theme switch"
-            value={theme}
-            onChange={selectTheme}
-            options={THEME_OPTIONS}
-          />
-        </div>
-      </section>
 
       <section className="px-2 pb-3" aria-label="UI mode">
         <div className="space-y-2 px-1">

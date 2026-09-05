@@ -11,7 +11,7 @@ import PoolRewardTable from './PoolRewardTable.jsx'
 import { formatENJ, poolExplorerUrl, poolLabel } from '../utils/format.js'
 import Skeleton, { SkeletonSwap } from './Skeleton.jsx'
 
-export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: controlledOpen, onOpenChange }) {
+export default function PoolCard({ pool, eraCount, latestEra, provisionalEra = null, onRetry, open: controlledOpen, onOpenChange }) {
   const [internalOpen, setInternalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('rewards')
 
@@ -187,6 +187,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
                     <PoolRewardTable
                       eraRewards={eraRewards}
                       missedEras={missedEras}
+                      provisionalEra={provisionalEra}
                       eraCount={eraCount}
                       latestEra={latestEra}
                       eraValidatorBreakdown={eraValidatorBreakdown}
@@ -199,7 +200,7 @@ export default function PoolCard({ pool, eraCount, latestEra, onRetry, open: con
                 ? <LoadingPlaceholder label="Fetching nominated validators…" />
                 : hasError && !nominatedValidators
                   ? <ErrorPlaceholder label="Validator list fetch failed." />
-                  : <PoolValidatorsTable validators={nominatedValidators} onRetry={addr => onRetry?.(pool.poolId, addr)} />
+                  : <PoolValidatorsTable validators={nominatedValidators} onRetry={onRetry && (addr => onRetry(pool.poolId, addr))} />
             )}
           </div>
         </div>
