@@ -170,7 +170,7 @@ export default function EraBlockExplorer() {
     <main id="main-content" className="relative z-10 mx-auto w-full max-w-[100rem] space-y-4 px-3 py-4 pb-32 sm:space-y-5 sm:px-6 sm:py-6">
       {/* Hero */}
       <section className="page-hero">
-        <div className="relative z-10 flex flex-col gap-3 sm:gap-4">
+        <div className="relative z-10 flex flex-col gap-2 sm:gap-3">
           <div className="hero-kicker self-start">
             <span className={`h-1.5 w-1.5 rounded-full ${statusCfg.dot}`} />
             <span>{statusCfg.label}</span>

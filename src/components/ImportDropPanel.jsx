@@ -24,7 +24,7 @@
  * inside a FileReader callback.
  */
 import { useState, useRef, useCallback } from 'react'
-import { Upload, FolderOpen, XCircle, CheckCircle } from 'lucide-react'
+import { Upload, FolderOpen, XCircle, CheckCircle, Info } from 'lucide-react'
 import Spinner from './Spinner.jsx'
 import Field from './Field.jsx'
 
@@ -291,6 +291,15 @@ export default function ImportDropPanel({
           disabled={disabled}
           aria-hidden
         />
+      </div>
+
+      <div className="mt-3 flex gap-2.5 rounded-lg border border-surface-bright bg-card p-3 text-[11px] leading-relaxed">
+        <Info size={13} className="mt-0.5 flex-shrink-0 text-text-secondary" />
+        <p className="text-text-secondary">
+          Only files previously exported by this tool{' '}
+          <span className="font-mono text-muted">({extLabel(extensions)})</span>{' '}
+          can be imported. Files from other sources or tools are not supported.
+        </p>
       </div>
 
       {encPending && (

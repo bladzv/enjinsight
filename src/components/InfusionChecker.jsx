@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Database, ExternalLink, FileDown, ImageIcon, Loader2, RefreshCw, Search, Square, Wallet } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Database, ExternalLink, FileDown, ImageIcon, Loader2, RefreshCw, Search, Wallet } from 'lucide-react'
 import DetailModal from './DetailModal.jsx'
 import PhaseProgressCards from './PhaseProgressCards.jsx'
 import StepProgress from './StepProgress.jsx'
@@ -8,7 +8,7 @@ import ToolInfoSection from './ToolInfoSection.jsx'
 import { derivePhases } from '../utils/infusionPhases.js'
 import { formatExportedAtUTC } from '../utils/format.js'
 import Field from './Field.jsx'
-import HoldButton from './HoldButton.jsx'
+import Spinner from './Spinner.jsx'
 import ScanStatusBar from './ScanStatusBar.jsx'
 import ScanExportPanel from './ScanExportPanel.jsx'
 import ScanImportPanel from './ScanImportPanel.jsx'
@@ -1020,7 +1020,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
   return (
     <div className="space-y-4 overflow-x-hidden sm:space-y-5">
       <section className="page-hero">
-        <div className="relative z-10 flex flex-col gap-2">
+        <div className="relative z-10 flex flex-col gap-2 sm:gap-3">
           <div className="hero-kicker self-start">
             <span className="hero-dot" />
             Ethereum Mainnet
@@ -1245,18 +1245,16 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
                   placeholder="Enter token ID or Etherscan NFT URL"
                   required
                 />
-                {/* Split rather than switched by `type`: the guarded Stop
-                    must be a plain button, while Check stays a submit so the
-                    form still responds to Enter in the field above. */}
+                {/* Split rather than switched by `type`: the busy state must
+                    be a plain non-submitting button, while Check stays a
+                    submit so the form still responds to Enter in the field
+                    above. Stop itself lives only in the sticky ScanStatusBar
+                    below, which stays reachable while scrolling results. */}
                 {isLoading ? (
-                  <HoldButton
-                    key="stop"
-                    onActivate={handleStopScan}
-                    className="btn-stop whitespace-nowrap"
-                  >
-                    <Square size={14} />
-                    Stop
-                  </HoldButton>
+                  <button key="scanning" type="button" disabled className="btn-primary btn-push whitespace-nowrap">
+                    <Spinner size={14} tone="on-primary" />
+                    Checking…
+                  </button>
                 ) : (
                   <button key="run" type="submit" className="btn-primary btn-push whitespace-nowrap">
                     <Search size={16} />
@@ -1279,18 +1277,16 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
                   placeholder="Enter Ethereum wallet address"
                   required
                 />
-                {/* Split rather than switched by `type`: the guarded Stop
-                    must be a plain button, while Bulk Check stays a submit so the
-                    form still responds to Enter in the field above. */}
+                {/* Split rather than switched by `type`: the busy state must
+                    be a plain non-submitting button, while Bulk Check stays a
+                    submit so the form still responds to Enter in the field
+                    above. Stop itself lives only in the sticky ScanStatusBar
+                    below, which stays reachable while scrolling results. */}
                 {isLoading ? (
-                  <HoldButton
-                    key="stop"
-                    onActivate={handleStopScan}
-                    className="btn-stop whitespace-nowrap"
-                  >
-                    <Square size={14} />
-                    Stop
-                  </HoldButton>
+                  <button key="scanning" type="button" disabled className="btn-primary btn-push whitespace-nowrap">
+                    <Spinner size={14} tone="on-primary" />
+                    Scanning…
+                  </button>
                 ) : (
                   <button key="run" type="submit" className="btn-primary btn-push whitespace-nowrap">
                     <Wallet size={16} />
@@ -1632,7 +1628,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
 
       {/* No re-export of imported data, matching the Balance Viewer and the
           Staking Cadence panels. */}
-      {!simpleMode && !isImported && rows.length > 0 && (
+      {!isImported && rows.length > 0 && (
         <ScanExportPanel
           schema={SCAN_SCHEMAS.INFUSION}
           buildContent={buildInfusionExport}

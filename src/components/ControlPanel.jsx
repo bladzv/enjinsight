@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { AlertCircle, Square } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import {
   DEFAULT_ERA_COUNT, MIN_ERA_COUNT, MAX_ERA_COUNT,
 } from '../constants.js'
 import Stepper from './Stepper.jsx'
 import HoldButton from './HoldButton.jsx'
+import Spinner from './Spinner.jsx'
 
 export default function ControlPanel({
   status,
@@ -67,11 +68,15 @@ export default function ControlPanel({
   // key. Without them React reconciles Stop and Reset as the same element and
   // the charge earned on Stop would carry over — a second click would reset
   // the results the first click had just preserved.
+  //
+  // Stop itself lives only in the sticky ScanStatusBar now, which stays
+  // reachable while scrolling a long result list; this slot just reflects
+  // that a scan is running.
   const actionButton = isLoading ? (
-    <HoldButton key="stop" onActivate={handleAction} className={`btn-stop ${actionButtonClass}`} aria-label="Stop running scan">
-      <Square size={15} className="fill-white stroke-white" />
-      Stop Scan
-    </HoldButton>
+    <button key="scanning" type="button" disabled className={`btn-primary ${actionButtonClass}`} aria-label="Scan in progress">
+      <Spinner size={15} tone="on-primary" />
+      Scanning…
+    </button>
   ) : isResetState ? (
     <HoldButton key="reset" onActivate={handleAction} className={`btn-secondary ${actionButtonClass}`} aria-label="Reset scan results">
       Reset View

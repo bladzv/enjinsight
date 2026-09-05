@@ -13,9 +13,9 @@
  */
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
-  Play, Square, RotateCcw, Download,
+  Play, RotateCcw, Download,
   ChevronDown, Lock, Unlock,
-  AlertTriangle, Info, FileDown,
+  AlertTriangle, FileDown,
 } from 'lucide-react'
 import { useRewardHistory, RH_STATUS } from '../hooks/useRewardHistory.js'
 import { fetchLiveChainInfo } from '../utils/chainInfo.js'
@@ -26,7 +26,7 @@ import ToolInfoSection from './ToolInfoSection.jsx'
 import RewardImportPanel from './RewardImportPanel.jsx'
 import ToolModeStrip from './ToolModeStrip.jsx'
 import { PLANCK_PER_ENJ, SUBSCAN_HISTORY_DAYS, MAX_SCAN_DAYS, MAX_REWARD_ERA_SPAN } from '../constants.js'
-import { aesEncryptLabelled, downloadFile, safeFilename, parseBigInt, splitCsvRow } from '../utils/balanceExport.js'
+import { aesEncryptLabelled, downloadFile, safeFilename, defaultRewardFilename, parseBigInt, splitCsvRow } from '../utils/balanceExport.js'
 import { SCAN_SCHEMAS, envelopeHeader, readLegacyHeader } from '../utils/scanEnvelope.js'
 import { formatExportedAtUTC } from '../utils/format.js'
 import Spinner from './Spinner.jsx'
@@ -1016,12 +1016,16 @@ function RewardExportPanel({ results, address }) {
   const [busy,     setBusy]     = useState(false)
   const [msg,      setMsg]      = useState(null)
 
+  // Frozen per mount (not recomputed on every render) so the placeholder
+  // shown below is byte-identical to the name actually saved.
+  const defaultName = useMemo(() => defaultRewardFilename(address), [address])
+
   async function handleExport() {
     if (!results.length) { setMsg({ type: 'err', text: 'No data to export.' }); return }
     if (encOn && !password) { setMsg({ type: 'err', text: 'Enter an encryption password.' }); return }
     setBusy(true); setMsg(null)
     try {
-      const fname = filename.trim() || `reward-history-${(address || 'enjin').slice(0, 10)}-${Date.now()}`
+      const fname = filename.trim() || defaultName
       const meta  = { address, exportedAt: new Date().toISOString() }
       let content = format === 'json' ? rewardToJSON(results, meta)
                   : format === 'csv'  ? rewardToCSV(results, meta)
@@ -1076,7 +1080,7 @@ function RewardExportPanel({ results, address }) {
       <div className="grid gap-3 sm:grid-cols-[1fr_120px_auto] items-end">
         <div>
           <Field label="Filename" id="rh-fname" type="text" maxLength={200} autoComplete="off" spellCheck="false"
-            placeholder={`reward-history-${(address||'').slice(0,10)}`}
+            placeholder={defaultName}
             value={filename} onChange={e => setFilename(e.target.value)}
             controlClassName="font-mono" />
         </div>
@@ -1333,7 +1337,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
     <div className={`space-y-4 transition-[padding] duration-200 ${!simpleMode && logExpanded ? 'pb-[380px]' : 'pb-16'}`}>
 
       <section className="page-hero">
-        <div className="relative z-10 flex flex-col gap-2">
+        <div className="relative z-10 flex flex-col gap-2 sm:gap-3">
           <div className="hero-kicker self-start">
             <span className="hero-dot" />
             Reward History Viewer
@@ -1344,6 +1348,13 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
           </p>
         </div>
       </section>
+
+      <ToolModeStrip
+        queryLabel="Compute Rewards"
+        value={tab}
+        onChange={setTab}
+        idPrefix="reward"
+      />
 
       {/* The stepper describes the Query flow, so it hides in Import mode. */}
       {simpleMode && tab === 'query' && (
@@ -1365,13 +1376,6 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
           }
         />
       )}
-
-      <ToolModeStrip
-        queryLabel="Compute Rewards"
-        value={tab}
-        onChange={setTab}
-        idPrefix="reward"
-      />
 
       {/* ── Compute pane (advanced only) ── */}
       {tab === 'query' && !simpleMode && (
@@ -1532,11 +1536,13 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
             <div className="flex flex-col items-center gap-2">
               {/* Distinct keys: Stop and Reset share this slot, and without
                   them the charge earned on Stop would carry straight over to
-                  Reset on a double click. */}
+                  Reset on a double click. Stop itself lives only in the
+                  sticky ScanStatusBar below, which stays reachable while
+                  scrolling a long result list. */}
               {isLoading ? (
-                <HoldButton key="stop" onActivate={stop} className="btn-danger gap-1.5 px-5">
-                  <Square size={14} />Stop
-                </HoldButton>
+                <button key="scanning" type="button" disabled className="btn-primary gap-1.5 px-5">
+                  <Spinner size={14} tone="on-primary" />Computing…
+                </button>
               ) : (isDone || isStopped || isError || importedResults) ? (
                 <HoldButton key="reset" onActivate={() => { reset(); setImportedResults(null); setImportedAddress('') }} className="btn-primary gap-1.5 px-5">
                   <RotateCcw size={14} />Reset
@@ -1765,14 +1771,6 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
           <div role="tabpanel" id="reward-panel-import" aria-labelledby="reward-tab-import" className="p-4 sm:p-5 space-y-3">
             <div>
               <p className="section-label">Import</p>
-            </div>
-            <div className="flex gap-2.5 p-3 rounded-lg bg-card border border-surface-bright text-[11px] leading-relaxed">
-              <Info size={13} className="text-text-secondary flex-shrink-0 mt-0.5" />
-              <p className="text-text-secondary">
-                Only files previously exported by this tool{' '}
-                <span className="font-mono text-muted">(JSON, CSV, or XML)</span>{' '}
-                can be imported. Files from other sources or tools are not supported.
-              </p>
             </div>
             <RewardImportPanel parse={parseRewardImport} onImport={handleImportResults} />
           </div>
