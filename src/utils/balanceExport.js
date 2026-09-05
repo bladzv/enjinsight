@@ -26,6 +26,11 @@ export function defaultFilename() {
   return `enjin_balance_${Math.floor(Date.now() / 1000)}`
 }
 
+/** Default filename for a Reward History export, keyed to the queried address. */
+export function defaultRewardFilename(address) {
+  return `reward-history-${(address || 'enjin').slice(0, 10)}-${Date.now()}`
+}
+
 /**
  * Convert a Planck BigInt to a float (for export / chart display).
  * Uses BigInt division to avoid IEEE 754 precision loss.

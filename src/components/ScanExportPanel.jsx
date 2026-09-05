@@ -7,8 +7,8 @@
  * flatten lossily or need a bespoke parser. A single JSON label is shown
  * instead of a one-option select.
  */
-import { useState } from 'react'
-import { Download, Lock, Unlock } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Download, Info, Lock, Unlock } from 'lucide-react'
 import { downloadFile, safeFilename } from '../utils/balanceExport.js'
 import { defaultScanFilename, encryptScanFile } from '../utils/scanExport.js'
 import Spinner from './Spinner.jsx'
@@ -21,15 +21,20 @@ import Field from './Field.jsx'
  * @param {boolean} [props.allowEncryption] - show the encrypt toggle. Off by default: the two
  *   Staking Cadence exports are plaintext; only the Infusion Checker offers encryption.
  * @param {boolean} [props.disabled] - e.g. while a scan is running, or for imported data.
+ * @param {string} [props.notice] - standing caveat about what is being written, shown
+ *   above the controls. Used to say that a filter narrowed the scan, since the file
+ *   itself is structurally identical to an unfiltered one.
  */
-export default function ScanExportPanel({ schema, buildContent, allowEncryption = false, disabled = false }) {
+export default function ScanExportPanel({ schema, buildContent, allowEncryption = false, disabled = false, notice = null }) {
   const [filename, setFilename] = useState('')
   const [encOn,    setEncOn]    = useState(false)
   const [password, setPassword] = useState('')
   const [busy,     setBusy]     = useState(false)
   const [message,  setMessage]  = useState(null) // { type:'ok'|'err', text }
 
-  const defaultName = defaultScanFilename(schema)
+  // Frozen per mount (not recomputed on every render) so the placeholder
+  // shown below is byte-identical to the name actually saved.
+  const defaultName = useMemo(() => defaultScanFilename(schema), [schema])
 
   async function handleExport() {
     if (encOn && !password) { setMessage({ type: 'err', text: 'Enter an encryption password.' }); return }
@@ -59,6 +64,13 @@ export default function ScanExportPanel({ schema, buildContent, allowEncryption 
         <p className="section-label">Export</p>
         <h3 className="mt-1 font-headline text-base font-bold text-text sm:text-lg">Save scan</h3>
       </div>
+
+      {notice && (
+        <div className="mb-3 flex items-start gap-2 rounded-sm border border-cyan/30 bg-cyan/10 px-3 py-2 text-xs text-cyan">
+          <Info size={13} className="mt-0.5 flex-shrink-0" />
+          <p className="min-w-0 flex-1">{notice}</p>
+        </div>
+      )}
 
       {message && (
         <div

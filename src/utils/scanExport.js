@@ -25,7 +25,7 @@
 import { parseBigInt, aesEncrypt, aesDecrypt } from './balanceExport.js'
 import {
   SCAN_TOOL_ID, SCAN_SCHEMAS, SCAN_SCHEMA_VERSION,
-  ScanImportError, MAX_TEXT, str, int,
+  ScanImportError, MAX_STR, MAX_TEXT, str, int,
   envelopeHeader, validateHeader,
 } from './scanEnvelope.js'
 
@@ -113,6 +113,59 @@ export function buildEnvelope(schema, { meta = {}, data = {} } = {}) {
 
 function serialise(envelope) {
   return JSON.stringify(envelope, null, 2)
+}
+
+/**
+ * `meta.filter` for an export written from a filtered view, or nothing at all.
+ *
+ * Exporting a filtered list writes a file structurally identical to a full
+ * scan, so the file records what narrowed it and how many records the scan
+ * actually held. Spread into `meta`, so an unfiltered export's envelope is
+ * byte-for-byte what it always was rather than carrying a `filter: null`.
+ *
+ * Deliberately additive: `SCAN_SCHEMA_VERSION` is *not* bumped for this. A
+ * reader that predates the field ignores an unknown `meta` key and still gets
+ * a valid scan, whereas a version bump would make older builds refuse the
+ * file outright — see `validateHeader`, which rejects anything newer than it
+ * understands, and the note in scanEnvelope.js about not costing a user the
+ * ability to open their own export on whichever build they are running.
+ */
+function filterMeta(filter) {
+  if (!filter || typeof filter !== 'object') return {}
+  return {
+    filter: {
+      search:     str(filter.search, MAX_STR),
+      status:     str(filter.status, 32),
+      missedMin:  filter.missedMin == null ? null : int(filter.missedMin),
+      missedMax:  filter.missedMax == null ? null : int(filter.missedMax),
+      sortKey:    str(filter.sortKey, 32),
+      sortDir:    oneOf(filter.sortDir, ['asc', 'desc'], 'desc'),
+      totalRecords:    int(filter.totalRecords),
+      exportedRecords: int(filter.exportedRecords),
+    },
+  }
+}
+
+/**
+ * Read back a `meta.filter` written by `filterMeta`, or `null`.
+ *
+ * `null` covers both an unfiltered export and any file written before this
+ * field existed — the two are indistinguishable and should be, since neither
+ * narrowed anything. Untrusted input like every other imported field: strings
+ * are capped, counts coerced, the direction allowlisted.
+ */
+function readFilterMeta(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  return {
+    search:     str(raw.search, MAX_STR),
+    status:     str(raw.status, 32),
+    missedMin:  raw.missedMin == null ? null : int(raw.missedMin),
+    missedMax:  raw.missedMax == null ? null : int(raw.missedMax),
+    sortKey:    str(raw.sortKey, 32),
+    sortDir:    oneOf(raw.sortDir, ['asc', 'desc'], 'desc'),
+    totalRecords:    int(raw.totalRecords),
+    exportedRecords: int(raw.exportedRecords),
+  }
 }
 
 /** Default download stem for a schema, e.g. `enjin_staking_pool_1757000000`. */
@@ -280,7 +333,7 @@ function eraStatFromObj(e, where) {
  * store a value that is immediately overwritten — and, if the two disagreed,
  * hide the disagreement.
  */
-export function exportValidatorScan({ validators = [], requestedEraCount = 0 } = {}) {
+export function exportValidatorScan({ validators = [], requestedEraCount = 0, filter = null } = {}) {
   const rows = validators.map(v => ({
     address:         str(v?.address),
     display:         str(v?.display),
@@ -301,7 +354,11 @@ export function exportValidatorScan({ validators = [], requestedEraCount = 0 } =
   }))
 
   return serialise(buildEnvelope(SCAN_SCHEMAS.VALIDATOR, {
-    meta: { requestedEraCount: int(requestedEraCount), validatorCount: rows.length },
+    meta: {
+      requestedEraCount: int(requestedEraCount),
+      validatorCount: rows.length,
+      ...filterMeta(filter),
+    },
     data: { validators: rows },
   }))
 }
@@ -341,6 +398,7 @@ export function importValidatorScan(text) {
     requestedEraCount: int(env.meta.requestedEraCount),
     exportedAt: env.exportedAt,
     appVersion: env.appVersion,
+    filter: readFilterMeta(env.meta.filter),
   }
 }
 
@@ -418,6 +476,7 @@ export function exportPoolScan({
   provisionalEra = null,
   completedEras = [],
   latestCompletedEra = 0,
+  filter = null,
 } = {}) {
   const rows = pools.map(p => ({
     poolId:        int(p?.poolId),
@@ -445,6 +504,7 @@ export function exportPoolScan({
       completedEras: intArray(completedEras),
       latestCompletedEra: int(latestCompletedEra),
       poolCount: rows.length,
+      ...filterMeta(filter),
     },
     data: { pools: rows },
   }))
@@ -498,6 +558,7 @@ export function importPoolScan(text) {
     latestCompletedEra: int(env.meta.latestCompletedEra) || (completedEras[0] ?? 0),
     exportedAt: env.exportedAt,
     appVersion: env.appVersion,
+    filter: readFilterMeta(env.meta.filter),
   }
 }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, Suspense, lazy } from 'react'
 import { ChevronDown, ChevronUp, FileDown } from 'lucide-react'
 import { DEFAULT_ERA_COUNT } from './constants.js'
 import { useValidatorChecker } from './hooks/useValidatorChecker.js'
@@ -11,6 +11,10 @@ import {
   exportPoolScan, importPoolScan,
 } from './utils/scanExport.js'
 import { useToast } from './hooks/useToast.jsx'
+import {
+  EMPTY_STAKING_FILTER, applyStakingFilter,
+  isStakingFilterActive, describeStakingFilter,
+} from './utils/stakingFilter.js'
 
 import AppHeader           from './components/AppHeader.jsx'
 import StepProgress        from './components/StepProgress.jsx'
@@ -30,6 +34,7 @@ import ScanStatusBar from './components/ScanStatusBar.jsx'
 import ScanExportPanel from './components/ScanExportPanel.jsx'
 import ScanImportPanel from './components/ScanImportPanel.jsx'
 import ToolModeStrip from './components/ToolModeStrip.jsx'
+import ResultsFilterBar from './components/ResultsFilterBar.jsx'
 import { isNavigationLocked } from './utils/navigationLock.js'
 
 const BalanceExplorer     = lazy(() => import('./components/BalanceExplorer.jsx'))
@@ -94,6 +99,11 @@ export default function App() {
   const [showPoolResults, setShowPoolResults] = useState(true)
   const [validatorPage, setValidatorPage] = useState(1)
   const [poolPage, setPoolPage] = useState(1)
+  // One filter per mode. Kept separate so switching Validators/Pools does not
+  // carry a pool-state selection into a validator list, where it would match
+  // nothing and look like an empty scan.
+  const [validatorFilter, setValidatorFilter] = useState(EMPTY_STAKING_FILTER)
+  const [poolFilter, setPoolFilter] = useState(EMPTY_STAKING_FILTER)
   const [selectedPoolId, setSelectedPoolId] = useState(null)
   const [theme, setTheme] = useState(() => {
     const storedTheme = window.localStorage.getItem('enjinsight-theme')
@@ -254,15 +264,36 @@ export default function App() {
 
   const headerStatus = navigationLocked ? 'loading' : status
   const activeRecords = isValidatorMode ? validators : pools
-  const validatorPages = Math.max(1, Math.ceil(validators.length / STAKING_RESULTS_PAGE_SIZE))
+
+  // Filtering happens before paging, and everything downstream — the card
+  // grid, the summary section and the export — reads the filtered list. Both
+  // helpers copy before sorting; `validators`/`pools` are reducer state.
+  const filteredValidators = useMemo(
+    () => applyStakingFilter(validators, 'validators', validatorFilter),
+    [validators, validatorFilter],
+  )
+  const filteredPools = useMemo(
+    () => applyStakingFilter(pools, 'pools', poolFilter),
+    [pools, poolFilter],
+  )
+  const activeFilter = isValidatorMode ? validatorFilter : poolFilter
+  const filteredRecords = isValidatorMode ? filteredValidators : filteredPools
+  const isFiltered = isStakingFilterActive(activeFilter)
+  // Shown beside both summary headings, so a narrowed aggregate never reads
+  // as a whole-scan figure.
+  const filterLabel = isFiltered
+    ? `filtered — ${filteredRecords.length} of ${activeRecords.length}`
+    : null
+
+  const validatorPages = Math.max(1, Math.ceil(filteredValidators.length / STAKING_RESULTS_PAGE_SIZE))
   const safeValidatorPage = Math.min(validatorPage, validatorPages)
-  const visibleValidators = validators.slice(
+  const visibleValidators = filteredValidators.slice(
     (safeValidatorPage - 1) * STAKING_RESULTS_PAGE_SIZE,
     safeValidatorPage * STAKING_RESULTS_PAGE_SIZE,
   )
-  const poolPages = Math.max(1, Math.ceil(pools.length / STAKING_RESULTS_PAGE_SIZE))
+  const poolPages = Math.max(1, Math.ceil(filteredPools.length / STAKING_RESULTS_PAGE_SIZE))
   const safePoolPage = Math.min(poolPage, poolPages)
-  const visiblePools = pools.slice(
+  const visiblePools = filteredPools.slice(
     (safePoolPage - 1) * STAKING_RESULTS_PAGE_SIZE,
     safePoolPage * STAKING_RESULTS_PAGE_SIZE,
   )
@@ -289,6 +320,31 @@ export default function App() {
     else pReset()
     setStakingPage(1)
     setStakingSimpleRunning(false)
+    clearFilters()
+  }
+
+  function clearFilters() {
+    setValidatorFilter(EMPTY_STAKING_FILTER)
+    setPoolFilter(EMPTY_STAKING_FILTER)
+    setValidatorPage(1)
+    setPoolPage(1)
+  }
+
+  /**
+   * Any filter edit re-clamps paging to the first page. `safeValidatorPage`
+   * clamps on read as well, but landing on a clamped last page after typing
+   * into the search box shows the tail of the matches rather than the head.
+   */
+  function handleFilterChange(next) {
+    if (isValidatorMode) {
+      setValidatorFilter(next)
+      setValidatorPage(1)
+    } else {
+      setPoolFilter(next)
+      setPoolPage(1)
+      // The open pool may no longer be in the filtered list.
+      setSelectedPoolId(null)
+    }
   }
 
   /**
@@ -306,9 +362,12 @@ export default function App() {
     setMode(intoValidators ? 'validators' : 'pools')
     if (intoValidators) vImportScan(parsed, fileName)
     else pImportScan(parsed, fileName)
-    // Paging and the open-pool selection refer to the replaced list.
+    // Paging, filters and the open-pool selection all refer to the replaced
+    // list — a search that matched the previous scan means nothing here.
     setValidatorPage(1)
     setPoolPage(1)
+    setValidatorFilter(EMPTY_STAKING_FILTER)
+    setPoolFilter(EMPTY_STAKING_FILTER)
     setSelectedPoolId(null)
     setStakingPage(1)
     setStakingSimpleRunning(false)
@@ -316,16 +375,33 @@ export default function App() {
     setShowPoolResults(true)
   }
 
-  /** Serialise the active mode's scan for ScanExportPanel. */
+  /**
+   * Serialise the active mode's scan for ScanExportPanel.
+   *
+   * Serialises the *filtered* list, matching what is on screen. That writes a
+   * file structurally identical to a full scan, so `filter` records what
+   * narrowed it and how many records the scan actually held — see
+   * `describeStakingFilter`. It is null when nothing is filtered, leaving the
+   * common case's envelope byte-for-byte as before.
+   */
   function buildScanExport() {
+    const filter = describeStakingFilter(activeFilter, {
+      totalRecords: activeRecords.length,
+      exportedRecords: filteredRecords.length,
+    })
     return isValidatorMode
-      ? exportValidatorScan({ validators, requestedEraCount: vRequestedEraCount })
+      ? exportValidatorScan({
+        validators: filteredValidators,
+        requestedEraCount: vRequestedEraCount,
+        filter,
+      })
       : exportPoolScan({
-        pools,
+        pools: filteredPools,
         requestedEraCount: pRequestedEraCount,
         provisionalEra: poolProvisionalEra,
         completedEras: pCompletedEras,
         latestCompletedEra: pCompletedEras[0] ?? 0,
+        filter,
       })
   }
 
@@ -364,7 +440,10 @@ export default function App() {
   }
 
   function handleSelectPool(poolId) {
-    const index = pools.findIndex(pool => pool.poolId === poolId)
+    // Indexed against the filtered list, which is what the grid paginates —
+    // the summary that offers this pool is itself rendered from that list, so
+    // anything selectable here is present in it.
+    const index = filteredPools.findIndex(pool => pool.poolId === poolId)
     if (index === -1) return
     setShowPoolResults(true)
     setPoolPage(Math.floor(index / STAKING_RESULTS_PAGE_SIZE) + 1)
@@ -493,7 +572,7 @@ export default function App() {
       <main id="main-content" className="relative z-10 mx-auto w-full max-w-[100rem] space-y-4 px-3 py-4 pb-32 sm:px-6 sm:py-6 sm:space-y-5">
 
         <section className="page-hero">
-          <div className="relative z-10 flex flex-col gap-2">
+          <div className="relative z-10 flex flex-col gap-2 sm:gap-3">
             <div className="hero-kicker self-start">
               <span className="hero-dot" />
               STAKING DIAGNOSTICS
@@ -575,6 +654,16 @@ export default function App() {
               {activeImportMeta.appVersion && <> · EnjinSight v{activeImportMeta.appVersion}</>}
               {' '}· {isValidatorMode ? validators.length : pools.length} {isValidatorMode ? 'validator' : 'pool'}{(isValidatorMode ? validators.length : pools.length) === 1 ? '' : 's'}.
               {' '}Nothing was fetched.
+              {/* A filtered export is structurally identical to a full scan,
+                  so without this the file would silently read as the whole
+                  thing. `meta.filter` is what makes that recoverable. */}
+              {activeImportMeta.filter && (
+                <> This file was exported from a filtered view
+                  {activeImportMeta.filter.totalRecords > 0 && (
+                    <> — {activeImportMeta.filter.exportedRecords} of {activeImportMeta.filter.totalRecords} records</>
+                  )}. It is not the complete scan.
+                </>
+              )}
             </p>
             {/* The Query pane owns the only Reset, so from the Import pane the
                 banner would otherwise point at a control that is not on
@@ -642,7 +731,8 @@ export default function App() {
             id="validators-panel"
             heading="Validators"
             headingId="validators-heading"
-            count={validators.length}
+            count={filteredValidators.length}
+            total={validators.length}
             countLabel="validator"
             isLoading={isLoading}
             loadingLabel={isLoading ? `${validators.filter(v => v.fetchStatus === 'done').length} / ${validators.length} loaded` : null}
@@ -651,18 +741,34 @@ export default function App() {
             onPageChange={setValidatorPage}
             open={showValidatorResults}
             onToggleOpen={() => setShowValidatorResults(open => !open)}
+            toolbar={
+              <ResultsFilterBar
+                mode="validators"
+                value={validatorFilter}
+                onChange={handleFilterChange}
+                total={validators.length}
+                shown={filteredValidators.length}
+                idPrefix="validators"
+              />
+            }
           >
-            <div className="grid gap-2 sm:gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-              {visibleValidators.map(v => (
-                <ValidatorCard
-                  key={v.address}
-                  validator={v}
-                  eraCount={lastEraCount}
-                  latestEra={validatorLatestEra}
-                  onRetry={isImported ? undefined : vRetryValidator}
-                />
-              ))}
-            </div>
+            {visibleValidators.length === 0 ? (
+              <p className="rounded-sm border border-[var(--hairline)] bg-card px-4 py-8 text-center text-sm text-text-secondary">
+                No validators match your filters.
+              </p>
+            ) : (
+              <div className="grid gap-2 sm:gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+                {visibleValidators.map(v => (
+                  <ValidatorCard
+                    key={v.address}
+                    validator={v}
+                    eraCount={lastEraCount}
+                    latestEra={validatorLatestEra}
+                    onRetry={isImported ? undefined : vRetryValidator}
+                  />
+                ))}
+              </div>
+            )}
           </ResultsPanel>
         )}
 
@@ -672,12 +778,13 @@ export default function App() {
         {isValidatorMode && (isLoading || validators.length > 0) && (
           <section id="staking-validator-summary">
             <SummarySection
-              validators={validators}
+              validators={filteredValidators}
               eraCount={lastEraCount}
               latestEra={validatorLatestEra}
               onRetry={isImported ? undefined : vRetryValidator}
               provisional={isLoading}
               progressLabel={isLoading ? `${validators.filter(v => v.fetchStatus === 'done').length} / ${validators.length} scanned` : null}
+              filterLabel={filterLabel}
             />
           </section>
         )}
@@ -688,7 +795,8 @@ export default function App() {
             id="pools-panel"
             heading="Nomination Pools"
             headingId="pools-heading"
-            count={pools.length}
+            count={filteredPools.length}
+            total={pools.length}
             countLabel="pool"
             isLoading={isLoading}
             loadingLabel={isLoading ? `${pools.filter(p => p.fetchStatus === 'done').length} / ${pools.length} loaded` : null}
@@ -697,32 +805,49 @@ export default function App() {
             onPageChange={(nextPage) => { setSelectedPoolId(null); setPoolPage(nextPage) }}
             open={showPoolResults}
             onToggleOpen={() => setShowPoolResults(open => !open)}
+            toolbar={
+              <ResultsFilterBar
+                mode="pools"
+                value={poolFilter}
+                onChange={handleFilterChange}
+                total={pools.length}
+                shown={filteredPools.length}
+                idPrefix="pools"
+              />
+            }
           >
-            <div className="grid gap-2 sm:gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-              {visiblePools.map(p => (
-                <PoolCard
-                  key={p.poolId}
-                  pool={p}
-                  eraCount={lastEraCount}
-                  latestEra={poolLatestEra}
-                  provisionalEra={poolProvisionalEra}
-                  onRetry={isImported ? undefined : pRetryPoolValidator}
-                  open={selectedPoolId === p.poolId}
-                  onOpenChange={next => setSelectedPoolId(next ? p.poolId : null)}
-                />
-              ))}
-            </div>
+            {visiblePools.length === 0 ? (
+              <p className="rounded-sm border border-[var(--hairline)] bg-card px-4 py-8 text-center text-sm text-text-secondary">
+                No pools match your filters.
+              </p>
+            ) : (
+              <div className="grid gap-2 sm:gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+                {visiblePools.map(p => (
+                  <PoolCard
+                    key={p.poolId}
+                    pool={p}
+                    eraCount={lastEraCount}
+                    latestEra={poolLatestEra}
+                    provisionalEra={poolProvisionalEra}
+                    onRetry={isImported ? undefined : pRetryPoolValidator}
+                    open={selectedPoolId === p.poolId}
+                    onOpenChange={next => setSelectedPoolId(next ? p.poolId : null)}
+                  />
+                ))}
+              </div>
+            )}
           </ResultsPanel>
         )}
 
         {!isValidatorMode && (isLoading || pools.length > 0) && (
           <section id="staking-pool-summary">
             <PoolSummarySection
-              pools={pools}
+              pools={filteredPools}
               eraCount={lastEraCount}
               onPoolSelect={handleSelectPool}
               provisional={isLoading}
               progressLabel={isLoading ? `${pools.filter(p => p.fetchStatus === 'done').length} / ${pools.length} scanned` : null}
+              filterLabel={filterLabel}
             />
           </section>
         )}
@@ -730,12 +855,15 @@ export default function App() {
         {/* Export, attached to the results it serialises. Hidden for imported
             data: an import is a snapshot of a past scan, and a re-export
             would be indistinguishable from an original. */}
-        {!simpleMode && canExport && (
+        {canExport && (
           <div className="lg:w-1/2">
             <ScanExportPanel
               schema={isValidatorMode ? SCAN_SCHEMAS.VALIDATOR : SCAN_SCHEMAS.POOL}
               buildContent={buildScanExport}
               disabled={isLoading}
+              notice={isFiltered
+                ? `Exporting ${filteredRecords.length} of ${activeRecords.length} records — a filter is applied.`
+                : null}
             />
           </div>
         )}
@@ -801,7 +929,11 @@ export default function App() {
   )
 }
 
-function ResultsPanel({ id, heading, headingId, count, countLabel, isLoading, loadingLabel, page, pages, onPageChange, open, onToggleOpen, children }) {
+function ResultsPanel({ id, heading, headingId, count, total, countLabel, isLoading, loadingLabel, page, pages, onPageChange, open, onToggleOpen, toolbar, children }) {
+  // `count` is what is on screen; `total` is what the scan holds. They differ
+  // only while a filter is applied, and the header says so rather than
+  // silently reporting a smaller scan than actually ran.
+  const filtered = typeof total === 'number' && total !== count
   return (
     <section id={id} aria-labelledby={headingId} className="overflow-hidden rounded-sm border border-[var(--hairline)] bg-surface">
       <button
@@ -815,7 +947,9 @@ function ResultsPanel({ id, heading, headingId, count, countLabel, isLoading, lo
           <h2 id={headingId} className="font-headline text-base font-bold text-text sm:text-xl">{heading}</h2>
         </div>
         <span className="hidden text-[11px] font-mono text-muted sm:inline">
-          {count.toLocaleString('en')} {countLabel}{count !== 1 ? 's' : ''}
+          {filtered
+            ? `${count.toLocaleString('en')} / ${total.toLocaleString('en')} ${countLabel}s`
+            : `${count.toLocaleString('en')} ${countLabel}${count !== 1 ? 's' : ''}`}
         </span>
         {isLoading && loadingLabel && (
           <span className="text-[11px] text-text-secondary">{loadingLabel}</span>
@@ -827,6 +961,7 @@ function ResultsPanel({ id, heading, headingId, count, countLabel, isLoading, lo
 
       {open && (
         <div className="space-y-3 px-3 py-3 sm:px-4 sm:py-4">
+          {toolbar}
           {children}
           {pages > 1 && (
             <ResultsPagination

@@ -831,7 +831,7 @@ export function usePoolChecker() {
 
     const {
       pools = [], requestedEraCount = 0, provisionalEra = null,
-      completedEras = [], exportedAt = '', appVersion = null,
+      completedEras = [], exportedAt = '', appVersion = null, filter = null,
     } = parsed ?? {}
 
     const rebuilt = pools.map(p => ({
@@ -849,7 +849,7 @@ export function usePoolChecker() {
       requestedEraCount,
       provisionalEra,
       completedEras,
-      importMeta: { fileName, exportedAt, appVersion },
+      importMeta: { fileName, exportedAt, appVersion, filter },
       logMessage: `Imported ${rebuilt.length} pool(s)${from}${when}. This is file data — nothing was fetched.`,
     })
   }, [])

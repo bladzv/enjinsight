@@ -290,6 +290,88 @@ describe('validator scan round-trip', () => {
   })
 })
 
+describe('filter metadata', () => {
+  const sampleFilter = {
+    search: 'dragons',
+    status: 'missed',
+    missedMin: 1,
+    missedMax: 5,
+    sortKey: 'bonded',
+    sortDir: 'asc',
+    totalRecords: 27,
+    exportedRecords: 1,
+  }
+
+  it('omits meta.filter entirely when nothing is filtered', () => {
+    const file = JSON.parse(exportValidatorScan(validatorState))
+    expect(file.meta).not.toHaveProperty('filter')
+    // The schema version is not bumped for this field: an older build must
+    // still be able to open its own unfiltered export exactly as before.
+    expect(file.schemaVersion).toBe(SCAN_SCHEMA_VERSION)
+  })
+
+  it('omits meta.filter when filter is explicitly null', () => {
+    const file = JSON.parse(exportValidatorScan({ ...validatorState, filter: null }))
+    expect(file.meta).not.toHaveProperty('filter')
+  })
+
+  it('records and round-trips a filter on a validator export', () => {
+    const file = JSON.parse(exportValidatorScan({ ...validatorState, filter: sampleFilter }))
+    expect(file.meta.filter).toEqual(sampleFilter)
+
+    const back = importValidatorScan(JSON.stringify(file))
+    expect(back.filter).toEqual(sampleFilter)
+  })
+
+  it('records and round-trips a filter on a pool export', () => {
+    const file = JSON.parse(exportPoolScan({ ...poolState, filter: sampleFilter }))
+    expect(file.meta.filter).toEqual(sampleFilter)
+
+    const back = importPoolScan(JSON.stringify(file))
+    expect(back.filter).toEqual(sampleFilter)
+  })
+
+  it('sanitises an untrusted filter block on import (caps, allowlist, coercion)', () => {
+    const file = JSON.parse(exportValidatorScan(validatorState))
+    file.meta.filter = {
+      search: 'x'.repeat(10_000),
+      status: 'missed',
+      missedMin: '3',
+      missedMax: 'not-a-number',
+      sortKey: 'bonded',
+      sortDir: 'sideways', // not in the allowlist
+      totalRecords: '27',
+      exportedRecords: 1,
+    }
+    const back = importValidatorScan(JSON.stringify(file))
+    expect(back.filter.search.length).toBeLessThanOrEqual(512)
+    expect(back.filter.missedMin).toBe(3)
+    expect(back.filter.missedMax).toBe(0) // int() falls back to 0 for a non-numeric string
+    expect(back.filter.sortDir).toBe('desc') // rejected, falls back to the default
+    expect(back.filter.totalRecords).toBe(27)
+  })
+
+  it('reads a file with no meta.filter (a pre-existing export) as unfiltered, not an error', () => {
+    // Exactly what a file written before this field existed looks like: a
+    // valid envelope whose meta simply lacks the key. Must not throw, and
+    // must not be confused with a filter that legitimately narrowed nothing.
+    const file = JSON.parse(exportValidatorScan(validatorState))
+    expect(file.meta.filter).toBeUndefined()
+    const back = importValidatorScan(JSON.stringify(file))
+    expect(back.filter).toBeNull()
+  })
+
+  it('treats a malformed meta.filter (wrong type) as absent rather than throwing', () => {
+    const file = JSON.parse(exportValidatorScan(validatorState))
+    file.meta.filter = 'not-an-object'
+    expect(() => importValidatorScan(JSON.stringify(file))).not.toThrow()
+    expect(importValidatorScan(JSON.stringify(file)).filter).toBeNull()
+
+    file.meta.filter = ['array', 'not', 'object']
+    expect(importValidatorScan(JSON.stringify(file)).filter).toBeNull()
+  })
+})
+
 describe('pool scan round-trip', () => {
   it('restores every field, with BigInts exact', () => {
     const back = importPoolScan(exportPoolScan(poolState))

@@ -4,7 +4,7 @@
  *
  * Only rendered when dataSource === 'query' (not for imported data).
  */
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Download, Lock, Unlock } from 'lucide-react'
 import {
   toJSON, toCSV, toXML,
@@ -25,13 +25,17 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
   const [busy,     setBusy]         = useState(false)
   const [message,  setMessage]      = useState(null) // { type:'ok'|'err', text }
 
+  // Frozen per mount (not recomputed on every render) so the placeholder
+  // shown below is byte-identical to the name actually saved.
+  const defaultName = useMemo(() => defaultFilename(), [])
+
   async function handleExport() {
     if (!records.length) { setMessage({ type: 'err', text: 'No data to export.' }); return }
     if (encOn && !password)  { setMessage({ type: 'err', text: 'Enter an encryption password.' }); return }
     setBusy(true)
     setMessage(null)
     try {
-      const fname = filename.trim() || defaultFilename()
+      const fname = filename.trim() || defaultName
       const meta  = { ...rpcMeta, exportedAt: new Date().toISOString() }
       let content = format === 'json' ? toJSON(records, meta)
                   : format === 'csv'  ? toCSV(records, meta)
@@ -123,7 +127,7 @@ export default function BalanceExportPanel({ records, rpcMeta }) {
             maxLength={200}
             autoComplete="off"
             spellCheck="false"
-            placeholder={defaultFilename()}
+            placeholder={defaultName}
             value={filename}
             onChange={e => setFilename(e.target.value)}
             controlClassName="font-mono"

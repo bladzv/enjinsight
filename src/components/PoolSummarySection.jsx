@@ -6,7 +6,7 @@ import { poolExplorerUrl, poolLabel } from '../utils/format.js'
 import { useCountUp } from '../hooks/useCountUp.js'
 
 const GAP_PAGE_SIZES = [5, 10, 20]
-export default function PoolSummarySection({ pools, eraCount, onPoolSelect, provisional = false, progressLabel }) {
+export default function PoolSummarySection({ pools, eraCount, onPoolSelect, provisional = false, progressLabel, filterLabel }) {
   const [showClean, setShowClean] = useState(false)
   const [gapPage, setGapPage]     = useState(0)
   const [gapPageSize, setGapPageSize] = useState(10)
@@ -65,6 +65,12 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect, prov
                so directly rather than leaving the reader to infer it from
                numbers that keep moving. */
             <span className="mini-chip text-warning">{progressLabel}</span>
+          )}
+          {filterLabel && (
+            /* Same reasoning as the provisional chip: these totals describe
+               the filtered subset, not the whole scan, and saying so beats
+               leaving the reader to wonder why the count shrank. */
+            <span className="mini-chip text-cyan">{filterLabel}</span>
           )}
         </div>
       </div>
