@@ -82,13 +82,13 @@ export default function LandingPage({ onNavigate }) {
           <h2 id="tools-heading" className="section-label">// Tool index</h2>
         </div>
 
-        <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">
+        <ul className="grid grid-cols-1 gap-3 lg:grid-cols-4 lg:gap-4">
           {TOOLS.map((tool, i) => (
-            <Reveal as="li" key={tool.key} index={i}>
+            <Reveal as="li" key={tool.key} index={i} className="h-full lg:col-span-2 lg:last:col-start-2">
               <button
                 type="button"
                 onClick={() => onNavigate(tool.key)}
-                className="tool-card group grid w-full grid-cols-[auto_1fr_auto] items-start gap-4 rounded-sm border border-white/[0.06] bg-surface px-4 py-5 text-left transition hover:bg-white/[0.02] sm:gap-6 sm:px-5"
+                className="tool-card group grid h-full w-full grid-cols-[auto_1fr_auto] items-start gap-4 rounded-sm border border-white/[0.06] bg-surface px-4 py-5 text-left transition hover:bg-white/[0.02] sm:gap-6 sm:px-5"
                 aria-label={`Open ${tool.title}`}
               >
                 {/* code + icon */}
