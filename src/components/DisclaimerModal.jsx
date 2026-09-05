@@ -4,8 +4,8 @@ import { AlertTriangle, CheckCircle2, ChevronDown, Database, Eye, X } from 'luci
 import { useFocusTrap } from '../hooks/useFocusTrap.js'
 
 const STORAGE_KEY = 'enjinsight_disclaimer_v1'
-const BRAND_LOGO_URL = '/android-chrome-192x192.png'
-const BRAND_NAME_URL = '/assets/brand/enjinsight_brand.png'
+const BRAND_LOGO_URL = '/assets/brand/enjinsight-logo-128.png'
+const BRAND_NAME_URL = '/assets/brand/enjinsight-wordmark-512.png'
 
 export function DisclaimerContent({ compact = false, titleId } = {}) {
   return (
@@ -117,7 +117,7 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
 
         <div ref={scrollRef} onScroll={checkOverflow} className="relative z-10 min-h-0 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-8">
           <div className="flex items-center gap-2.5 sm:gap-3">
-            <img src={BRAND_LOGO_URL} alt="EnjinSight logo" className="h-8 w-8 rounded-sm sm:h-12 sm:w-12" />
+            <img src={BRAND_LOGO_URL} alt="EnjinSight logo" className="h-8 w-8 sm:h-12 sm:w-12" />
             <img src={BRAND_NAME_URL} alt="EnjinSight" className="h-6 w-auto max-w-[9rem] sm:h-9 sm:max-w-[13rem]" />
           </div>
 
