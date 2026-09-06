@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, ArrowUpDown, Database, ExternalLink, FileDown, ImageIcon, Loader2, RefreshCw, Search, Wallet } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Database, ExternalLink, ImageIcon, Loader2, RefreshCw, Search, Wallet } from 'lucide-react'
 import DetailModal from './DetailModal.jsx'
 import PhaseProgressCards from './PhaseProgressCards.jsx'
 import StepProgress from './StepProgress.jsx'
 import TerminalLog from './TerminalLog.jsx'
 import ToolInfoSection from './ToolInfoSection.jsx'
 import { derivePhases } from '../utils/infusionPhases.js'
-import { formatExportedAtUTC } from '../utils/format.js'
 import Field from './Field.jsx'
 import Spinner from './Spinner.jsx'
 import ScanStatusBar from './ScanStatusBar.jsx'
 import ScanExportPanel from './ScanExportPanel.jsx'
 import ScanImportPanel from './ScanImportPanel.jsx'
 import ToolModeStrip from './ToolModeStrip.jsx'
-import { SCAN_SCHEMAS, exportInfusionScan, importInfusionScan } from '../utils/scanExport.js'
+import ImportProvenance from './ImportProvenance.jsx'
+import { SCAN_SCHEMAS, SCHEMA_LABELS, exportInfusionScan, importInfusionScan } from '../utils/scanExport.js'
 
 const CONTRACT_ADDRESS = '0xfaafdc07907ff5120a76b34b731b278c38d6043c'
 const ETHERSCAN_NFT_HOLDINGS_URL = import.meta.env.DEV
@@ -1330,29 +1330,20 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
       {/* Provenance. Rendered in both UI modes — the panel above is
           advanced-only, but a user can switch to guided mode after importing
           and the results would otherwise look like a live scan. */}
+      {/* Advanced mode has no Reset control of its own — the guided stepper
+          owns the only one — so without the banner's Clear the imported rows
+          could only be cleared by running a new scan. */}
       {isImported && importMeta && (
-        <div className="space-y-2 rounded-sm border border-cyan/30 bg-cyan/10 px-3 py-2 text-xs text-cyan">
-          <div className="flex items-start gap-2">
-            <FileDown size={14} className="mt-0.5 flex-shrink-0" />
-            <p className="min-w-0 flex-1">
-              Showing imported data
-              {importMeta.fileName && <> from <span className="break-all font-mono">{importMeta.fileName}</span></>}
-              {importMeta.exportedAt && <> · exported {formatExportedAtUTC(importMeta.exportedAt)}</>}
-              {importMeta.appVersion && <> · EnjinSight v{importMeta.appVersion}</>}
-              {' '}· {rows.length} token row{rows.length === 1 ? '' : 's'}.
-              {' '}Nothing was fetched.
-            </p>
-            {/* Advanced mode has no Reset control of its own — the guided
-                stepper owns the only one — so without this the banner and the
-                imported rows could only be cleared by running a new scan. */}
-            <button
-              type="button"
-              onClick={handleSimpleReset}
-              className="btn-secondary shrink-0 px-3 py-1 text-xs"
-            >
-              Clear
-            </button>
-          </div>
+        <ImportProvenance
+          fileName={importMeta.fileName}
+          exportedAt={importMeta.exportedAt}
+          appVersion={importMeta.appVersion}
+          typeLabel={SCHEMA_LABELS[SCAN_SCHEMAS.INFUSION]}
+          count={rows.length}
+          noun="token row"
+          note="Nothing was fetched."
+          onClear={handleSimpleReset}
+        >
           {importedImageCount > 0 && !showImportedImages && (
             <div className="flex flex-wrap items-center gap-2 border-t border-cyan/20 pt-2">
               <p className="min-w-0 flex-1">
@@ -1371,7 +1362,7 @@ export default function InfusionChecker({ onScanStateChange, simpleMode = false 
               </button>
             </div>
           )}
-        </div>
+        </ImportProvenance>
       )}
 
       {mode === 'wallet' && bulkStarted && (!simpleMode || infusionSimpleStep >= 3) && (

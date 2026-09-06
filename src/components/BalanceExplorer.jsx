@@ -15,8 +15,9 @@
  */
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { fetchLiveChainInfo } from '../utils/chainInfo.js'
-import { Activity, AlertTriangle, ChevronDown, FileDown, RotateCcw, Sparkles } from 'lucide-react'
+import { Activity, AlertTriangle, ChevronDown, RotateCcw, Sparkles } from 'lucide-react'
 import { fmtENJ } from '../utils/balanceExport.js'
+import { SCAN_SCHEMAS, SCHEMA_LABELS } from '../utils/scanEnvelope.js'
 import useBalanceExplorer, { STATUS } from '../hooks/useBalanceExplorer.js'
 import { ENJIN_NETWORKS, MAX_RPC_CALLS, MAX_SCAN_DAYS } from '../constants.js'
 import { fetchEraBoundariesFromRpc } from '../utils/eraRpc.js'
@@ -25,7 +26,6 @@ import BalanceTable       from './BalanceTable.jsx'
 import BalanceExportPanel from './BalanceExportPanel.jsx'
 import BalanceImportPanel from './BalanceImportPanel.jsx'
 import ToolModeStrip from './ToolModeStrip.jsx'
-import { formatExportedAtUTC } from '../utils/format.js'
 import PhaseProgressCards from './PhaseProgressCards.jsx'
 import StepProgress       from './StepProgress.jsx'
 import TerminalLog        from './TerminalLog.jsx'
@@ -33,6 +33,7 @@ import ToolInfoSection    from './ToolInfoSection.jsx'
 import Field from './Field.jsx'
 import HoldButton from './HoldButton.jsx'
 import Spinner from './Spinner.jsx'
+import ImportProvenance from './ImportProvenance.jsx'
 import ScanStatusBar from './ScanStatusBar.jsx'
 
 // ── Address prefix map ───────────────────────────────────────────────────────
@@ -1211,24 +1212,16 @@ export default function BalanceExplorer({ onScanStateChange, simpleMode = false 
 
           {/* Provenance, adjacent to the results it describes. */}
           {dataSource === 'import' && importMeta && (
-            <div className="flex items-start gap-2 rounded-sm border border-cyan/30 bg-cyan/10 px-3 py-2 text-xs text-cyan">
-              <FileDown size={14} className="mt-0.5 flex-shrink-0" />
-              <p className="min-w-0 flex-1">
-                Showing imported data
-                {importMeta.fileName && <> from <span className="break-all font-mono">{importMeta.fileName}</span></>}
-                {importMeta.exportedAt && <> · exported {formatExportedAtUTC(importMeta.exportedAt)}</>}
-                {importMeta.appVersion && <> · EnjinSight v{importMeta.appVersion}</>}
-                {' '}· {records.length.toLocaleString('en')} record{records.length === 1 ? '' : 's'}.
-                {' '}Nothing was queried.
-              </p>
-              <button
-                type="button"
-                onClick={() => { reset(); setImportMeta(null); setQueriedAddress('') }}
-                className="btn-secondary shrink-0 px-3 py-1 text-xs"
-              >
-                Clear
-              </button>
-            </div>
+            <ImportProvenance
+              fileName={importMeta.fileName}
+              exportedAt={importMeta.exportedAt}
+              appVersion={importMeta.appVersion}
+              typeLabel={SCHEMA_LABELS[SCAN_SCHEMAS.BALANCE]}
+              count={records.length}
+              noun="record"
+              note="Nothing was queried."
+              onClear={() => { reset(); setImportMeta(null); setQueriedAddress('') }}
+            />
           )}
 
           {/* Records summary bar */}
