@@ -1696,10 +1696,12 @@
      happen — unmounting wins and the crossfade never renders. */
   .skel-swap {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .skel-swap > * {
     grid-area: 1 / 1;
+    min-width: 0;
     transition: opacity var(--m-base) var(--m-ease-out),
                 transform var(--m-base) var(--m-ease-out);
   }
