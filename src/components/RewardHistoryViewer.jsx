@@ -15,10 +15,11 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   Play, RotateCcw, Download,
   ChevronDown, Lock, Unlock,
-  AlertTriangle, FileDown,
+  AlertTriangle,
 } from 'lucide-react'
 import { useRewardHistory, RH_STATUS } from '../hooks/useRewardHistory.js'
 import { fetchLiveChainInfo } from '../utils/chainInfo.js'
+import ImportProvenance from './ImportProvenance.jsx'
 import PhaseProgressCards from './PhaseProgressCards.jsx'
 import StepProgress from './StepProgress.jsx'
 import TerminalLog from './TerminalLog.jsx'
@@ -27,8 +28,7 @@ import RewardImportPanel from './RewardImportPanel.jsx'
 import ToolModeStrip from './ToolModeStrip.jsx'
 import { PLANCK_PER_ENJ, SUBSCAN_HISTORY_DAYS, MAX_SCAN_DAYS, MAX_REWARD_ERA_SPAN } from '../constants.js'
 import { aesEncryptLabelled, downloadFile, safeFilename, defaultRewardFilename, parseBigInt, splitCsvRow } from '../utils/balanceExport.js'
-import { SCAN_SCHEMAS, envelopeHeader, readLegacyHeader } from '../utils/scanEnvelope.js'
-import { formatExportedAtUTC } from '../utils/format.js'
+import { SCAN_SCHEMAS, SCHEMA_LABELS, envelopeHeader, readLegacyHeader } from '../utils/scanEnvelope.js'
 import Spinner from './Spinner.jsx'
 import Field from './Field.jsx'
 import Skeleton from './Skeleton.jsx'
@@ -1831,24 +1831,16 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
 
           {/* Provenance, adjacent to the results it describes. */}
           {importedResults && (
-            <div className="flex items-start gap-2 rounded-sm border border-cyan/30 bg-cyan/10 px-3 py-2 text-xs text-cyan">
-              <FileDown size={14} className="mt-0.5 flex-shrink-0" />
-              <p className="min-w-0 flex-1">
-                Showing imported data
-                {importMeta?.fileName && <> from <span className="break-all font-mono">{importMeta.fileName}</span></>}
-                {importMeta?.exportedAt && <> · exported {formatExportedAtUTC(importMeta.exportedAt)}</>}
-                {importMeta?.appVersion && <> · EnjinSight v{importMeta.appVersion}</>}
-                {' '}· {activeResults.length} row{activeResults.length === 1 ? '' : 's'}.
-                {' '}Nothing was computed.
-              </p>
-              <button
-                type="button"
-                onClick={clearImport}
-                className="btn-secondary shrink-0 px-3 py-1 text-xs"
-              >
-                Clear
-              </button>
-            </div>
+            <ImportProvenance
+              fileName={importMeta?.fileName}
+              exportedAt={importMeta?.exportedAt}
+              appVersion={importMeta?.appVersion}
+              typeLabel={SCHEMA_LABELS[SCAN_SCHEMAS.REWARD]}
+              count={activeResults.length}
+              noun="row"
+              note="Nothing was computed."
+              onClear={clearImport}
+            />
           )}
         </section>
       )}
