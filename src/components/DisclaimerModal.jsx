@@ -188,7 +188,7 @@ function FirstVisitCard({ icon: Icon, title, text }) {
         </div>
         <h3 className="font-headline text-sm font-bold text-text sm:text-base">{title}</h3>
       </div>
-      <p className="mt-1.5 text-xs leading-5 text-text-secondary sm:mt-2.5 sm:text-sm sm:leading-6">{text}</p>
+      <p className="mt-1.5 text-[11px] leading-4 text-text-secondary sm:mt-2.5 sm:text-xs sm:leading-5">{text}</p>
     </div>
   )
 }
