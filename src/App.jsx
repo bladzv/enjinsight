@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Suspense, lazy } from 'react'
-import { ChevronDown, ChevronUp, FileDown } from 'lucide-react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { DEFAULT_ERA_COUNT } from './constants.js'
 import { useValidatorChecker } from './hooks/useValidatorChecker.js'
 import { usePoolChecker }      from './hooks/usePoolChecker.js'
 import { resolveLatestEra }    from './utils/eraAnalysis.js'
-import { formatExportedAtUTC } from './utils/format.js'
 import {
-  SCAN_SCHEMAS,
+  SCAN_SCHEMAS, SCHEMA_LABELS,
   exportValidatorScan, importValidatorScan,
   exportPoolScan, importPoolScan,
 } from './utils/scanExport.js'
@@ -26,6 +25,7 @@ import ModeSelector        from './components/ModeSelector.jsx'
 import ControlPanel        from './components/ControlPanel.jsx'
 import ValidatorCard       from './components/ValidatorCard.jsx'
 import PoolCard            from './components/PoolCard.jsx'
+import ImportProvenance    from './components/ImportProvenance.jsx'
 import TerminalLog         from './components/TerminalLog.jsx'
 import SummarySection      from './components/SummarySection.jsx'
 import PoolSummarySection  from './components/PoolSummarySection.jsx'
@@ -653,38 +653,20 @@ export default function App() {
         {/* Provenance. Rendered in both UI modes — the panels above are
             advanced-only, but a user can switch to guided mode after importing
             and the results on screen would otherwise look like a live scan. */}
+        {/* The Query pane owns the only Reset, so from the Import pane the
+            banner's Clear is the only control on screen that can undo this. */}
         {isImported && activeImportMeta && (
-          <div className="flex items-start gap-2 rounded-sm border border-cyan/30 bg-cyan/10 px-3 py-2 text-xs text-cyan">
-            <FileDown size={14} className="mt-0.5 flex-shrink-0" />
-            <p className="min-w-0 flex-1">
-              Showing imported data
-              {activeImportMeta.fileName && <> from <span className="break-all font-mono">{activeImportMeta.fileName}</span></>}
-              {activeImportMeta.exportedAt && <> · exported {formatExportedAtUTC(activeImportMeta.exportedAt)}</>}
-              {activeImportMeta.appVersion && <> · EnjinSight v{activeImportMeta.appVersion}</>}
-              {' '}· {isValidatorMode ? validators.length : pools.length} {isValidatorMode ? 'validator' : 'pool'}{(isValidatorMode ? validators.length : pools.length) === 1 ? '' : 's'}.
-              {' '}Nothing was fetched.
-              {/* A filtered export is structurally identical to a full scan,
-                  so without this the file would silently read as the whole
-                  thing. `meta.filter` is what makes that recoverable. */}
-              {activeImportMeta.filter && (
-                <> This file was exported from a filtered view
-                  {activeImportMeta.filter.totalRecords > 0 && (
-                    <> — {activeImportMeta.filter.exportedRecords} of {activeImportMeta.filter.totalRecords} records</>
-                  )}. It is not the complete scan.
-                </>
-              )}
-            </p>
-            {/* The Query pane owns the only Reset, so from the Import pane the
-                banner would otherwise point at a control that is not on
-                screen. Matches the Clear in the other three tools. */}
-            <button
-              type="button"
-              onClick={handleReset}
-              className="btn-secondary shrink-0 px-3 py-1 text-xs"
-            >
-              Clear
-            </button>
-          </div>
+          <ImportProvenance
+            fileName={activeImportMeta.fileName}
+            exportedAt={activeImportMeta.exportedAt}
+            appVersion={activeImportMeta.appVersion}
+            typeLabel={SCHEMA_LABELS[isValidatorMode ? SCAN_SCHEMAS.VALIDATOR : SCAN_SCHEMAS.POOL]}
+            count={isValidatorMode ? validators.length : pools.length}
+            noun={isValidatorMode ? 'validator' : 'pool'}
+            note="Nothing was fetched."
+            filter={activeImportMeta.filter}
+            onClear={handleReset}
+          />
         )}
 
         {/* Simple page 1: Mode selection */}

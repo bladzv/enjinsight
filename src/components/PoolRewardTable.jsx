@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp, ExternalLink, Info } from 'lucide-react'
 import { formatENJ, truncateAddress, validatorExplorerUrl } from '../utils/format.js'
 import { useHoverCapable } from '../hooks/useHoverCapable.js'
@@ -57,20 +58,39 @@ export function buildEraRows({ eraRewards, missedEras, eraCount, latestEra, prov
 
 const PROVISIONAL_COPY = "Provisional \u2014 this era's payout window (the era now in progress) is still open. A missing reward is counted as missed, but it may still be paid before the window closes."
 
+const TIP_WIDTH = 224      // matches `w-56`
+const TIP_GAP = 4          // matches the old `mt-1`
+const VIEWPORT_MARGIN = 8
+
 /**
  * Small "i" affordance that reveals an explanation on hover (pointer devices)
- * or on click/focus (touch and keyboard). Hover alone would be permanently
- * unreachable on a touch screen, so the click/focus path is not optional.
+ * or on click (touch and keyboard). Hover alone would be permanently
+ * unreachable on a touch screen, so the click path is not optional.
+ *
+ * The panel is portalled to `document.body`, positioned `fixed`, and mounted
+ * only while open. All three matter: this tip renders inside
+ * `.data-table-wrap`, whose `overflow-x: auto` makes the CSS engine compute
+ * `overflow-y` to `auto` as well (an `overflow` of `visible` on one axis is
+ * coerced when the other is not). An absolutely positioned panel inside that
+ * box is therefore both clipped by it and counted in its scroll height — so a
+ * permanently mounted panel added ~100px of empty scroll below a one-row
+ * table, and showed only a ~16px sliver of itself when it did open.
  */
 function InfoTip({ label, children, align = 'left' }) {
   const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState(null)
+  // The panel is held in state, not a ref, so that placement re-runs once the
+  // node is actually attached. A plain ref is not measurable on the layout
+  // pass that mounts it, which skipped the flip-above test on first paint and
+  // let the panel hang off the bottom of the viewport.
+  const [tipNode, setTipNode] = useState(null)
   const hoverCapable = useHoverCapable()
-  const wrapRef = useRef(null)
+  const btnRef = useRef(null)
 
   useEffect(() => {
-    if (!open) return
+    if (!open) return undefined
     function onDocPointer(event) {
-      if (wrapRef.current && !wrapRef.current.contains(event.target)) setOpen(false)
+      if (btnRef.current && !btnRef.current.contains(event.target)) setOpen(false)
     }
     function onKeyDown(event) {
       if (event.key === 'Escape') setOpen(false)
@@ -83,23 +103,71 @@ function InfoTip({ label, children, align = 'left' }) {
     }
   }, [open])
 
+  // Anchor to the button in viewport coordinates, and keep it anchored — the
+  // panel is no longer a child of the scroller, so nothing repositions it for
+  // us. `capture` is what catches the table's and the modal body's scrolls;
+  // neither bubbles a scroll event as far as `window`.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null)
+      return undefined
+    }
+
+    function place() {
+      const anchor = btnRef.current?.getBoundingClientRect()
+      if (!anchor) return
+      const height = tipNode?.offsetHeight ?? 0
+      const left = Math.max(
+        VIEWPORT_MARGIN,
+        Math.min(
+          align === 'right' ? anchor.right - TIP_WIDTH : anchor.left,
+          window.innerWidth - TIP_WIDTH - VIEWPORT_MARGIN,
+        ),
+      )
+      // Flip above the row when the panel would otherwise run off the bottom.
+      const below = anchor.bottom + TIP_GAP
+      const flip = height > 0 && below + height > window.innerHeight - VIEWPORT_MARGIN
+      setPos({
+        left,
+        top: flip ? Math.max(VIEWPORT_MARGIN, anchor.top - TIP_GAP - height) : below,
+      })
+    }
+
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
+    }
+  }, [open, align, tipNode])
+
   return (
-    <span ref={wrapRef} className="relative inline-flex group align-middle">
+    <span className="inline-flex align-middle">
       <button
+        ref={btnRef}
         type="button"
         onClick={() => setOpen(o => !o)}
+        onMouseEnter={hoverCapable ? () => setOpen(true) : undefined}
+        onMouseLeave={hoverCapable ? () => setOpen(false) : undefined}
         aria-label={label}
         aria-expanded={open}
         className="ml-1.5 inline-flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning transition-colors hover:bg-warning/25"
       >
         <Info size={9} strokeWidth={2.5} />
       </button>
-      <span
-        role="tooltip"
-        className={`pointer-events-none absolute z-50 top-full mt-1 w-56 whitespace-normal break-words rounded-lg border border-rim bg-ink p-2.5 text-left text-[10px] font-normal normal-case leading-relaxed tracking-normal text-text-secondary shadow-xl shadow-black/60 transition-opacity duration-150 ${align === 'right' ? 'right-0' : 'left-0'} ${open ? 'opacity-100' : hoverCapable ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'}`}
-      >
-        {children}
-      </span>
+      {open && createPortal(
+        <span
+          ref={setTipNode}
+          role="tooltip"
+          className="pointer-events-none fixed z-[80] w-56 whitespace-normal break-words rounded-lg border border-rim bg-ink p-2.5 text-left text-[10px] font-normal normal-case leading-relaxed tracking-normal text-text-secondary shadow-xl shadow-black/60"
+          // Parked off-screen for the one frame before `place()` measures it.
+          style={{ top: pos?.top ?? -9999, left: pos?.left ?? -9999 }}
+        >
+          {children}
+        </span>,
+        document.body,
+      )}
     </span>
   )
 }

@@ -1,0 +1,137 @@
+{
+  "tool": "enjinsight",
+  "schema": "staking-cadence-validator",
+  "schemaVersion": 1,
+  "appVersion": "enjinsight-cli@1.0.0",
+  "exportedAt": "2026-09-06T09:08:44.515Z",
+  "meta": {
+    "requestedEraCount": 1,
+    "validatorCount": 3
+  },
+  "data": {
+    "validators": [
+      {
+        "address": "enDu5MGqCa6T4e9uLoAFmpuFz32qDCjyt1HKuiDYgGbS8j7KH",
+        "display": "GODSANDS",
+        "commission": 5.0,
+        "bondedTotal": "18042820576014588738195135",
+        "countNominators": 6,
+        "isActive": true,
+        "fetchStatus": "done",
+        "lastError": null,
+        "nominators": [
+          {
+            "address": "enD9wdMEaQa3LR6AUWQv9WY1Wp3F629uGZi3pnxfdxEMGEcUh",
+            "display": "Pool#78(Stash)",
+            "bonded": "4565972138855094364734435"
+          },
+          {
+            "address": "enD9wdMEaQa3LR6AUWQv7fYHJCqj7rFChtGeDcRLUCJi42pAo",
+            "display": "Pool#48(Stash)",
+            "bonded": "4312545257403259300851645"
+          },
+          {
+            "address": "enD9wdMEaQa3LR6AUWQv5aH87nR5Hf1soP3KCQUVgLXP5fgAC",
+            "display": "Pool#14(Stash)",
+            "bonded": "4008625866694154503684770"
+          },
+          {
+            "address": "enD9wdMEaQa3LR6AUWQv9pNJDaaAR3oghLwx6KiZAaYxTwF2q",
+            "display": "Pool#83(Stash)",
+            "bonded": "3270242007878075599671120"
+          },
+          {
+            "address": "enD9wdMEaQa3LR6AUWQvANU1tALDc6n6TwymmssxKJjFRo3jK",
+            "display": "Pool#92(Stash)",
+            "bonded": "1162122831287651505735360"
+          },
+          {
+            "address": "enD9wdMEaQa3LR6AUWQv8iArtR442wrsA8tJjDPks8CNYDAXx",
+            "display": "Pool#65(Stash)",
+            "bonded": "708312473896353493720680"
+          }
+        ],
+        "eraStat": [
+          {
+            "era": 1174,
+            "reward": "0",
+            "validatorStake": "0",
+            "nominatorStake": "0",
+            "startBlock": 17125687,
+            "endBlock": 17132885,
+            "rewardPoint": 0,
+            "blocksProduced": 311
+          }
+        ]
+      },
+      {
+        "address": "enG2tPZeAkKCNSxgXnWNDhGf5j83GZboj41ypUENcGZCNDheN",
+        "display": "",
+        "commission": 5.0,
+        "bondedTotal": "17329642237297041074941800",
+        "countNominators": 2,
+        "isActive": true,
+        "fetchStatus": "done",
+        "lastError": null,
+        "nominators": [
+          {
+            "address": "enD9wdMEaQa3LR6AUWQv4iM7kS86maPgbzmbFKZCzz2Uv7758",
+            "display": "Pool#0(Stash)",
+            "bonded": "16172566805972365730346510"
+          },
+          {
+            "address": "enD9wdMEaQa3LR6AUWQvAcjSqyZMU86iommhBuHTwQawBxFsv",
+            "display": "Pool#96(Stash)",
+            "bonded": "82813479680338996733655"
+          }
+        ],
+        "eraStat": [
+          {
+            "era": 1174,
+            "reward": "0",
+            "validatorStake": "0",
+            "nominatorStake": "0",
+            "startBlock": 17125687,
+            "endBlock": 17132885,
+            "rewardPoint": 0,
+            "blocksProduced": 270
+          }
+        ]
+      },
+      {
+        "address": "enCTe5RMrn159cF187zEGn5VrzvYM19kwrQFrzkzC7fR2Txrp",
+        "display": "",
+        "commission": 5.0,
+        "bondedTotal": "17303956153962472281147975",
+        "countNominators": 2,
+        "isActive": true,
+        "fetchStatus": "done",
+        "lastError": null,
+        "nominators": [
+          {
+            "address": "enD9wdMEaQa3LR6AUWQv5L1h9yBwRdhFTZFPnP4z4EfhKWCr4",
+            "display": "Pool#10(Stash)",
+            "bonded": "11157774418489384413462615"
+          },
+          {
+            "address": "enD9wdMEaQa3LR6AUWQv4iM7kS86maPgbzmbFKZCzz2Uv7758",
+            "display": "Pool#0(Stash)",
+            "bonded": "5061461034124040387664870"
+          }
+        ],
+        "eraStat": [
+          {
+            "era": 1174,
+            "reward": "0",
+            "validatorStake": "0",
+            "nominatorStake": "0",
+            "startBlock": 17125687,
+            "endBlock": 17132885,
+            "rewardPoint": 0,
+            "blocksProduced": 267
+          }
+        ]
+      }
+    ]
+  }
+}
