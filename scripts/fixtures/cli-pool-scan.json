@@ -1,0 +1,604 @@
+{
+  "tool": "enjinsight",
+  "schema": "staking-cadence-pool",
+  "schemaVersion": 1,
+  "appVersion": "enjinsight-cli@1.0.0",
+  "exportedAt": "2026-09-06T09:08:27.827Z",
+  "meta": {
+    "requestedEraCount": 1,
+    "provisionalEra": 1173,
+    "completedEras": [
+      1173
+    ],
+    "latestCompletedEra": 1173,
+    "poolCount": 3
+  },
+  "data": {
+    "pools": [
+      {
+        "poolId": 0,
+        "metadata": "",
+        "state": "Open",
+        "stashAddress": "enD9wdMEaQa3LR6AUWQv4iM7kS86maPgbzmbFKZCzz2Uv7758",
+        "stashDisplay": "Pool#0(Stash)",
+        "rewardAddress": "enD9wdMEaQa3LR6AUWQvLTNfLYcmy2wnUjSXksVtqSrMeNbca",
+        "rewardDisplay": "Pool#0(Reward)",
+        "memberCount": 198,
+        "totalBonded": "86856033927662856978616455",
+        "commission": 0.0,
+        "fetchStatus": "done",
+        "nominatedValidators": [
+          {
+            "address": "enCC76sMpXRKERr7xJtHA3NLWeLR8gF1z7ZUgs6rH6fxPJC8v",
+            "display": "",
+            "bonded": "16768656171414872390357025",
+            "isActive": true,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enCTe5RMrn159cF187zEGn5VrzvYM19kwrQFrzkzC7fR2Txrp",
+            "display": "",
+            "bonded": "5061461034124040387664870",
+            "isActive": true,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enCYqG8iYjGeZ135nUWH6DpLUYdx7kYGASiheg16W164RZ747",
+            "display": "Matrixed.Link / 2",
+            "bonded": "11369411163540078144738600",
+            "isActive": true,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enCbYndxGeoXWSAwAxL23bcVVu5zcjenmDjTiaqpyYLr8ux2s",
+            "display": "Enjin / AP1",
+            "bonded": "3457318319566539087947820",
+            "isActive": true,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enEbAAWuR8L73eyr9WtFWtZYbw3UhfPcdNBDiQc9YWy31V784",
+            "display": "",
+            "bonded": "16991196201180074865081285",
+            "isActive": true,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enFw32hdoxiEfhnenLqkLg3t2ec5f4ixVzmRW4VVQCbkTc194",
+            "display": "",
+            "bonded": "16989871558145758186291185",
+            "isActive": true,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enG2tPZeAkKCNSxgXnWNDhGf5j83GZboj41ypUENcGZCNDheN",
+            "display": "Enjin / US1",
+            "bonded": "16172566805972365730346510",
+            "isActive": true,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enCMbpGcNKfaY7bRfSyZAVdSGe48MnihCG9n4BvaCUtATxLzG",
+            "display": "Enjin / US2",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enB3aj9qMZkHtJy2NwRrx8UvZn83qrfaibpNFgpwt7P3B5yWa",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enGJZezJA9vF4yfSbPYzo1u5NyJxn7HdCvixcfaBdrBkF7gWo",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enBRFocgo4aPAVtny93ZLaTPX9JpbxrSeBt29uXdLy3AcG8Dx",
+            "display": "Enjin / EU1",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enFzJ3vs1nxjr4rvzv38rMzxrS88srTffU5T2FcpdgsLEirTy",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enEm2HMCCrNGhDUbtZ9QcZmfThL9jHeiA5JR4ZVR2Hi9kqUni",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enF4pssFtqA6dQHMqWcnFzVyzZ5AbRXX3NJA3eigxWL8YQUKK",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enAxDeawNAicPNEgBu2hKaWKUEjhQTQcsLTccoC2ABozPHH2n",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enGD21jemwYWYiRZtQVXVonb5dkUSY3Sw8VEVnVg5jhM13VRK",
+            "display": "Subscan / validator01",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          }
+        ],
+        "eraRewards": [
+          {
+            "era": 1173,
+            "amount": "8574267616709516327146",
+            "blockTimestamp": 1788635736,
+            "eventIndex": "17125704-61",
+            "validatorStash": "enEbAAWuR8L73eyr9WtFWtZYbw3UhfPcdNBDiQc9YWy31V784"
+          },
+          {
+            "era": 1173,
+            "amount": "8449556806959431571964",
+            "blockTimestamp": 1788635712,
+            "eventIndex": "17125700-193",
+            "validatorStash": "enG2tPZeAkKCNSxgXnWNDhGf5j83GZboj41ypUENcGZCNDheN"
+          },
+          {
+            "era": 1173,
+            "amount": "2839962961907112853272",
+            "blockTimestamp": 1788635706,
+            "eventIndex": "17125699-9",
+            "validatorStash": "enCTe5RMrn159cF187zEGn5VrzvYM19kwrQFrzkzC7fR2Txrp"
+          },
+          {
+            "era": 1173,
+            "amount": "6068730854789725593022",
+            "blockTimestamp": 1788635688,
+            "eventIndex": "17125696-8",
+            "validatorStash": "enCYqG8iYjGeZ135nUWH6DpLUYdx7kYGASiheg16W164RZ747"
+          },
+          {
+            "era": 1173,
+            "amount": "1698472695228952482578",
+            "blockTimestamp": 1788635682,
+            "eventIndex": "17125695-44",
+            "validatorStash": "enCbYndxGeoXWSAwAxL23bcVVu5zcjenmDjTiaqpyYLr8ux2s"
+          },
+          {
+            "era": 1173,
+            "amount": "8911089962278606027464",
+            "blockTimestamp": 1788635676,
+            "eventIndex": "17125694-50",
+            "validatorStash": "enFw32hdoxiEfhnenLqkLg3t2ec5f4ixVzmRW4VVQCbkTc194"
+          },
+          {
+            "era": 1173,
+            "amount": "9010592821254732486605",
+            "blockTimestamp": 1788635664,
+            "eventIndex": "17125692-9",
+            "validatorStash": "enCC76sMpXRKERr7xJtHA3NLWeLR8gF1z7ZUgs6rH6fxPJC8v"
+          }
+        ],
+        "missedEras": []
+      },
+      {
+        "poolId": 1,
+        "metadata": "",
+        "state": "Open",
+        "stashAddress": "enD9wdMEaQa3LR6AUWQv4muyVPRtEaiqgxDa6puauWVQMeK5L",
+        "stashDisplay": "Pool#1(Stash)",
+        "rewardAddress": "enD9wdMEaQa3LR6AUWQvLWwX5VvZS3GwZgtWcNrGjyKH5v1vk",
+        "rewardDisplay": "Pool#1(Reward)",
+        "memberCount": 180,
+        "totalBonded": "40118520371861881698028164",
+        "commission": 0.0,
+        "fetchStatus": "done",
+        "nominatedValidators": [
+          {
+            "address": "enAnwVcmPePdsyqeTP9mvULBqUTcmyfU9jAhFHcvuBD5Wan9V",
+            "display": "Matrixed.Link / 1",
+            "bonded": "4991511606737539405596900",
+            "isActive": true,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enAxDeawNAicPNEgBu2hKaWKUEjhQTQcsLTccoC2ABozPHH2n",
+            "display": "",
+            "bonded": "5618662795375193025217290",
+            "isActive": true,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enB3aj9qMZkHtJy2NwRrx8UvZn83qrfaibpNFgpwt7P3B5yWa",
+            "display": "",
+            "bonded": "16223942358942460883863500",
+            "isActive": true,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enBCbKVpQ8a8y2DfqX4p4JLZHkEuhkh98L27Ee4Figba7HroW",
+            "display": "Subscan / validator02",
+            "bonded": "13263788748572735899992375",
+            "isActive": true,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enG2tPZeAkKCNSxgXnWNDhGf5j83GZboj41ypUENcGZCNDheN",
+            "display": "Enjin / US1",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enCMbpGcNKfaY7bRfSyZAVdSGe48MnihCG9n4BvaCUtATxLzG",
+            "display": "Enjin / US2",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enGJZezJA9vF4yfSbPYzo1u5NyJxn7HdCvixcfaBdrBkF7gWo",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enEbAAWuR8L73eyr9WtFWtZYbw3UhfPcdNBDiQc9YWy31V784",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enFw32hdoxiEfhnenLqkLg3t2ec5f4ixVzmRW4VVQCbkTc194",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enCC76sMpXRKERr7xJtHA3NLWeLR8gF1z7ZUgs6rH6fxPJC8v",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enBRFocgo4aPAVtny93ZLaTPX9JpbxrSeBt29uXdLy3AcG8Dx",
+            "display": "Enjin / EU1",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enFzJ3vs1nxjr4rvzv38rMzxrS88srTffU5T2FcpdgsLEirTy",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enCTe5RMrn159cF187zEGn5VrzvYM19kwrQFrzkzC7fR2Txrp",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enCbYndxGeoXWSAwAxL23bcVVu5zcjenmDjTiaqpyYLr8ux2s",
+            "display": "Enjin / AP1",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enEm2HMCCrNGhDUbtZ9QcZmfThL9jHeiA5JR4ZVR2Hi9kqUni",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enF4pssFtqA6dQHMqWcnFzVyzZ5AbRXX3NJA3eigxWL8YQUKK",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          }
+        ],
+        "eraRewards": [
+          {
+            "era": 1173,
+            "amount": "3013888083855768258307",
+            "blockTimestamp": 1788635724,
+            "eventIndex": "17125702-36",
+            "validatorStash": "enAxDeawNAicPNEgBu2hKaWKUEjhQTQcsLTccoC2ABozPHH2n"
+          },
+          {
+            "era": 1173,
+            "amount": "7881291420549264099740",
+            "blockTimestamp": 1788635718,
+            "eventIndex": "17125701-22",
+            "validatorStash": "enB3aj9qMZkHtJy2NwRrx8UvZn83qrfaibpNFgpwt7P3B5yWa"
+          },
+          {
+            "era": 1173,
+            "amount": "2813109398163989754750",
+            "blockTimestamp": 1788635700,
+            "eventIndex": "17125698-64",
+            "validatorStash": "enAnwVcmPePdsyqeTP9mvULBqUTcmyfU9jAhFHcvuBD5Wan9V"
+          },
+          {
+            "era": 1173,
+            "amount": "6906573331383424353540",
+            "blockTimestamp": 1788635694,
+            "eventIndex": "17125697-28",
+            "validatorStash": "enBCbKVpQ8a8y2DfqX4p4JLZHkEuhkh98L27Ee4Figba7HroW"
+          }
+        ],
+        "missedEras": []
+      },
+      {
+        "poolId": 2,
+        "metadata": "",
+        "state": "Open",
+        "stashAddress": "enD9wdMEaQa3LR6AUWQv4qUqELjfhb3zmufYxLFxp2xKoBcAC",
+        "stashDisplay": "Pool#2(Stash)",
+        "rewardAddress": "enD9wdMEaQa3LR6AUWQvLaWNpTELu3c6eeLVTtCeeVnCXTSBU",
+        "rewardDisplay": "Pool#2(Reward)",
+        "memberCount": 173,
+        "totalBonded": "39393049655801011553073716",
+        "commission": 0.0,
+        "fetchStatus": "done",
+        "nominatedValidators": [
+          {
+            "address": "enBU8hyQvkP7qJLxyfNYRiviNcUQXZtB1Xg1FNifJZnZBaTRE",
+            "display": "🛡 DWELLIR 🛡 / 2",
+            "bonded": "17222785960876969357988010",
+            "isActive": true,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enCMbpGcNKfaY7bRfSyZAVdSGe48MnihCG9n4BvaCUtATxLzG",
+            "display": "Enjin / US2",
+            "bonded": "12046578208717210473540090",
+            "isActive": true,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enFzJ3vs1nxjr4rvzv38rMzxrS88srTffU5T2FcpdgsLEirTy",
+            "display": "",
+            "bonded": "10101895700158582350161445",
+            "isActive": true,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enG2tPZeAkKCNSxgXnWNDhGf5j83GZboj41ypUENcGZCNDheN",
+            "display": "Enjin / US1",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enB3aj9qMZkHtJy2NwRrx8UvZn83qrfaibpNFgpwt7P3B5yWa",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enGJZezJA9vF4yfSbPYzo1u5NyJxn7HdCvixcfaBdrBkF7gWo",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enEbAAWuR8L73eyr9WtFWtZYbw3UhfPcdNBDiQc9YWy31V784",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enFw32hdoxiEfhnenLqkLg3t2ec5f4ixVzmRW4VVQCbkTc194",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enCC76sMpXRKERr7xJtHA3NLWeLR8gF1z7ZUgs6rH6fxPJC8v",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enAxDeawNAicPNEgBu2hKaWKUEjhQTQcsLTccoC2ABozPHH2n",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enBRFocgo4aPAVtny93ZLaTPX9JpbxrSeBt29uXdLy3AcG8Dx",
+            "display": "Enjin / EU1",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enCTe5RMrn159cF187zEGn5VrzvYM19kwrQFrzkzC7fR2Txrp",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enCbYndxGeoXWSAwAxL23bcVVu5zcjenmDjTiaqpyYLr8ux2s",
+            "display": "Enjin / AP1",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enEm2HMCCrNGhDUbtZ9QcZmfThL9jHeiA5JR4ZVR2Hi9kqUni",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enF4pssFtqA6dQHMqWcnFzVyzZ5AbRXX3NJA3eigxWL8YQUKK",
+            "display": "",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          },
+          {
+            "address": "enCdPS68me314CNuM4XRftjHvqS6asGpZdgWi3VjDc7Z9YGPL",
+            "display": "🛡 DWELLIR 🛡 / 1",
+            "bonded": "0",
+            "isActive": false,
+            "fetchStatus": "done",
+            "retryAttempts": 0,
+            "lastError": null
+          }
+        ],
+        "eraRewards": [
+          {
+            "era": 1173,
+            "amount": "5615140563139390374074",
+            "blockTimestamp": 1788635724,
+            "eventIndex": "17125702-16",
+            "validatorStash": "enFzJ3vs1nxjr4rvzv38rMzxrS88srTffU5T2FcpdgsLEirTy"
+          },
+          {
+            "era": 1173,
+            "amount": "9442011837782826705210",
+            "blockTimestamp": 1788635718,
+            "eventIndex": "17125701-9",
+            "validatorStash": "enBU8hyQvkP7qJLxyfNYRiviNcUQXZtB1Xg1FNifJZnZBaTRE"
+          },
+          {
+            "era": 1173,
+            "amount": "6732633647327142948203",
+            "blockTimestamp": 1788635694,
+            "eventIndex": "17125697-9",
+            "validatorStash": "enCMbpGcNKfaY7bRfSyZAVdSGe48MnihCG9n4BvaCUtATxLzG"
+          }
+        ],
+        "missedEras": []
+      }
+    ]
+  }
+}
