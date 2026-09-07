@@ -1,0 +1,26 @@
+# The commit whose web-app cadence logic scripts/enjinsight_cli.py was last
+# reviewed against.
+#
+# The CLI is a standalone tool: users download it on its own, so it cannot
+# import anything from src/ and necessarily duplicates the scan logic. That
+# duplication has drifted before — the free-plan row cap (25/req) landed in the
+# web app in d20b976 and never reached the CLI, which left every pool reward
+# fetch returning 403 row_limit_exceeded and every pool reported as missed.
+#
+# A comment asking people to remember would not have caught that (the trigger
+# was Subscan changing externally, not anyone editing the scan logic), so CI
+# enforces it instead: .github/workflows/ci.yml fails when any of the watched
+# files below change past this commit.
+#
+# When CI flags it: review the diff, update the CLI if the change affects it,
+# then set this to the new commit and note what you checked.
+#
+# Watched:
+#   src/hooks/usePoolChecker.js
+#   src/hooks/useValidatorChecker.js
+#   src/utils/eraAnalysis.js
+#   src/utils/scanExport.js
+#   src/utils/scanEnvelope.js
+#   src/constants.js
+
+76ac606c0649dcdf14bab122c9367d90f988d09f

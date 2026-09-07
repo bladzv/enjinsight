@@ -1,0 +1,24 @@
+[Unit]
+Description=Run the EnjinSight Staking Cadence scan daily
+Documentation=https://github.com/bladzv/enjinsight
+
+[Timer]
+# 18:00 UTC, chosen deliberately. Enjin era boundaries fall at ~19:13:54 UTC
+# (14400 blocks x 6s = exactly 24h; see public/relay-era-reference.csv). At
+# 18:00 the era being scanned closed ~23h ago, so its payout window has been
+# open for nearly a full era and provisional-era false alarms are minimised.
+# Running just AFTER 19:13 is the worst possible time: the payout window would
+# be minutes old and every pool would look unpaid.
+#
+# IMPORTANT: OnCalendar evaluates in the SERVER's local timezone, not UTC. The
+# explicit UTC suffix below requires systemd >= 252 (check: systemctl --version).
+# On older systemd, drop the suffix and convert 18:00 UTC to local time yourself.
+# Verify before enabling:  systemd-analyze calendar "*-*-* 18:00:00 UTC"
+OnCalendar=*-*-* 18:00:00 UTC
+
+# Run a missed occurrence (server off or rebooting at 18:00) on next boot.
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
