@@ -1,0 +1,18 @@
+# Fires via OnFailure= when cadence-scan.service fails outright — including
+# failures the script itself cannot report (missing interpreter, unreadable
+# .env, OOM, timeout).
+#
+# The scan posts its own failure message for errors it can catch. Set
+# SLACK_NOTIFY_ON_FAILURE=false in .env if you would rather have only this one.
+
+[Unit]
+Description=Notify Slack that the EnjinSight cadence scan failed
+
+[Service]
+Type=oneshot
+User=enjinsight
+Group=enjinsight
+EnvironmentFile=/opt/enjinsight/.env
+ExecStart=/opt/enjinsight/deploy/systemd/notify-failure.sh cadence-scan
+NoNewPrivileges=true
+PrivateTmp=true

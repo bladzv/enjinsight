@@ -31,3 +31,50 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # ── CLI drift gate ────────────────────────────────────────────────────────
+  # scripts/enjinsight_cli.py is a standalone download: it cannot import from
+  # src/, so it duplicates the cadence scan logic. This job fails when that
+  # logic changes without someone confirming the CLI still matches, and bumping
+  # scripts/SYNCED_FROM. See that file for the drift this was added to prevent.
+  cli-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0        # `git log <sha>..HEAD` needs real history
+
+      - name: Check enjinsight_cli.py against the web app's cadence logic
+        run: |
+          set -euo pipefail
+          WATCHED="src/hooks/usePoolChecker.js \
+                   src/hooks/useValidatorChecker.js \
+                   src/utils/eraAnalysis.js \
+                   src/utils/scanExport.js \
+                   src/utils/scanEnvelope.js \
+                   src/constants.js"
+
+          SYNCED=$(grep -vE '^\s*(#|$)' scripts/SYNCED_FROM | head -1 | tr -d '[:space:]')
+          if [ -z "$SYNCED" ]; then
+            echo "::error file=scripts/SYNCED_FROM::No commit hash found in scripts/SYNCED_FROM."
+            exit 1
+          fi
+          if ! git cat-file -e "${SYNCED}^{commit}" 2>/dev/null; then
+            echo "::error file=scripts/SYNCED_FROM::${SYNCED} is not a commit in this repository."
+            exit 1
+          fi
+
+          # shellcheck disable=SC2086
+          CHANGED=$(git log --format=  --name-only "${SYNCED}..HEAD" -- $WATCHED | sort -u | sed '/^$/d')
+          if [ -n "$CHANGED" ]; then
+            echo "::error file=scripts/SYNCED_FROM::scripts/enjinsight_cli.py may be stale."
+            echo
+            echo "The web app's cadence logic changed since ${SYNCED}:"
+            echo "$CHANGED" | sed 's/^/  - /'
+            echo
+            echo "The CLI reimplements this logic and cannot import it. Review whether the"
+            echo "change affects scripts/enjinsight_cli.py, update it if so, then set"
+            echo "scripts/SYNCED_FROM to the current commit."
+            exit 1
+          fi
+          echo "CLI is in sync with the web app's cadence logic as of ${SYNCED}."

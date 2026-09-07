@@ -332,6 +332,24 @@ python scripts/enjinsight_cli.py
 
 The CLI offers interactive access to era lookup, staking cadence scans, balance history, reward-history workflows, and ENJ Infusion token or wallet scans. It supports cancellation, rich terminal output, provider logs, and JSON/CSV/XML exports.
 
+### Scheduled Staking Cadence scan
+
+The same CLI runs unattended for a cron job or systemd timer, scanning validator
+cadence and then nomination-pool cadence and posting each result to Slack with
+the scan export attached:
+
+```bash
+python scripts/enjinsight_cli.py --non-interactive --mode both --eras 1 --export json
+```
+
+`--export json` writes the EnjinSight scan envelope, so the attached file loads
+straight back into the web app's **Staking Cadence → Import** tab. Run `--help`
+for every flag; anything not passed falls back to `.env` (all keys documented in
+`.env.example`), then to a built-in default. With no arguments the CLI behaves
+exactly as before — the interactive menu.
+
+Ready-made systemd units and a full setup guide are in [`deploy/`](deploy/README.md).
+
 ### Data maintenance
 
 | Script | Purpose |

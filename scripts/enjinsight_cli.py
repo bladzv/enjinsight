@@ -24,6 +24,7 @@ as environment variables.
 """
 
 # ── Standard library ──────────────────────────────────────────────────────────
+import argparse
 import asyncio
 import csv
 import hashlib
@@ -40,6 +41,9 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
+import urllib.error
+import urllib.parse
+import urllib.request
 from urllib.parse import urlparse
 
 # ── Third-party: required ─────────────────────────────────────────────────────
@@ -138,6 +142,15 @@ def _offer_install_missing(pkgs: list) -> None:
 
 
 if _missing:
+    # Non-interactive runs (systemd timers) must never reach the install prompt:
+    # it waits on stdin, and a timer unit has no TTY. argv is available here,
+    # long before main() parses it, so gate on the raw flag.
+    if "--non-interactive" in sys.argv or "-h" in sys.argv or "--help" in sys.argv:
+        sys.stderr.write(
+            "enjinsight_cli: missing required packages: " + ", ".join(_missing) + "\n"
+            "Install them first:  pip install " + " ".join(_missing) + "\n"
+        )
+        sys.exit(2)
     _offer_install_missing(_missing)
 
 # ── Load environment ──────────────────────────────────────────────────────────
@@ -178,6 +191,11 @@ LIVE_RPC_WSS    = "wss://rpc.relay.blockchain.enjin.io"
 ARCHIVE_WSS     = "wss://archive.relay.blockchain.enjin.io"
 
 PLANCK_PER_ENJ   = 10 ** 18
+
+# The web app's scan-range ceiling (MAX_ERA_COUNT in src/constants.js). The CLI
+# allows more, but a scan wider than this cannot be reproduced in the app for a
+# side-by-side cross-check, so a batch run says so rather than silently diverging.
+MAX_WEB_ERA_COUNT = 7
 COLLECTION_ID    = 1          # sENJ multi-token collection
 ERAS_PER_YEAR    = 365
 EVENT_SCAN_AFTER = 40         # blocks after era boundary to scan for rewards
@@ -186,9 +204,15 @@ CONSECUTIVE_MISS_THRESHOLD = 3
 API_DELAY_MS   = 1.0          # seconds between Subscan requests
 MAX_RETRIES    = 5
 REQUEST_TIMEOUT = 15          # seconds
-POOLS_PAGE_SIZE = 100
-REWARD_SLASH_ROW = 100
-NOMINATORS_ROW   = 100
+POOLS_PAGE_SIZE = 100         # the pools endpoint is not row-capped; verified 100 works
+# Subscan's free plan caps `row` at 25 on most endpoints and answers a larger
+# request with HTTP 403 {"message": "row_limit_exceeded"} — NOT a 400, and not an
+# auth error, so it is easy to misread as a bad API key. Verified 2026-09-06:
+# nominators, reward_slash and extrinsics all reject row=100 and accept row=25.
+# Every endpoint using this constant must therefore paginate.
+SUBSCAN_MAX_ROW  = 25
+REWARD_SLASH_ROW = SUBSCAN_MAX_ROW
+NOMINATORS_ROW   = SUBSCAN_MAX_ROW
 MAX_RPC_CALLS    = 2000
 
 SYS_ACCT_PREFIX = bytes.fromhex(
@@ -212,6 +236,26 @@ ETHERSCAN_DELAY_SEC = 0.35
 # DISPLAY HELPERS
 # ════════════════════════════════════════════════════════════════════════════════
 
+# ════════════════════════════════════════════════════════════════════════════════
+# BATCH (NON-INTERACTIVE) MODE
+# ════════════════════════════════════════════════════════════════════════════════
+
+# Set by main() when --non-interactive is passed. In batch mode every prompt
+# helper raises instead of blocking on stdin: under systemd there is no TTY, so
+# a stray prompt would hang the timer unit forever rather than fail. Failing
+# loudly in the journal is the only acceptable behaviour there.
+_BATCH_MODE = False
+
+
+class BatchPromptError(RuntimeError):
+    """An interactive prompt was reached while running non-interactively."""
+
+
+def _batch_guard(prompt: str) -> None:
+    if _BATCH_MODE:
+        raise BatchPromptError(f"interactive prompt in non-interactive mode: {prompt!r}")
+
+
 def cprint(msg: str, style: str = "") -> None:
     if HAS_RICH:
         console.print(msg, style=style)
@@ -234,12 +278,14 @@ def log_line(level: str, msg: str) -> None:
         print(f"{ts} {level:4} {msg}")
 
 def ask(prompt: str, default: str = "") -> str:
+    _batch_guard(prompt)
     if HAS_RICH:
         return Prompt.ask(prompt, default=default) if default else Prompt.ask(prompt)
     val = input(f"{prompt}{' [' + default + ']' if default else ''}: ").strip()
     return val or default
 
 def ask_int(prompt: str, default: int = 0, min_val: int = 0, max_val: int = 10**9) -> int:
+    _batch_guard(prompt)
     while True:
         raw = ask(prompt, str(default))
         try:
@@ -251,6 +297,7 @@ def ask_int(prompt: str, default: int = 0, min_val: int = 0, max_val: int = 10**
             cprint("  Invalid number.", "yellow")
 
 def confirm(prompt: str, default: bool = False) -> bool:
+    _batch_guard(prompt)
     if HAS_RICH:
         return Confirm.ask(prompt, default=default)
     raw = input(f"{prompt} [{'Y/n' if default else 'y/N'}]: ").strip().lower()
@@ -698,8 +745,12 @@ class SubscanClient:
         })
         self._last_req   = 0.0
         self._ssl_warned = False   # True once we've fallen back to verify=False
+        # Informational: every real HTTP request, retries included. Reported in
+        # the scan summary so the free tier's 20,000/day quota stays visible.
+        self.request_count = 0
 
     def _rate_limit(self) -> None:
+        self.request_count += 1
         elapsed = time.time() - self._last_req
         if elapsed < API_DELAY_MS:
             time.sleep(API_DELAY_MS - elapsed)
@@ -776,6 +827,7 @@ class SubscanClient:
 
     def probe(self, path: str) -> dict:
         """Probe an endpoint with empty body; returns {ok, status, error}."""
+        self.request_count += 1
         if path not in ALLOWED_PATHS:
             return {"ok": False, "error": "Path not in allowlist"}
         url = SUBSCAN_BASE + path
@@ -803,11 +855,30 @@ class SubscanClient:
         data = self.post(ENDPOINTS["validators"], {"order": "desc", "order_field": "bonded_total"})
         return data.get("data", {}).get("list") or []
 
+    def fetch_paged(self, path: str, body: dict, row: int = SUBSCAN_MAX_ROW,
+                    max_pages: int = 400) -> List[dict]:
+        """Walk every page of a list endpoint.
+
+        Stops on a short page or once `count` is reached; max_pages is a guard
+        against a runaway loop burning the 20,000/day request quota.
+        """
+        out: List[dict] = []
+        for page in range(max_pages):
+            data = self.post(path, {**body, "page": page, "row": row})
+            lst = data.get("data", {}).get("list") or []
+            out.extend(lst)
+            if len(lst) < row:
+                break
+            total = data.get("data", {}).get("count")
+            if total is not None and len(out) >= total:
+                break
+        return out
+
     def fetch_nominators(self, address: str) -> List[dict]:
-        data = self.post(ENDPOINTS["nominators"],
-                         {"page": 0, "row": NOMINATORS_ROW, "address": address,
-                          "order": "desc", "order_field": "bonded"})
-        return data.get("data", {}).get("list") or []
+        return self.fetch_paged(
+            ENDPOINTS["nominators"],
+            {"address": address, "order": "desc", "order_field": "bonded"},
+            row=NOMINATORS_ROW)
 
     def fetch_era_stat(self, address: str, row: int) -> List[dict]:
         data = self.post(ENDPOINTS["eraStat"], {"address": address, "row": row, "page": 0})
@@ -835,14 +906,15 @@ class SubscanClient:
         return data.get("data", {}).get("list") or []
 
     def fetch_reward_slash(self, address: str, block_range: str) -> List[dict]:
-        data = self.post(ENDPOINTS["rewardSlash"],
-                         {"address": address, "is_stash": True, "category": "Reward",
-                          "block_range": block_range, "page": 0, "row": REWARD_SLASH_ROW})
-        return data.get("data", {}).get("list") or []
+        return self.fetch_paged(
+            ENDPOINTS["rewardSlash"],
+            {"address": address, "is_stash": True, "category": "Reward",
+             "block_range": block_range},
+            row=REWARD_SLASH_ROW)
 
     def fetch_historical_pool_ids(self, address: str, on_page=None) -> Set[int]:
         pool_ids: Set[int] = set()
-        page, row = 0, 100
+        page, row = 0, SUBSCAN_MAX_ROW   # row>25 is rejected with 403 row_limit_exceeded
         allowed_calls = {"bond", "unbond", "withdraw_unbonded", "withdraw_unbonded_kill"}
         while True:
             data = self.post(ENDPOINTS["extrinsics"],
@@ -892,11 +964,12 @@ class SubscanClient:
     def fetch_events_in_range(self, block_range: str) -> List[dict]:
         all_events, page = [], 0
         while True:
+            # row>25 is rejected with 403 row_limit_exceeded on the free plan.
             data = self.post(ENDPOINTS["events"],
-                             {"block_range": block_range, "page": page, "row": 100})
+                             {"block_range": block_range, "page": page, "row": SUBSCAN_MAX_ROW})
             evts = data.get("data", {}).get("events") or []
             all_events.extend(evts)
-            if len(evts) < 100:
+            if len(evts) < SUBSCAN_MAX_ROW:
                 break
             page += 1
         return all_events
@@ -1257,8 +1330,14 @@ def _stdin_listener_thread() -> None:
 
 
 def start_stop_listener() -> None:
-    """Arm the stop listener and print the usage hint to the user."""
+    """Arm the stop listener and print the usage hint to the user.
+
+    No-op in batch mode: the listener blocks on stdin, which under systemd is
+    /dev/null (or closed), and the hint would be noise in the journal.
+    """
     _stop_event.clear()
+    if _BATCH_MODE:
+        return
     threading.Thread(target=_stdin_listener_thread, daemon=True).start()
     if HAS_RICH:
         console.print("[dim]  → Type [bold]q[/bold] + Enter at any time to stop the scan early.[/dim]")
@@ -1338,6 +1417,190 @@ async def binary_search_era_start(rpc: SubstrateRPC, target_era: int,
 # ════════════════════════════════════════════════════════════════════════════════
 # EXPORT FORMAT HELPERS
 # ════════════════════════════════════════════════════════════════════════════════
+
+# ════════════════════════════════════════════════════════════════════════════════
+# SCAN EXPORT — the web app's import envelope
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# Replicates src/utils/scanExport.js + scanEnvelope.js so a scan written here
+# loads in the web app's Staking Cadence -> Import tab. The rules that bite:
+#
+#  - Every Planck value is a DECIMAL STRING. The importer runs each through
+#    parseBigInt, which accepts only /^\+?\d+$/ — an int would serialise fine but
+#    a suffixed or signed value would be rejected. planck_str() enforces this.
+#  - Era arrays are de-duplicated and sorted NEWEST FIRST (intArray in
+#    scanExport.js).
+#  - meta.filter is OMITTED entirely rather than written as null, so an
+#    unfiltered export is byte-identical to one written by the web app.
+#  - Validator exports OMIT missedEras: enrichValidators recomputes it on import,
+#    and persisting it would hide a disagreement between the two.
+#  - Pool exports DO store missedEras, and omit eraValidatorBreakdown, which the
+#    web app rebuilds from completedEras.
+
+CLI_VERSION = "1.0.0"
+
+SCAN_TOOL_ID = "enjinsight"
+SCAN_SCHEMA_VERSION = 1
+SCAN_SCHEMAS = {
+    "validator": "staking-cadence-validator",
+    "pool":      "staking-cadence-pool",
+}
+_FILENAME_STEMS = {
+    SCAN_SCHEMAS["validator"]: "enjin_staking_validator",
+    SCAN_SCHEMAS["pool"]:      "enjin_staking_pool",
+}
+
+
+def default_scan_filename(schema: str) -> str:
+    stem = _FILENAME_STEMS.get(schema, "enjin_scan")
+    return f"{stem}_{int(time.time())}.json"
+
+
+def _era_array(vals) -> List[int]:
+    """De-duplicated integer era array, newest first (intArray in scanExport.js)."""
+    seen = set()
+    for v in vals or []:
+        n = safe_int(v)
+        if n:
+            seen.add(n)
+    return sorted(seen, reverse=True)
+
+
+def _envelope_header(schema: str) -> dict:
+    if schema not in _FILENAME_STEMS:
+        raise ValueError(f"Unknown scan schema: {schema}")
+    return {
+        "tool":          SCAN_TOOL_ID,
+        "schema":        schema,
+        "schemaVersion": SCAN_SCHEMA_VERSION,
+        # Informational only and ungated by the importer (scanEnvelope.js:78), so
+        # the web app's provenance banner names the tool that wrote the file.
+        "appVersion":    f"enjinsight-cli@{CLI_VERSION}",
+        "exportedAt":    datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.") +
+                         f"{datetime.now(timezone.utc).microsecond // 1000:03d}Z",
+    }
+
+
+def build_validator_envelope(result: dict) -> dict:
+    rows = []
+    for v in result["validators"]:
+        rows.append({
+            "address":         str(v.get("address") or ""),
+            "display":         str(v.get("display") or ""),
+            "commission":      float(v.get("commission") or 0),
+            "bondedTotal":     planck_str(v.get("bondedTotal")),
+            "countNominators": safe_int(v.get("countNominators")),
+            "isActive":        bool(v.get("isActive")),
+            "fetchStatus":     str(v.get("fetchStatus") or "done"),
+            "lastError":       (str(v["lastError"]) if v.get("lastError") else None),
+            "nominators": ([
+                {"address": str(n.get("address") or ""),
+                 "display": str(n.get("display") or ""),
+                 "bonded":  planck_str(n.get("bonded"))}
+                for n in v["nominators"]
+            ] if isinstance(v.get("nominators"), list) else None),
+            "eraStat": ([
+                {"era":            safe_int(e.get("era")),
+                 "reward":         planck_str(e.get("reward")),
+                 "validatorStake": planck_str(e.get("validatorStake")),
+                 "nominatorStake": planck_str(e.get("nominatorStake")),
+                 "startBlock":     safe_int(e.get("startBlock")),
+                 "endBlock":       safe_int(e.get("endBlock")),
+                 "rewardPoint":    safe_int(e.get("rewardPoint")),
+                 "blocksProduced": safe_int(e.get("blocksProduced"))}
+                for e in v["eraStat"]
+            ] if isinstance(v.get("eraStat"), list) else None),
+        })
+    env = _envelope_header(SCAN_SCHEMAS["validator"])
+    env["meta"] = {
+        "requestedEraCount": safe_int(result.get("era_count")),
+        "validatorCount":    len(rows),
+    }
+    env["data"] = {"validators": rows}
+    return env
+
+
+def build_pool_envelope(result: dict) -> dict:
+    rows = []
+    for p in result["pools"]:
+        rows.append({
+            "poolId":        safe_int(p.get("poolId")),
+            "metadata":      str(p.get("metadata") or ""),
+            "state":         str(p.get("state") or ""),
+            "stashAddress":  str(p.get("stashAddress") or ""),
+            "stashDisplay":  str(p.get("stashDisplay") or ""),
+            "rewardAddress": str(p.get("rewardAddress") or ""),
+            "rewardDisplay": str(p.get("rewardDisplay") or ""),
+            "memberCount":   safe_int(p.get("memberCount")),
+            "totalBonded":   planck_str(p.get("totalBonded")),
+            "commission":    float(p.get("commission") or 0),
+            "fetchStatus":   str(p.get("fetchStatus") or "done"),
+            "nominatedValidators": ([
+                {"address":       str(v.get("address") or ""),
+                 "display":       str(v.get("display") or ""),
+                 "bonded":        planck_str(v.get("bonded")),
+                 "isActive":      bool(v.get("isActive")),
+                 "fetchStatus":   str(v.get("fetchStatus") or "done"),
+                 "retryAttempts": safe_int(v.get("retryAttempts")),
+                 "lastError":     (str(v["lastError"]) if v.get("lastError") else None)}
+                for v in p["nominatedValidators"]
+            ] if isinstance(p.get("nominatedValidators"), list) else None),
+            "eraRewards": ([
+                {"era":            safe_int(r.get("era")),
+                 "amount":         planck_str(r.get("amount")),
+                 "blockTimestamp": safe_int(r.get("blockTimestamp")),
+                 "eventIndex":     str(r.get("eventIndex") or ""),
+                 "validatorStash": str(r.get("validatorStash") or "")}
+                for r in p["eraRewards"]
+            ] if isinstance(p.get("eraRewards"), list) else None),
+            "missedEras": _era_array(p.get("missedEras")),
+        })
+    completed = _era_array(result.get("completed_eras"))
+    prov = result.get("provisional_era")
+    env = _envelope_header(SCAN_SCHEMAS["pool"])
+    env["meta"] = {
+        "requestedEraCount":  safe_int(result.get("era_count")),
+        "provisionalEra":     (safe_int(prov) if prov is not None else None),
+        "completedEras":      completed,
+        "latestCompletedEra": safe_int(result.get("latest_completed")),
+        "poolCount":          len(rows),
+    }
+    env["data"] = {"pools": rows}
+    return env
+
+
+def build_scan_envelope(result: dict) -> dict:
+    if result.get("mode") == "validator":
+        return build_validator_envelope(result)
+    if result.get("mode") == "pool":
+        return build_pool_envelope(result)
+    raise ValueError(f"Cannot build an envelope for mode {result.get('mode')!r}")
+
+
+def write_scan_json(result: dict, path: str) -> str:
+    """Write the web-app import envelope for a scan result. Returns the path."""
+    env = build_scan_envelope(result)
+    # indent=2 + ensure_ascii=False matches JSON.stringify(env, null, 2).
+    text = json.dumps(env, indent=2, ensure_ascii=False)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    log_line("OK", f"Exported to {path} ({len(text.encode('utf-8'))} bytes)")
+    return path
+
+
+def ask_scan_export_format(legacy: Tuple[str, ...] = ("csv",)) -> str:
+    """Choose a scan export format. JSON is the web app's import envelope."""
+    opts = ["json"] + list(legacy)
+    labels = {
+        "json": "JSON  — EnjinSight scan export (re-importable in the web app)",
+        "csv":  "CSV   — comma-separated, spreadsheet-compatible",
+        "xml":  "XML   — tagged markup",
+    }
+    cprint("\n[bold]Export format:[/bold]")
+    for i, o in enumerate(opts, 1):
+        cprint(f"  {i}. {labels[o]}")
+    return opts[ask_int("Format", default=1, min_val=1, max_val=len(opts)) - 1]
+
 
 def ask_export_format() -> str:
     """Prompt the user to choose an export format. Returns 'csv', 'json', or 'xml'."""
@@ -1579,6 +1842,38 @@ def find_consecutive_groups(missed_eras: List[int]) -> List[List[int]]:
         groups.append(group)
     return groups
 
+class ScanError(RuntimeError):
+    """A scan could not be completed. Carries a message fit for a log line."""
+
+
+def planck_str(v) -> str:
+    """Subscan Planck amount -> a decimal string of digits only.
+
+    Mirrors the web app's `BigInt(String(x).replace(/[^0-9]/g, '') || '0')`
+    (useValidatorChecker.js:291). The web app's importer runs every Planck field
+    through `parseBigInt`, which rejects anything but /^\\+?\\d+$/ — so a value
+    carrying a unit suffix, a sign or a decimal point must be stripped here or
+    the export will not import.
+    """
+    digits = "".join(ch for ch in str(v if v is not None else "0") if ch.isdigit())
+    return digits or "0"
+
+
+def count_unique_blocks(raw) -> int:
+    """Distinct blocks produced in an era, from Subscan's `block_produced`.
+
+    Matches countUniqueBlocks in useValidatorChecker.js:363 — the field arrives
+    as either a list or a delimited string depending on the endpoint version.
+    """
+    if not raw:
+        return 0
+    if isinstance(raw, (list, tuple, set)):
+        return len({str(x) for x in raw})
+    if isinstance(raw, str):
+        return len({part.strip() for part in re.split(r"[,\s]+", raw) if part.strip()})
+    return 0
+
+
 def determine_active(v: dict) -> bool:
     raw = v.get("status") or v.get("is_active") or v.get("active") or ""
     if isinstance(raw, bool):
@@ -1748,38 +2043,39 @@ def tool_era_explorer(era_csv: Dict[int, dict]) -> None:
 # TOOL 2: VALIDATOR REWARD CADENCE
 # ════════════════════════════════════════════════════════════════════════════════
 
-def tool_validator_checker(subscan: SubscanClient) -> None:
-    cprint("\n[bold cyan]── Validator Reward Cadence ──[/bold cyan]")
-    era_count = ask_int("How many recent eras to check?", default=2, min_val=1, max_val=100)
+def scan_validators(subscan: SubscanClient, era_count: int, limit: Optional[int] = None) -> dict:
+    """Run the validator cadence scan.
 
-    # Probe endpoints
-    cprint("\n[bold]Step 0: Probing Subscan endpoints…[/bold]")
-    probe_keys = ["validators", "nominators", "eraStat"]
-    any_failed = False
-    for key in probe_keys:
+    Contains no prompts and no rendering, so the interactive menu and the
+    non-interactive runner share exactly one implementation of the scan.
+
+    @raises ScanError when the scan cannot produce a result at all.
+    """
+    # Step 0: probe endpoints
+    log_line("INFO", "Probing Subscan endpoints…")
+    failed = []
+    for key in ("validators", "nominators", "eraStat"):
         result = subscan.probe(ENDPOINTS[key])
         if result["ok"]:
-            log_line("OK",  f"{key}: reachable")
+            log_line("OK", f"{key}: reachable")
         else:
             log_line("ERR", f"{key}: {result['error']}")
-            any_failed = True
-    if any_failed:
-        cprint("[red]One or more endpoints failed. Check SUBSCAN_API_KEY.[/red]")
-        return
+            failed.append(key)
+    if failed:
+        raise ScanError(
+            f"Subscan endpoint(s) unreachable: {', '.join(failed)}. Check SUBSCAN_API_KEY.")
 
     start_stop_listener()
 
-    # Step 1: Fetch validators
+    # Step 1: validator list. Deliberately a single page — fetch_validators does
+    # not paginate, and the web app does not either, so both scan the same set.
     log_line("INFO", "Fetching validator list…")
     try:
         raw_vals = subscan.fetch_validators()
     except Exception as e:
-        log_line("ERR", f"Failed to fetch validators: {e}")
-        return
-
+        raise ScanError(f"Failed to fetch validators: {e}") from e
     if not raw_vals:
-        log_line("WARN", "No validators returned.")
-        return
+        raise ScanError("No validators returned by Subscan.")
 
     validators = []
     for v in raw_vals:
@@ -1791,28 +2087,38 @@ def tool_validator_checker(subscan: SubscanClient) -> None:
         if not addr:
             continue
         validators.append({
-            "address":    addr,
-            "display":    str(v.get("stash_account_display", {}).get("display") or ""),
-            "commission": parse_commission(v.get("validator_prefs_value")),
-            "isActive":   determine_active(v),
-            "nominators": None,
-            "eraStat":    None,
-            "missedEras": [],
+            "address":         addr,
+            "display":         str(v.get("stash_account_display", {}).get("display") or ""),
+            "commission":      parse_commission(v.get("validator_prefs_value")),
+            "bondedTotal":     planck_str(v.get("bonded_total")),
+            "countNominators": safe_int(v.get("count_nominators")),
+            "isActive":        determine_active(v),
+            "fetchStatus":     "pending",
+            "lastError":       None,
+            "nominators":      None,
+            "eraStat":         None,
+            "missedEras":      [],
         })
+    if limit:
+        validators = validators[:limit]
+        log_line("INFO", f"--limit {limit}: truncated to {len(validators)} validator(s).")
     log_line("OK", f"Found {len(validators)} validators.")
 
-    # Step 2: Nominators (sequential, rate-limited)
+    stopped = False
+
+    # Step 2: nominators (sequential, rate-limited)
     log_line("INFO", f"Fetching nominators for {len(validators)} validators…")
     for i, v in enumerate(validators):
         if _stop_event.is_set():
             log_line("WARN", "Scan stopped early by user.")
+            stopped = True
             break
         try:
             lst = subscan.fetch_nominators(v["address"])
             v["nominators"] = [
                 {"address": str(n.get("account_display", {}).get("address") or ""),
-                 "display":  str(n.get("account_display", {}).get("display") or ""),
-                 "bonded":   safe_int(n.get("bonded"))}
+                 "display": str(n.get("account_display", {}).get("display") or ""),
+                 "bonded":  planck_str(n.get("bonded"))}
                 for n in lst
             ]
             log_line("OK", f"[{i+1}/{len(validators)}] {v['display'] or truncate_addr(v['address'])}: {len(v['nominators'])} nominator(s)")
@@ -1820,26 +2126,33 @@ def tool_validator_checker(subscan: SubscanClient) -> None:
             log_line("WARN", f"[{i+1}/{len(validators)}] Nominators failed for {truncate_addr(v['address'])}: {e}")
             v["nominators"] = []
 
-    # Step 3: Era stats
+    # Step 3: era stats
     log_line("INFO", f"Fetching era stats (last {era_count} eras) for {len(validators)} validators…")
     for i, v in enumerate(validators):
         if _stop_event.is_set():
             log_line("WARN", "Scan stopped early by user.")
+            stopped = True
             break
         try:
             lst = subscan.fetch_era_stat(v["address"], era_count)
             v["eraStat"] = [
-                {"era":        safe_int(e.get("era")),
-                 "reward":     safe_int(e.get("validator_reward_total") or e.get("reward")),
-                 "rewardPoint":safe_int(e.get("reward_point")),
-                 "startBlock": safe_int(e.get("start_block_num")),
-                 "endBlock":   safe_int(e.get("end_block_num"))}
+                {"era":            safe_int(e.get("era")),
+                 "reward":         planck_str(e.get("validator_reward_total") or e.get("reward")),
+                 "validatorStake": planck_str(e.get("validator_stash_amount")),
+                 "nominatorStake": planck_str(e.get("nominator_stash_amount")),
+                 "rewardPoint":    safe_int(e.get("reward_point")),
+                 "blocksProduced": count_unique_blocks(e.get("block_produced")),
+                 "startBlock":     safe_int(e.get("start_block_num")),
+                 "endBlock":       safe_int(e.get("end_block_num"))}
                 for e in lst
             ]
+            v["fetchStatus"] = "done"
             log_line("OK", f"[{i+1}/{len(validators)}] {v['display'] or truncate_addr(v['address'])}: {len(v['eraStat'])} era(s)")
         except Exception as e:
-            log_line("WARN", f"[{i+1}/{len(validators)}] Era stat failed for {truncate_addr(v['address'])}: {e}")
             v["eraStat"] = []
+            v["fetchStatus"] = "failed"
+            v["lastError"] = str(e)
+            log_line("WARN", f"[{i+1}/{len(validators)}] Era stat failed for {truncate_addr(v['address'])}: {e}")
 
     # Compute missed eras
     all_eras = [e["era"] for v in validators for e in (v["eraStat"] or [])]
@@ -1849,7 +2162,20 @@ def tool_validator_checker(subscan: SubscanClient) -> None:
             if v["eraStat"]:
                 v["missedEras"] = compute_missed_eras(v["eraStat"], latest_era, era_count)
 
-    # Display results
+    return {
+        "mode":        "validator",
+        "validators":  validators,
+        "era_count":   era_count,
+        "latest_era":  latest_era,
+        "stopped":     stopped,
+    }
+
+
+def _render_validators(result: dict) -> None:
+    """Print the validator scan result. Unchanged from the original layout."""
+    validators = result["validators"]
+    latest_era = result["latest_era"]
+
     cprint(f"\n[bold green]── Results (latest era: {latest_era}) ──[/bold green]")
     if HAS_RICH:
         t = Table(title="Validator Summary", border_style="cyan", show_lines=True)
@@ -1892,9 +2218,27 @@ def tool_validator_checker(subscan: SubscanClient) -> None:
                 desc += f"  ({len(groups)} consecutive streak(s))"
             log_line("WARN", f"{v['display'] or truncate_addr(v['address'])}: {desc}")
 
-    # Export option
-    if validators and confirm("\nExport results to CSV?", default=False):
-        _export_validators_csv(validators, era_count, latest_era)
+
+def tool_validator_checker(subscan: SubscanClient) -> None:
+    cprint("\n[bold cyan]── Validator Reward Cadence ──[/bold cyan]")
+    era_count = ask_int("How many recent eras to check?", default=2, min_val=1, max_val=100)
+
+    try:
+        result = scan_validators(subscan, era_count)
+    except ScanError as e:
+        cprint(f"[red]{e}[/red]")
+        return
+
+    _render_validators(result)
+
+    validators = result["validators"]
+    if validators and confirm("\nExport results?", default=False):
+        fmt = ask_scan_export_format()
+        if fmt == "json":
+            write_scan_json(result, ask("Filename", default_scan_filename(SCAN_SCHEMAS["validator"])))
+        else:
+            _export_validators_csv(validators, era_count, result["latest_era"])
+
 
 def _export_validators_csv(validators: List[dict], era_count: int, latest_era: int) -> None:
     fname = ask("Filename", f"validators_{latest_era}.csv")
@@ -1920,37 +2264,39 @@ def _export_validators_csv(validators: List[dict], era_count: int, latest_era: i
 
 import random
 
-def tool_pool_checker(subscan: SubscanClient) -> None:
-    cprint("\n[bold cyan]── Pool Reward Cadence ──[/bold cyan]")
-    era_count = ask_int("How many recent completed eras to check?", default=2, min_val=1, max_val=100)
+def scan_pools(subscan: SubscanClient, era_count: int, limit: Optional[int] = None) -> dict:
+    """Run the nomination-pool cadence scan.
 
-    # Probe endpoints
-    cprint("\n[bold]Step 0: Probing Subscan endpoints…[/bold]")
-    probe_keys = ["pools", "voted", "rewardSlash"]
-    any_failed = False
-    for key in probe_keys:
+    Contains no prompts and no rendering, so the interactive menu and the
+    non-interactive runner share exactly one implementation of the scan.
+
+    @raises ScanError when the scan cannot produce a result at all.
+    """
+    # Step 0: probe endpoints
+    log_line("INFO", "Probing Subscan endpoints…")
+    failed = []
+    for key in ("pools", "voted", "rewardSlash"):
         result = subscan.probe(ENDPOINTS[key])
         if result["ok"]:
-            log_line("OK",  f"{key}: reachable")
+            log_line("OK", f"{key}: reachable")
         else:
             log_line("ERR", f"{key}: {result['error']}")
-            any_failed = True
-    if any_failed:
-        cprint("[red]One or more endpoints failed. Check SUBSCAN_API_KEY.[/red]")
-        return
+            failed.append(key)
+    if failed:
+        raise ScanError(
+            f"Subscan endpoint(s) unreachable: {', '.join(failed)}. Check SUBSCAN_API_KEY.")
 
     start_stop_listener()
 
-    # Step 1: Fetch pools
+    # Step 1: pools
     log_line("INFO", "Fetching nomination pools…")
     try:
         raw_pools = subscan.fetch_all_pools(
             on_page=lambda pg, cnt: log_line("INFO", f"Pools page {pg}: {cnt} pool(s)"))
     except Exception as e:
-        log_line("ERR", f"Failed to fetch pools: {e}"); return
-
+        raise ScanError(f"Failed to fetch pools: {e}") from e
     if not raw_pools:
-        log_line("WARN", "No pools found."); return
+        raise ScanError("No nomination pools returned by Subscan.")
 
     pools = []
     for p in raw_pools:
@@ -1958,41 +2304,58 @@ def tool_pool_checker(subscan: SubscanClient) -> None:
         if not addr:
             continue
         pools.append({
-            "poolId":       safe_int(p.get("pool_id")),
-            "metadata":     str(p.get("metadata") or ""),
-            "stashAddress": addr,
-            "stashDisplay": str(p.get("pool_account", {}).get("display") or ""),
-            "memberCount":  safe_int(p.get("member_count")),
-            "commission":   parse_commission(p.get("commission")),
+            "poolId":        safe_int(p.get("pool_id")),
+            "metadata":      str(p.get("metadata") or ""),
+            "state":         str(p.get("state") or "Unknown"),
+            "stashAddress":  addr,
+            "stashDisplay":  str(p.get("pool_account", {}).get("display") or ""),
+            "rewardAddress": str(p.get("pool_reward_account", {}).get("address") or ""),
+            "rewardDisplay": str(p.get("pool_reward_account", {}).get("display") or ""),
+            "memberCount":   safe_int(p.get("member_count")),
+            "totalBonded":   planck_str(p.get("total_bonded")),
+            "commission":    parse_commission(p.get("commission")),
+            "fetchStatus":   "pending",
             "nominatedValidators": None,
-            "eraRewards":   None,
-            "missedEras":   [],
+            "eraRewards":    None,
+            "missedEras":    [],
         })
+    if limit:
+        pools = pools[:limit]
+        log_line("INFO", f"--limit {limit}: truncated to {len(pools)} pool(s).")
     log_line("OK", f"Found {len(pools)} pool(s).")
 
-    # Step 2: Fetch nominated validators
+    stopped = False
+
+    # Step 2: nominated validators
     log_line("INFO", "Fetching nominated validators for each pool…")
     all_validators: List[dict] = []
-    pool_validators_map: Dict[int, List[dict]] = {}
 
     for i, p in enumerate(pools):
         if _stop_event.is_set():
             log_line("WARN", "Scan stopped early by user.")
+            stopped = True
             break
         try:
             lst = subscan.fetch_voted(p["stashAddress"])
             validators = []
             for v in lst:
-                vaddr = str(v.get("stash_account_display", {}).get("address") or "")
-                vdisp_obj = v.get("stash_account_display", {})
+                vdisp_obj = v.get("stash_account_display", {}) or {}
+                vaddr = str(vdisp_obj.get("address") or "")
                 parent = vdisp_obj.get("parent")
                 if parent:
                     vdisp = f"{parent.get('display', '')} / {parent.get('sub_symbol', '')}".strip(" /")
                 else:
                     vdisp = str(vdisp_obj.get("display") or "")
-                validators.append({"address": vaddr, "display": vdisp})
+                validators.append({
+                    "address":       vaddr,
+                    "display":       vdisp,
+                    "bonded":        planck_str(v.get("bonded")),
+                    "isActive":      v.get("active") is True or ("active" not in v and not str(v.get("status") or "")),
+                    "fetchStatus":   "done",
+                    "retryAttempts": 0,
+                    "lastError":     None,
+                })
             p["nominatedValidators"] = validators
-            pool_validators_map[p["poolId"]] = validators
             for v in validators:
                 if v["address"]:
                     all_validators.append(v)
@@ -2000,7 +2363,7 @@ def tool_pool_checker(subscan: SubscanClient) -> None:
         except Exception as e:
             log_line("WARN", f"[{i+1}/{len(pools)}] Pool #{p['poolId']}: voted fetch failed — {e}")
             p["nominatedValidators"] = []
-            pool_validators_map[p["poolId"]] = []
+            p["fetchStatus"] = "error"
 
     # Deduplicate validators
     seen: Set[str] = set()
@@ -2010,7 +2373,11 @@ def tool_pool_checker(subscan: SubscanClient) -> None:
             seen.add(v["address"])
             unique_validators.append(v)
 
-    # Step 3: Resolve era block ranges via consensus
+    # Step 3: Resolve era block ranges via consensus.
+    # NOTE: the cadence scan resolves era block ranges from Subscan era_stat
+    # alone — it needs neither the era reference CSV nor an archive node. Several
+    # validators are sampled and their era -> {start,end} maps must agree before
+    # the map is trusted.
     log_line("INFO", f"Resolving era block ranges ({len(unique_validators)} unique validators)…")
     rows_needed = era_count + 1
     consensus_map: Optional[Dict[int, dict]] = None
@@ -2066,8 +2433,7 @@ def tool_pool_checker(subscan: SubscanClient) -> None:
             log_line("OK", f"Consensus achieved: {len(ref)} era(s) mapped.")
 
     if not consensus_map:
-        log_line("ERR", "Failed to establish era block range consensus.")
-        return
+        raise ScanError("Failed to establish era block range consensus.")
 
     current_era = max(consensus_map.keys())
     current_era_range = consensus_map.get(current_era)
@@ -2080,6 +2446,19 @@ def tool_pool_checker(subscan: SubscanClient) -> None:
             del consensus_map[era]
 
     latest_completed = completed_eras[0] if completed_eras else 0
+
+    # The newest "completed" era is provisional: rewards for era N are paid
+    # during era N+1, and for this era N+1 *is* the current era — an unfinished
+    # window. A pool with no reward found there may simply not have been paid
+    # yet, so it must be labelled rather than reported as a hard miss.
+    provisional_era = None
+    if completed_eras and (latest_completed + 1) == current_era:
+        provisional_era = latest_completed
+        log_line("WARN",
+                 f"Era {provisional_era} is PROVISIONAL — its payout window "
+                 f"(era {current_era}) is still open. Missing rewards there may "
+                 f"not yet have been paid.")
+
     log_line("OK", f"Completed eras to check: {sorted(completed_eras)}")
 
     # Step 4: Confirm rewards
@@ -2087,6 +2466,7 @@ def tool_pool_checker(subscan: SubscanClient) -> None:
     for i, p in enumerate(pools):
         if _stop_event.is_set():
             log_line("WARN", "Scan stopped early by user.")
+            stopped = True
             break
         label = f"Pool #{p['poolId']}" + (f" — {p['metadata']}" if p["metadata"] else "")
         try:
@@ -2100,8 +2480,10 @@ def tool_pool_checker(subscan: SubscanClient) -> None:
                     reward_list = subscan.fetch_reward_slash(p["stashAddress"], block_range)
                     for r in reward_list:
                         all_rewards.append({
-                            "era":   safe_int(r.get("era")),
-                            "amount": str(r.get("amount") or "0"),
+                            "era":            safe_int(r.get("era")),
+                            "amount":         planck_str(r.get("amount")),
+                            "blockTimestamp": safe_int(r.get("block_timestamp")),
+                            "eventIndex":     str(r.get("event_index") or ""),
                             "validatorStash": str(r.get("validator_stash") or ""),
                         })
                     log_line("INFO", f"  Era {era}: {len(reward_list)} reward event(s)")
@@ -2110,18 +2492,44 @@ def tool_pool_checker(subscan: SubscanClient) -> None:
 
             p["eraRewards"]  = all_rewards
             p["missedEras"]  = compute_pool_missed_eras(all_rewards, latest_completed, len(completed_eras))
+            p["fetchStatus"] = "done"
             missed = len(p["missedEras"])
             if missed:
-                log_line("WARN", f"[{i+1}/{len(pools)}] {label}: {missed} missed era(s) — {sorted(p['missedEras'])}")
+                note = ""
+                if provisional_era is not None and provisional_era in p["missedEras"]:
+                    note = f" (era {provisional_era} is provisional)"
+                log_line("WARN", f"[{i+1}/{len(pools)}] {label}: {missed} missed era(s) — {sorted(p['missedEras'])}{note}")
             else:
                 log_line("OK",   f"[{i+1}/{len(pools)}] {label}: all {len(completed_eras)} eras rewarded")
         except Exception as e:
             log_line("ERR", f"[{i+1}/{len(pools)}] {label}: {e}")
             p["eraRewards"] = []
             p["missedEras"] = []
+            p["fetchStatus"] = "error"
 
-    # Display results
+    return {
+        "mode":              "pool",
+        "pools":             pools,
+        "era_count":         era_count,
+        "completed_eras":    sorted(completed_eras, reverse=True),
+        "latest_completed":  latest_completed,
+        "provisional_era":   provisional_era,
+        "current_era":       current_era,
+        "stopped":           stopped,
+    }
+
+
+def _render_pools(result: dict) -> None:
+    """Print the pool scan result. Unchanged from the original layout."""
+    pools            = result["pools"]
+    latest_completed = result["latest_completed"]
+    provisional_era  = result.get("provisional_era")
+
     cprint(f"\n[bold green]── Pool Results (latest completed era: {latest_completed}) ──[/bold green]")
+    if provisional_era is not None:
+        cprint(f"[yellow]⚠ Era {provisional_era} is PROVISIONAL — its payout window "
+               f"(era {result['current_era']}) is still open. Pools shown as missing "
+               f"that era may simply not have been paid yet.[/yellow]")
     if HAS_RICH:
         t = Table(title="Pool Summary", border_style="cyan", show_lines=True)
         t.add_column("Pool",       style="bold", max_width=30)
@@ -2149,9 +2557,27 @@ def tool_pool_checker(subscan: SubscanClient) -> None:
             label  = f"#{p['poolId']} {(p['metadata'] or '')[:20]}"
             print(f"{label:<32} {p['memberCount']:>7} {p['commission']:>6.2f}% {missed:>6} {get_severity(missed)}")
 
+
+def tool_pool_checker(subscan: SubscanClient) -> None:
+    cprint("\n[bold cyan]── Pool Reward Cadence ──[/bold cyan]")
+    era_count = ask_int("How many recent completed eras to check?", default=2, min_val=1, max_val=100)
+
+    try:
+        result = scan_pools(subscan, era_count)
+    except ScanError as e:
+        cprint(f"[red]{e}[/red]")
+        return
+
+    _render_pools(result)
+
+    pools = result["pools"]
     if pools and confirm("\nExport results?", default=False):
-        fmt = ask_export_format()
-        _export_pools(pools, latest_completed, fmt)
+        fmt = ask_scan_export_format(("csv", "xml"))
+        if fmt == "json":
+            write_scan_json(result, ask("Filename", default_scan_filename(SCAN_SCHEMAS["pool"])))
+        else:
+            _export_pools(pools, result["latest_completed"], fmt)
+
 
 def _export_pools(pools: List[dict], latest_era: int, fmt: str = "csv") -> None:
     fname = ask("Filename", f"pools_{latest_era}.{fmt}")
@@ -3071,6 +3497,347 @@ def tool_staking_cadence(subscan: SubscanClient) -> None:
 # ABOUT / INFO
 # ════════════════════════════════════════════════════════════════════════════════
 
+# ════════════════════════════════════════════════════════════════════════════════
+# SLACK DELIVERY
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# stdlib urllib only — no new dependency, so the CLI stays a single-file download.
+# Slack answers logical failures with HTTP 200 and {"ok": false}, so every
+# response is checked for `ok` rather than status alone.
+
+SLACK_API = "https://slack.com/api/"
+
+
+def _slack_call(method: str, token: str, *, form: Optional[dict] = None,
+                payload: Optional[dict] = None) -> dict:
+    if form is not None:
+        body = urllib.parse.urlencode(form).encode("utf-8")
+        ctype = "application/x-www-form-urlencoded"
+    else:
+        body = json.dumps(payload or {}).encode("utf-8")
+        ctype = "application/json; charset=utf-8"
+    req = urllib.request.Request(
+        SLACK_API + method, data=body, method="POST",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": ctype},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    if not data.get("ok"):
+        raise RuntimeError(f"Slack {method} failed: {data.get('error') or data}")
+    return data
+
+
+def slack_post(token: str, channel: str, text: str,
+               file_path: Optional[str] = None, title: str = "") -> None:
+    """Post a summary to Slack, optionally with a file attached.
+
+    Without a file this is one chat.postMessage. With one it is Slack's external
+    upload flow: reserve a URL, POST the bytes to it, then complete the upload
+    with the channel and comment — which posts the message itself, so no separate
+    chat.postMessage is needed.
+    """
+    if not file_path:
+        _slack_call("chat.postMessage", token, payload={"channel": channel, "text": text})
+        return
+
+    raw = Path(file_path).read_bytes()
+    # Slack validates this against the bytes it receives. The export contains
+    # non-ASCII, so a character count would be rejected.
+    upload = _slack_call("files.getUploadURLExternal", token, form={
+        "filename": os.path.basename(file_path),
+        "length":   len(raw),
+    })
+
+    # The upload URL is pre-signed: no Authorization header, and POST (not PUT).
+    put = urllib.request.Request(
+        upload["upload_url"], data=raw, method="POST",
+        headers={"Content-Type": "application/octet-stream"},
+    )
+    with urllib.request.urlopen(put, timeout=120) as resp:
+        if resp.status >= 300:
+            raise RuntimeError(f"Slack file upload failed: HTTP {resp.status}")
+
+    _slack_call("files.completeUploadExternal", token, payload={
+        "files":           [{"id": upload["file_id"], "title": title or os.path.basename(file_path)}],
+        "channel_id":      channel,
+        "initial_comment": text,
+    })
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# SUMMARY FORMATTING
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# Severity buckets are deliberately NOT reported. get_severity() returns 'low'
+# for 1-2 misses and find_consecutive_groups() needs CONSECUTIVE_MISS_THRESHOLD
+# misses before a streak exists — so on a 1-era scan every record is 'none' or
+# 'low' and the critical band can never fire. Reporting it would be reporting a
+# constant. Counts and names carry the actual information.
+
+_MAX_NAMED_GAPS = 15
+
+
+def _fmt_duration(seconds: float) -> str:
+    m, sec = divmod(int(seconds), 60)
+    return f"{m}m {sec:02d}s" if m else f"{sec}s"
+
+
+def _gap_list(names: List[str]) -> str:
+    if len(names) <= _MAX_NAMED_GAPS:
+        return ", ".join(names)
+    shown = ", ".join(names[:_MAX_NAMED_GAPS])
+    return f"{shown}, +{len(names) - _MAX_NAMED_GAPS} more"
+
+
+def format_validator_summary(result: dict, elapsed: float, requests_used: int,
+                             attached: bool) -> str:
+    vals = result["validators"]
+    errors = [v for v in vals if v.get("fetchStatus") in ("error", "failed")]
+    gaps   = [v for v in vals if v.get("missedEras")]
+    clean  = [v for v in vals if v.get("eraStat") and not v.get("missedEras")
+              and v.get("fetchStatus") not in ("error", "failed")]
+    era_c  = result["era_count"]
+
+    lines = [
+        f"Staking Cadence — validator mode — era {result['latest_era']} "
+        f"({era_c} era{'s' if era_c != 1 else ''})",
+        f"Scanned {len(vals)} · clean {len(clean)} · gaps {len(gaps)} · errors {len(errors)}",
+    ]
+    if gaps:
+        names = [f"{v['display'] or truncate_addr(v['address'])}" for v in gaps]
+        eras = sorted({e for v in gaps for e in v["missedEras"]}, reverse=True)
+        label = f"era {eras[0]}" if len(eras) == 1 else f"eras {eras}"
+        lines.append(f"Missed {label}: {_gap_list(names)}")
+    else:
+        lines.append("No missed eras.")
+    if result.get("stopped"):
+        lines.append("⚠ Scan was stopped early — results are partial.")
+    lines.append(f"{requests_used} Subscan requests · {_fmt_duration(elapsed)} · "
+                 + ("full scan attached" if attached else "export written to disk"))
+    return "\n".join(lines)
+
+
+def format_pool_summary(result: dict, elapsed: float, requests_used: int,
+                        attached: bool) -> str:
+    pools  = result["pools"]
+    errors = [p for p in pools if p.get("fetchStatus") == "error"]
+    gaps   = [p for p in pools if p.get("missedEras")]
+    rewarded = [p for p in pools if not p.get("missedEras") and p.get("fetchStatus") != "error"]
+    era_c  = result["era_count"]
+    prov   = result.get("provisional_era")
+
+    lines = [
+        f"Staking Cadence — pool mode — era {result['latest_completed']} "
+        f"({era_c} era{'s' if era_c != 1 else ''})",
+        f"{len(pools)} pools · rewarded {len(rewarded)} · gaps {len(gaps)} · errors {len(errors)}",
+    ]
+    if prov is not None:
+        lines.append(f"⚠ Era {prov} is PROVISIONAL — payout window "
+                     f"(era {result['current_era']}) is still open")
+    if gaps:
+        names = [f"Pool #{p['poolId']}" + (f" {p['metadata'][:24]}" if p["metadata"] else "")
+                 for p in gaps]
+        lines.append(f"Missed: {_gap_list(names)}")
+    else:
+        lines.append("No missed eras.")
+    if result.get("stopped"):
+        lines.append("⚠ Scan was stopped early — results are partial.")
+    lines.append(f"{requests_used} Subscan requests · {_fmt_duration(elapsed)} · "
+                 + ("full scan attached" if attached else "export written to disk"))
+    return "\n".join(lines)
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# BATCH RUNNER
+# ════════════════════════════════════════════════════════════════════════════════
+
+def _env_str(name: str, default: str = "") -> str:
+    return (os.environ.get(name) or "").strip() or default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = _env_str(name)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        log_line("WARN", f"{name}={raw!r} is not an integer — using {default}.")
+        return default
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = _env_str(name).lower()
+    if not raw:
+        return default
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    if raw in ("0", "false", "no", "off"):
+        return False
+    log_line("WARN", f"{name}={raw!r} is not a boolean — using {default}.")
+    return default
+
+
+def resolve_batch_config(args) -> dict:
+    """Config precedence: CLI flag -> .env -> built-in default."""
+    modes_raw = args.mode or _env_str("CADENCE_MODES", "validator,pool")
+    if modes_raw == "both":
+        modes = ["validator", "pool"]
+    else:
+        modes = [m.strip().lower() for m in modes_raw.split(",") if m.strip()]
+    bad = [m for m in modes if m not in ("validator", "pool")]
+    if bad or not modes:
+        raise SystemExit(
+            f"Invalid mode(s): {', '.join(bad) or '(none given)'}. "
+            "Use 'validator', 'pool', 'both', or a comma-separated list.")
+
+    eras = args.eras if args.eras is not None else _env_int("CADENCE_ERA_COUNT", 1)
+    if eras < 1:
+        log_line("WARN", f"--eras {eras} is below 1 — using 1.")
+        eras = 1
+    elif eras > 100:
+        log_line("WARN", f"--eras {eras} exceeds the CLI maximum of 100 — using 100.")
+        eras = 100
+    if eras > MAX_WEB_ERA_COUNT:
+        log_line("WARN", f"--eras {eras} exceeds the web app's {MAX_WEB_ERA_COUNT}-era cap; "
+                         "the export will still import, but the app cannot produce a "
+                         "comparable scan for cross-checking.")
+
+    attach = _env_bool("SLACK_ATTACH_EXPORT", True)
+    if args.no_attach:
+        attach = False
+
+    return {
+        "modes":         modes,
+        "eras":          eras,
+        "export":        args.export or "json",
+        "out_dir":       args.out or _env_str("CADENCE_OUT_DIR", "./scan-output"),
+        "keep_days":     _env_int("CADENCE_KEEP_DAYS", 30),
+        "limit":         args.limit,
+        "dry_run":       args.dry_run,
+        "slack_enabled": (not args.dry_run) and (not args.no_slack),
+        "slack_token":   _env_str("SLACK_BOT_TOKEN"),
+        "slack_channel": args.slack_channel or _env_str("SLACK_CHANNEL_ID"),
+        "slack_attach":  attach,
+        "notify_fail":   _env_bool("SLACK_NOTIFY_ON_FAILURE", True),
+    }
+
+
+def prune_old_exports(out_dir: str, keep_days: int) -> None:
+    if keep_days <= 0:
+        return
+    cutoff = time.time() - keep_days * 86400
+    removed = 0
+    try:
+        for f in Path(out_dir).glob("enjin_staking_*"):
+            if f.is_file() and f.stat().st_mtime < cutoff:
+                f.unlink()
+                removed += 1
+    except Exception as e:
+        log_line("WARN", f"Could not prune {out_dir}: {e}")
+        return
+    if removed:
+        log_line("OK", f"Pruned {removed} export(s) older than {keep_days} day(s).")
+
+
+def _run_one_mode(mode: str, subscan: SubscanClient, cfg: dict) -> bool:
+    """Scan one mode, write its export, post it. Returns True on success.
+
+    Each mode is fully independent: the export is written and posted before the
+    next mode starts, so a failure in the second does not cost you the first.
+    """
+    # Plain text, not rich markup: batch output goes to the journal, where a
+    # missing `rich` would print the markup tags verbatim.
+    log_line("INFO", f"── Staking Cadence: {mode} mode ──")
+    started = time.time()
+    before  = subscan.request_count
+
+    try:
+        if mode == "validator":
+            result = scan_validators(subscan, cfg["eras"], limit=cfg["limit"])
+            schema = SCAN_SCHEMAS["validator"]
+        else:
+            result = scan_pools(subscan, cfg["eras"], limit=cfg["limit"])
+            schema = SCAN_SCHEMAS["pool"]
+    except ScanError as e:
+        log_line("ERR", f"{mode} scan failed: {e}")
+        if cfg["slack_enabled"] and cfg["notify_fail"]:
+            _try_slack(cfg, f"❌ Staking Cadence — {mode} mode failed: {e}")
+        return False
+
+    elapsed  = time.time() - started
+    requests_used = subscan.request_count - before
+
+    # Export is always written to disk, even when it is not attached to Slack —
+    # the local copy is the durable archive (Slack's free plan hides files after
+    # 90 days) and the file you drag into the web app's Import tab.
+    path = None
+    if cfg["export"] != "none":
+        os.makedirs(cfg["out_dir"], exist_ok=True)
+        path = os.path.join(cfg["out_dir"], default_scan_filename(schema))
+        try:
+            write_scan_json(result, path)
+        except Exception as e:
+            log_line("ERR", f"Failed to write export: {e}")
+            path = None
+
+    attach  = bool(path) and cfg["slack_attach"]
+    summary = (format_validator_summary if mode == "validator" else format_pool_summary)(
+        result, elapsed, requests_used, attach)
+
+    for line in summary.split("\n"):
+        log_line("DONE", line)
+
+    if not cfg["slack_enabled"]:
+        return True
+    return _try_slack(cfg, summary, path if attach else None,
+                      title=f"Staking Cadence — {mode} mode")
+
+
+def _try_slack(cfg: dict, text: str, file_path: Optional[str] = None,
+               title: str = "") -> bool:
+    if not cfg["slack_token"] or not cfg["slack_channel"]:
+        log_line("WARN", "SLACK_BOT_TOKEN or SLACK_CHANNEL_ID is unset — skipping Slack.")
+        return False
+    try:
+        slack_post(cfg["slack_token"], cfg["slack_channel"], text, file_path, title)
+        log_line("OK", "Posted to Slack." + (" (with attachment)" if file_path else ""))
+        return True
+    except Exception as e:
+        log_line("ERR", f"Slack delivery failed: {e}")
+        return False
+
+
+def run_batch(args) -> int:
+    """Non-interactive entry point. Returns a process exit code."""
+    cfg = resolve_batch_config(args)
+
+    api_key = _env_str("SUBSCAN_API_KEY")
+    if not api_key:
+        log_line("ERR", "SUBSCAN_API_KEY is not set — cannot run a Subscan scan.")
+        if cfg["slack_enabled"] and cfg["notify_fail"]:
+            _try_slack(cfg, "❌ Staking Cadence scan aborted: SUBSCAN_API_KEY is not set.")
+        return 2
+    subscan = SubscanClient(api_key)
+
+    log_line("INFO", f"Batch run: modes={','.join(cfg['modes'])} eras={cfg['eras']} "
+                     f"export={cfg['export']} out={cfg['out_dir']} "
+                     f"slack={'on' if cfg['slack_enabled'] else 'off'} "
+                     f"attach={'yes' if cfg['slack_attach'] else 'no'}")
+
+    ok = True
+    for mode in cfg["modes"]:
+        if not _run_one_mode(mode, subscan, cfg):
+            ok = False
+
+    if cfg["export"] != "none":
+        prune_old_exports(cfg["out_dir"], cfg["keep_days"])
+
+    log_line("DONE" if ok else "ERR",
+             f"Batch run finished ({subscan.request_count} Subscan requests total).")
+    return 0 if ok else 1
+
+
 def show_about() -> None:
     content = f"""[bold]EnjinSight[/bold] — Enjin Blockchain monitoring tools (read-only, no wallet required)
 
@@ -3097,6 +3864,16 @@ def show_about() -> None:
 [bold cyan]Disclaimer:[/bold cyan]
   EnjinSight is a third-party, community-built tool. Information displayed is derived from publicly available on-chain data and is provided for research and reference purposes only. It does not constitute financial, accounting, tax, or legal advice, and should not be relied upon as a definitive or complete record. Always verify any information against your own primary records before making operational, accounting, tax, or other material decisions.
 
+[bold cyan]Scheduled / non-interactive use:[/bold cyan]
+  Staking Cadence can run unattended and post its results to Slack with the scan
+  export attached, for a daily cron or systemd timer:
+
+    enjinsight_cli.py --non-interactive --mode both --eras 1 --export json
+
+  --export json writes the EnjinSight scan envelope, which loads in the web app's
+  Staking Cadence -> Import tab. Run --help for every flag; anything not passed
+  falls back to .env. Setup guide: deploy/README.md
+
 [bold cyan]Security:[/bold cyan]
   - API key read from environment (never hard-coded)
   - Subscan and Etherscan API keys read from environment
@@ -3119,7 +3896,51 @@ def show_about() -> None:
 # MAIN MENU
 # ════════════════════════════════════════════════════════════════════════════════
 
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Batch-mode arguments.
+
+    With no arguments at all the CLI behaves exactly as it always has: the
+    interactive menu. Every flag below is inert unless --non-interactive is given.
+    """
+    ap = argparse.ArgumentParser(
+        prog="enjinsight_cli.py",
+        description="EnjinSight CLI — Enjin Blockchain monitoring (read-only). "
+                    "Run with no arguments for the interactive menu.",
+        epilog="Example: enjinsight_cli.py --non-interactive --tool staking-cadence "
+               "--mode both --eras 1 --export json --out ./scan-output",
+    )
+    ap.add_argument("--non-interactive", action="store_true",
+                    help="run without prompts (for cron/systemd); required for every flag below")
+    ap.add_argument("--tool", default="staking-cadence", choices=["staking-cadence"],
+                    help="which tool to run (default: staking-cadence)")
+    ap.add_argument("--mode", default=None,
+                    help="validator, pool, both, or a comma-separated list "
+                         "(default: $CADENCE_MODES, else validator,pool)")
+    ap.add_argument("--eras", type=int, default=None,
+                    help="recent eras to scan (default: $CADENCE_ERA_COUNT, else 1)")
+    ap.add_argument("--export", default=None, choices=["json", "none"],
+                    help="json writes the web app's import envelope (default: json)")
+    ap.add_argument("--out", default=None,
+                    help="output directory (default: $CADENCE_OUT_DIR, else ./scan-output)")
+    ap.add_argument("--limit", type=int, default=None,
+                    help="scan only the first N validators/pools — for fast smoke tests")
+    ap.add_argument("--no-slack", action="store_true", help="skip Slack delivery")
+    ap.add_argument("--no-attach", action="store_true",
+                    help="post the summary without attaching the export")
+    ap.add_argument("--slack-channel", default=None,
+                    help="override $SLACK_CHANNEL_ID (useful for a test channel)")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="write export files but post nothing to Slack")
+    return ap
+
+
 def main() -> None:
+    global _BATCH_MODE
+    args = build_arg_parser().parse_args()
+    if args.non_interactive:
+        _BATCH_MODE = True
+        sys.exit(run_batch(args))
+
     if HAS_RICH:
         console.print(Panel(
             "[bold cyan]EnjinSight CLI[/bold cyan]\n"
