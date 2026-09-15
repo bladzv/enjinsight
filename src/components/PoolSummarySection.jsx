@@ -140,7 +140,7 @@ export default function PoolSummarySection({ pools, eraCount, onPoolSelect, prov
               return (
                 <div
                   key={`m-${p.poolId}`}
-                  className="cursor-pointer rounded-sm border border-[var(--hairline)] bg-card p-2.5 transition-colors hover:bg-surface-high focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="cursor-pointer rounded-sm border border-[var(--hairline)] bg-card p-2.5 transition-colors hover:bg-surface-high focus:outline-hidden focus:ring-1 focus:ring-primary"
                   role="button"
                   tabIndex={0}
                   onClick={() => onPoolSelect?.(p.poolId)}

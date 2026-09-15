@@ -15,31 +15,30 @@
     "lint": "eslint . --max-warnings=0"
   },
   "dependencies": {
-    "@noble/hashes": "^1.8.0",
+    "@noble/hashes": "^2.4.0",
     "@polkadot/api": "^16.5.6",
     "@polkadot/util-crypto": "^14.0.2",
     "chart.js": "^4.5.1",
-    "lucide-react": "^0.577.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "lucide-react": "^1.45.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.3.3",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.3",
-    "@types/react": "^18.3.1",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^5.0.0",
-    "autoprefixer": "^10.4.20",
-    "eslint": "^10.0.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "eslint": "^10.10.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "globals": "^17.11.0",
-    "jsdom": "^28.1.0",
-    "postcss": "^8.5.26",
-    "tailwindcss": "^3.4.14",
-    "vite": "^8.0.16",
-    "vitest": "^4.1.0"
+    "globals": "^17.12.0",
+    "jsdom": "^30.0.1",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0"
   },
   "overrides": {
     "eslint-plugin-jsx-a11y": {
