@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 // Read at config time (Node context) rather than imported into app code, so
 // bumping the version never requires touching anything but package.json.
@@ -556,7 +557,7 @@ export default defineConfig(({ mode }) => {
   const openSeaApiKey = env.OPENSEA_API_KEY || ''
 
   return {
-    plugins: [react(), createEtherscanDevDetailsPlugin(etherscanApiKey, alchemyRpcUrl, openSeaApiKey)],
+    plugins: [react(), tailwindcss(), createEtherscanDevDetailsPlugin(etherscanApiKey, alchemyRpcUrl, openSeaApiKey)],
     // './' base makes the app work at any subdirectory path,
     // including use in relative subdirectories for static hosts
     base: './',
