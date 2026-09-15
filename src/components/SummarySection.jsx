@@ -122,7 +122,7 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
                 tabIndex={0}
                 onClick={() => openValidator(v)}
                 onKeyDown={event => handleOpenKey(event, v)}
-                className="flex cursor-pointer gap-3 px-4 py-3 rounded-sm bg-danger/10 animate-fade-in transition-colors hover:bg-danger/15 focus:outline-none focus:ring-2 focus:ring-danger/40"
+                className="flex cursor-pointer gap-3 px-4 py-3 rounded-sm bg-danger/10 animate-fade-in transition-colors hover:bg-danger/15 focus:outline-hidden focus:ring-2 focus:ring-danger/40"
                 aria-label={`Open details for validator ${v.display || truncateAddress(v.address)}`}
               >
                 <AlertTriangle size={16} className="text-danger flex-shrink-0 mt-0.5" />
@@ -174,7 +174,7 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
                   tabIndex={0}
                   onClick={() => openValidator(v)}
                   onKeyDown={event => handleOpenKey(event, v)}
-                  className="cursor-pointer rounded-sm border border-[var(--hairline)] bg-card p-2.5 transition-colors hover:bg-surface-high focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="cursor-pointer rounded-sm border border-[var(--hairline)] bg-card p-2.5 transition-colors hover:bg-surface-high focus:outline-hidden focus:ring-1 focus:ring-primary"
                   aria-label={`Open details for validator ${v.display || truncateAddress(v.address)}`}
                 >
                   <div className="flex items-center gap-2">
@@ -232,7 +232,7 @@ export default function SummarySection({ validators, eraCount, latestEra, onRetr
                       tabIndex={0}
                       onClick={() => openValidator(v)}
                       onKeyDown={event => handleOpenKey(event, v)}
-                      className="data-table-row cursor-pointer hover:bg-card/80 focus:outline-none focus:ring-2 focus:ring-cyan/35"
+                      className="data-table-row cursor-pointer hover:bg-card/80 focus:outline-hidden focus:ring-2 focus:ring-cyan/35"
                       aria-label={`Open details for validator ${v.display || truncateAddress(v.address)}`}
                     >
                       <td className="px-4 py-3">

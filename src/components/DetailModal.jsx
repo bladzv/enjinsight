@@ -40,7 +40,7 @@ export default function DetailModal({
     <div className="fixed inset-0 z-[70] flex items-end justify-center overflow-hidden sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-labelledby={titleId}>
       <button
         type="button"
-        className="absolute inset-0 bg-ink/85 backdrop-blur-sm"
+        className="absolute inset-0 bg-ink/85 backdrop-blur-xs"
         onClick={onClose}
         aria-label="Close detail view"
       />

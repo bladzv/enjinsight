@@ -1405,7 +1405,7 @@ export default function RewardHistoryViewer({ onScanStateChange, simpleMode = fa
                     aria-checked={includeHistory}
                     disabled={isLoading}
                     onClick={() => setIncludeHistory(v => !v)}
-                    className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200 focus-visible:outline-none
+                    className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200 focus-visible:outline-hidden
                       focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50
                       ${includeHistory ? 'bg-primary' : 'bg-surface-bright'}`}
                   >
