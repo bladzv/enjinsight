@@ -8,7 +8,7 @@
  * Security: all address inputs are validated before use.
  * No user-supplied data reaches any network call or eval path.
  */
-import { blake2b } from '@noble/hashes/blake2b'
+import { blake2b } from '@noble/hashes/blake2.js'
 import { SYS_ACCT_PREFIX, IS_NEW_LOGIC_BIT } from '../constants.js'
 
 // ── Base58 alphabet ────────────────────────────────────────────────────────

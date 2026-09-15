@@ -29,7 +29,7 @@ function ToastCard({ toast }) {
   const isError = toast.type === 'error'
   return (
     <div
-      className={`toast-card rounded-sm border px-4 py-3 shadow-ambient backdrop-blur-sm ${
+      className={`toast-card rounded-sm border px-4 py-3 shadow-ambient backdrop-blur-xs ${
         isError ? 'border-danger/40 bg-card/95' : 'border-warning/40 bg-card/95'
       }`}
     >

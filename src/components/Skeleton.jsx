@@ -75,10 +75,12 @@ export function SkeletonSwap({ loading, skeleton, children, className = '' }) {
       {/* `inert` (not `hidden`) while loading: the content must keep
           occupying the grid cell for the crossfade to work, but must not
           be tabbable or readable while it is invisible behind the
-          skeleton. React 18 forwards the empty-string form verbatim. */}
+          skeleton. React 19 supports `inert` as a real boolean attribute,
+          so it takes the boolean directly — the empty-string form this
+          used to need under React 18 now warns. */}
       <div
         className="skel-swap__content"
-        inert={loading ? '' : undefined}
+        inert={loading}
         aria-hidden={loading || undefined}
       >
         {children}

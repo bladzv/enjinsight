@@ -93,7 +93,7 @@ export default function DisclaimerModal({ mode = 'first-visit', onClose }) {
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-hidden p-2 sm:p-4" role="dialog" aria-modal="true" aria-labelledby={titleId}>
       <div
-        className="absolute inset-0 bg-ink/80 backdrop-blur-sm"
+        className="absolute inset-0 bg-ink/80 backdrop-blur-xs"
         onClick={isFirstVisit ? undefined : onClose}
         aria-hidden="true"
       />

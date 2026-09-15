@@ -83,7 +83,7 @@ export default function Stepper({
         aria-invalid={ariaInvalid}
         maxLength={maxDigits}
         style={{ width: `${Math.max(2, maxDigits + 1)}ch` }}
-        className={`step-val tabular border-none bg-transparent px-0 py-0 text-center font-mono font-bold tracking-tight text-primary focus:outline-none disabled:opacity-50
+        className={`step-val tabular border-none bg-transparent px-0 py-0 text-center font-mono font-bold tracking-tight text-primary placeholder:text-muted focus:outline-hidden disabled:opacity-50
           ${compact ? 'text-[2.5rem]' : 'text-3xl sm:text-4xl'}
           ${ariaInvalid ? 'text-danger' : ''}
           ${bump ? 'bump' : ''}`}

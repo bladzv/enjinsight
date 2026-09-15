@@ -1,6 +1,114 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss" source(none);
+@source "../index.html";
+@source "../src/**/*.{js,jsx}";
+
+/* =============================================================================
+   Theme tokens — migrated from tailwind.config.js (Tailwind v4 is CSS-first).
+
+   The `rgb(var(--x-rgb))` indirection replaces v3's `<alpha-value>` placeholder,
+   which v4 removed. Opacity modifiers (`bg-ink/50`) still work: v4 implements
+   them with color-mix(), which accepts a var()-built colour. Because --x-rgb is
+   resolved at use time, the runtime [data-theme='light'] switch below keeps
+   working unchanged — do not inline these to literals.
+
+   `@theme static` (rather than bare `@theme`) forces every token into :root.
+   Bare @theme tree-shakes unused ones, and several are read only from the
+   hand-written CSS further down this file.
+
+   The --x-rgb custom properties themselves stay in @layer base below: they are
+   the substrate these tokens read, not theme keys. Layer order is irrelevant —
+   var() substitutes at computed-value time.
+   ============================================================================= */
+@theme static {
+  /* Must precede --color-cyan*: clears Tailwind's stock cyan palette so that a
+     stray `text-cyan-500` fails loudly (generates nothing) instead of silently
+     rendering stock cyan instead of the brand royal blue. The wildcard also
+     wipes --color-cyan / --color-cyan-dim, hence the ordering. */
+  --color-cyan-*: initial;
+
+  /* Surface stack — deep indigo-black with a faint purple-blue undertone */
+  --color-ink:             rgb(var(--ink-rgb));
+  --color-surface:         rgb(var(--surface-rgb));
+  --color-card:            rgb(var(--card-rgb));
+  --color-surface-high:    rgb(var(--surface-high-rgb));
+  --color-surface-highest: rgb(var(--surface-highest-rgb));
+  --color-surface-bright:  rgb(var(--surface-bright-rgb));
+  --color-rim:             rgb(var(--rim-rgb));
+  --color-border:          rgb(var(--border-rgb));
+  --color-term:            rgb(var(--term-rgb));
+
+  /* Brand accent — violet/purple (left side of logo gradient) */
+  --color-primary:      rgb(var(--primary-rgb));
+  --color-primary-dim:  rgb(var(--primary-dim-rgb));
+  --color-primary-glow: rgb(var(--primary-glow-rgb));
+  --color-on-primary:   rgb(var(--on-primary-rgb));
+
+  /* Signal accents — cyan = blue side of logo gradient (royal blue) */
+  --color-cyan:        rgb(var(--cyan-rgb));
+  --color-cyan-dim:    rgb(var(--cyan-dim-rgb));
+  --color-success:     rgb(var(--success-rgb));
+  --color-success-dim: rgb(var(--success-dim-rgb));
+  --color-warning:     rgb(var(--warning-rgb));
+  --color-warning-dim: rgb(var(--warning-dim-rgb));
+  --color-danger:      rgb(var(--danger-rgb));
+  --color-danger-dim:  rgb(var(--danger-dim-rgb));
+
+  /* Text hierarchy */
+  --color-text:           rgb(var(--text-rgb));
+  --color-text-secondary: rgb(var(--text-secondary-rgb));
+  --color-dim:            rgb(var(--dim-rgb));
+  --color-muted:          rgb(var(--muted-rgb));
+
+  /* fontFamily -> --font-* */
+  --font-sans:     "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-headline: "Inter Tight", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-brand:    "Inter Tight", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:     "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* animation -> --animate-* (v4 resolves the keyframes name from the value,
+     so animate-pulse-slow pulls in Tailwind's built-in `pulse` automatically) */
+  --animate-pulse-slow:   pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-fade-in:      fadeIn 0.25s ease-out;
+  --animate-blink:        blink 1.2s step-end infinite;
+  --animate-tick:         tick 1.2s steps(2, end) infinite;
+  --animate-scroll-nudge: scrollNudge 1.5s ease-in-out infinite;
+
+  /* keyframes live inside @theme in v4 */
+  @keyframes fadeIn {
+    0%   { opacity: 0; transform: translateY(-4px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0; }
+  }
+  @keyframes tick {
+    0%, 49%   { opacity: 1; }
+    50%, 100% { opacity: 0.35; }
+  }
+  @keyframes scrollNudge {
+    0%, 100% { transform: translateY(0);   opacity: 0.45; }
+    55%      { transform: translateY(5px); opacity: 1;    }
+  }
+
+  /* boxShadow -> --shadow-* */
+  --shadow-primary-glow: 0 0 20px rgba(124, 58, 237, 0.25);
+  --shadow-cyan-glow:    0 0 18px rgba(96, 165, 250, 0.20);
+  --shadow-card:         0 1px 0 rgba(255,255,255,0.02) inset;
+  --shadow-float:        0 8px 24px rgba(0,0,0,0.45);
+  --shadow-ambient:      0 1px 0 rgba(255,255,255,0.02) inset;
+  --shadow-inset-soft:   inset 0 1px 0 rgba(255,255,255,0.03);
+
+  /* borderRadius -> --radius-*. These overrides are what make the app's 157
+     `rounded-sm` uses a no-op across the v3->v4 scale rename. DEFAULT needs no
+     entry: v4's own fallback for bare `rounded` is already 0.25rem. */
+  --radius-sm: 0.125rem;
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.375rem;
+
+  /* letterSpacing -> --tracking-* */
+  --tracking-tightest: -0.04em;
+}
 
 /* =============================================================================
    FOUNDRY · monochrome engineering aesthetic
@@ -598,7 +706,7 @@
   .input-field {
     @apply rounded-sm px-3 py-2 text-sm text-text placeholder:text-muted
            disabled:opacity-50 transition-colors
-           focus-visible:outline-none focus-visible:border-primary;
+           focus-visible:outline-hidden focus-visible:border-primary;
     background: var(--card);
     border: 1px solid var(--hairline);
     min-width: 0;
@@ -615,7 +723,7 @@
   .select-field {
     @apply rounded-sm px-3 py-2 text-sm text-text
            disabled:opacity-50 transition-colors cursor-pointer
-           focus-visible:outline-none focus-visible:border-primary;
+           focus-visible:outline-hidden focus-visible:border-primary;
     background: var(--card);
     border: 1px solid var(--hairline);
     min-width: 0;
@@ -627,7 +735,7 @@
 
   .select-compact {
     @apply rounded-sm px-2 py-1 text-[11px] text-text
-           focus-visible:outline-none focus-visible:border-primary;
+           focus-visible:outline-hidden focus-visible:border-primary;
     background: var(--card);
     border: 1px solid var(--hairline);
     font-family: theme('fontFamily.mono');
@@ -938,7 +1046,7 @@
   /* ── Buttons — flat, sharp, single border ─────────────────────────── */
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-on-primary transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
+    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-on-primary transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
     background: theme('colors.primary');
     border: 1px solid theme('colors.primary-dim');
   }
@@ -963,7 +1071,7 @@
 
   .btn-stop,
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-white transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-danger focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
+    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-white transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-danger focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
     background: theme('colors.danger');
     border: 1px solid theme('colors.danger-dim');
   }
@@ -979,7 +1087,7 @@
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-text transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
+    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-text transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
     background: var(--card);
     border: 1px solid var(--hairline);
   }
@@ -994,7 +1102,7 @@
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium text-text-secondary transition duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium text-text-secondary transition duration-150 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-primary;
   }
 
   .btn-ghost:hover {
@@ -1007,7 +1115,7 @@
   }
 
   .btn-icon {
-    @apply inline-flex min-h-[34px] min-w-[34px] items-center justify-center rounded-sm text-text-secondary transition duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary;
+    @apply inline-flex min-h-[34px] min-w-[34px] items-center justify-center rounded-sm text-text-secondary transition duration-150 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-primary;
   }
 
   .btn-icon:hover {
