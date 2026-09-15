@@ -706,7 +706,7 @@
   .input-field {
     @apply rounded-sm px-3 py-2 text-sm text-text placeholder:text-muted
            disabled:opacity-50 transition-colors
-           focus-visible:outline-none focus-visible:border-primary;
+           focus-visible:outline-hidden focus-visible:border-primary;
     background: var(--card);
     border: 1px solid var(--hairline);
     min-width: 0;
@@ -723,7 +723,7 @@
   .select-field {
     @apply rounded-sm px-3 py-2 text-sm text-text
            disabled:opacity-50 transition-colors cursor-pointer
-           focus-visible:outline-none focus-visible:border-primary;
+           focus-visible:outline-hidden focus-visible:border-primary;
     background: var(--card);
     border: 1px solid var(--hairline);
     min-width: 0;
@@ -735,7 +735,7 @@
 
   .select-compact {
     @apply rounded-sm px-2 py-1 text-[11px] text-text
-           focus-visible:outline-none focus-visible:border-primary;
+           focus-visible:outline-hidden focus-visible:border-primary;
     background: var(--card);
     border: 1px solid var(--hairline);
     font-family: theme('fontFamily.mono');
@@ -1046,7 +1046,7 @@
   /* ── Buttons — flat, sharp, single border ─────────────────────────── */
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-on-primary transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
+    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-on-primary transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
     background: theme('colors.primary');
     border: 1px solid theme('colors.primary-dim');
   }
@@ -1071,7 +1071,7 @@
 
   .btn-stop,
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-white transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-danger focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
+    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-white transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-danger focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
     background: theme('colors.danger');
     border: 1px solid theme('colors.danger-dim');
   }
@@ -1087,7 +1087,7 @@
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-text transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
+    @apply inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-semibold tracking-tight text-text transition duration-150 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-ink;
     background: var(--card);
     border: 1px solid var(--hairline);
   }
@@ -1102,7 +1102,7 @@
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium text-text-secondary transition duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-sm px-2.5 py-1 text-xs font-medium text-text-secondary transition duration-150 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-primary;
   }
 
   .btn-ghost:hover {
@@ -1115,7 +1115,7 @@
   }
 
   .btn-icon {
-    @apply inline-flex min-h-[34px] min-w-[34px] items-center justify-center rounded-sm text-text-secondary transition duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary;
+    @apply inline-flex min-h-[34px] min-w-[34px] items-center justify-center rounded-sm text-text-secondary transition duration-150 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-primary;
   }
 
   .btn-icon:hover {
