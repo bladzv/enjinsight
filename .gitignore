@@ -2,6 +2,7 @@
 dist/
 .cache/
 .vite/
+*.map
 
 # Dependencies
 node_modules/
@@ -20,6 +21,7 @@ __pycache__/
 .vscode/
 .idea/
 .DS_Store
+.claude/settings.local.json
 
 # Logs & caches
 *.log
@@ -32,7 +34,7 @@ coverage/
 /.pnp.*
 
 # Agent session / scratch files (not part of the shipped app)
-# .claude/ and .codex/ are intentionally tracked; these are not.
+# .claude/ is intentionally tracked; these are not.
 .agents/
 docs/motion-examples-full.md
 

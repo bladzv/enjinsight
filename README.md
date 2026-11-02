@@ -269,7 +269,7 @@ Full proxy notes: [`PROXY.md`](./PROXY.md)
 │   └── **/*.test.js(x)        # Vitest suites colocated with the code under test
 ├── .env.example  index.html  package.json
 ├── eslint.config.js  tailwind.config.js  vercel.json  vite.config.js
-└── CLAUDE.md  AGENTS.md  DESIGN.md  PROXY.md
+└── CLAUDE.md  DESIGN.md  PROXY.md
 ```
 
 ## Scan Phases
